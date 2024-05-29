@@ -67,6 +67,10 @@ const Tables = struct {
     // pub vvar: Option<hvar::Table<'a>>,
 };
 
+pub const Raw = struct {
+    data: []const u8,
+};
+
 const VariableCoordinates = struct {};
 const Unmanaged = struct {
     data: []const u8,

@@ -19,6 +19,22 @@ pub const Rect = struct {
     }
 };
 
+pub const Fixed = struct {
+    value: f32,
+
+    pub fn createI32(i: i32) Fixed {
+        return Fixed{
+            .value = @as(f32, @floatFromInt(i)) / 65536.0,
+        };
+    }
+
+    pub fn addDelta(self: Fixed, delta: f32) Fixed {
+        return Fixed{
+            .value = self.value + @as(f32, @as(f64, delta) * (1.0 / 65536.0)),
+        };
+    }
+};
+
 export fn add(a: i32, b: i32) i32 {
     return a + b;
 }

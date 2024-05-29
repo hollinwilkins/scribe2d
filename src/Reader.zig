@@ -1,3 +1,6 @@
+const std = @import("std");
+const mem = std.mem;
+
 const Reader = @This();
 
 cursor: usize,
@@ -18,5 +21,20 @@ pub fn skipN(self: *Reader, n: usize) void {
     self.cursor += n;
 }
 
-// pub fn read(self: *Reader, comptime T: type) ?T {
-// }
+pub fn readN(self: *Reader, n: usize) ?[]const u8 {
+    if (self.cursor + n <= self.data.len) {
+        const bytes = self.data[self.cursor .. self.cursor + n];
+        self.cursor += n;
+        return bytes;
+    }
+
+    return null;
+}
+
+pub fn read(self: *Reader, comptime T: type) ?T {
+    if (self.readN(@sizeOf(T))) |bytes| {
+        return mem.bytesAsValue(T, bytes);
+    }
+
+    return null;
+}
