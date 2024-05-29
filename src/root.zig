@@ -22,6 +22,14 @@ pub const Rect = struct {
 pub const Fixed = struct {
     value: f32,
 
+    pub fn read(reader: *Reader) ?Fixed {
+        if (reader.read(i32)) |i| {
+            return createI32(i);
+        }
+
+        return null;
+    }
+
     pub fn createI32(i: i32) Fixed {
         return Fixed{
             .value = @as(f32, @floatFromInt(i)) / 65536.0,

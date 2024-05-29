@@ -11,6 +11,18 @@ pub const Error = error{
 pub const IndexToLocationFormat = enum {
     short,
     long,
+
+    pub fn read(reader: *Reader) ?IndexToLocationFormat {
+        if (reader.read(u16)) |i| {
+            switch (i) {
+                0 => return .short,
+                1 => return .long,
+                _ => return null,
+            }
+        }
+
+        return null;
+    }
 };
 
 pub const Table = struct {
@@ -25,7 +37,7 @@ pub const Table = struct {
 
         const r = Reader.create(data);
         r.skip(u32); // version
-        r.skip(Fixed); // font revision
+        _ = Fixed.read(r).?; // font revision
         r.skip(u32); // checksum adjustment
         r.skip(u32); // magic number
         r.skip(u16); // flags
@@ -36,17 +48,11 @@ pub const Table = struct {
         r.skip(u16); // max style
         r.skip(u16); // lowest PPEM
         r.skip(i16); // font direction hint
-        const index_to_location_format_u16 = r.read(u16).?;
+        const index_to_location_format = IndexToLocationFormat.read(r).?;
 
         if (units_per_em < 16 or units_per_em > 16384) {
             return error.InvalidHeadTable;
         }
-
-        const index_to_location_format: IndexToLocationFormat = switch (index_to_location_format_u16) {
-            0 => .short,
-            1 => .long,
-            _ => return error.InvalidHeadTable,
-        };
 
         return Table{
             .units_per_em = units_per_em,
