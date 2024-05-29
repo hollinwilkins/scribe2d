@@ -1,11 +1,14 @@
 const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const table = @import("./table.zig");
+const head = table.head;
 
 const Face = @This();
 
 const Tables = struct {
-    // // Mandatory tables.
+    // Mandatory tables.
+    head: head.Table,
     // pub head: head::Table,
     // pub hhea: hhea::Table,
     // pub maxp: maxp::Table,
@@ -85,7 +88,9 @@ pub fn initFile(allocator: Allocator, path: []const u8) !Face {
         .allocator = allocator,
         .unmanaged = Unmanaged{
             .data = data,
-            .tables = Tables{},
+            .tables = Tables{
+                .head = try head.Table.create(&.{}),
+            },
             .coordinates = VariableCoordinates{},
         },
     };
