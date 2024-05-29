@@ -1,0 +1,69 @@
+const std = @import("std");
+
+const Tables = struct {
+    // // Mandatory tables.
+    // pub head: head::Table,
+    // pub hhea: hhea::Table,
+    // pub maxp: maxp::Table,
+
+    // pub bdat: Option<cbdt::Table<'a>>,
+    // pub cbdt: Option<cbdt::Table<'a>>,
+    // pub cff: Option<cff::Table<'a>>,
+    // pub cmap: Option<cmap::Table<'a>>,
+    // pub colr: Option<colr::Table<'a>>,
+    // pub ebdt: Option<cbdt::Table<'a>>,
+    // pub glyf: Option<glyf::Table<'a>>,
+    // pub hmtx: Option<hmtx::Table<'a>>,
+    // pub kern: Option<kern::Table<'a>>,
+    // pub name: Option<name::Table<'a>>,
+    // pub os2: Option<os2::Table<'a>>,
+    // pub post: Option<post::Table<'a>>,
+    // pub sbix: Option<sbix::Table<'a>>,
+    // pub svg: Option<svg::Table<'a>>,
+    // pub vhea: Option<vhea::Table>,
+    // pub vmtx: Option<hmtx::Table<'a>>,
+    // pub vorg: Option<vorg::Table<'a>>,
+
+    // #[cfg(feature = "opentype-layout")]
+    // pub gdef: Option<gdef::Table<'a>>,
+    // #[cfg(feature = "opentype-layout")]
+    // pub gpos: Option<opentype_layout::LayoutTable<'a>>,
+    // #[cfg(feature = "opentype-layout")]
+    // pub gsub: Option<opentype_layout::LayoutTable<'a>>,
+    // #[cfg(feature = "opentype-layout")]
+    // pub math: Option<math::Table<'a>>,
+
+    // #[cfg(feature = "apple-layout")]
+    // pub ankr: Option<ankr::Table<'a>>,
+    // #[cfg(feature = "apple-layout")]
+    // pub feat: Option<feat::Table<'a>>,
+    // #[cfg(feature = "apple-layout")]
+    // pub kerx: Option<kerx::Table<'a>>,
+    // #[cfg(feature = "apple-layout")]
+    // pub morx: Option<morx::Table<'a>>,
+    // #[cfg(feature = "apple-layout")]
+    // pub trak: Option<trak::Table<'a>>,
+
+    // #[cfg(feature = "variable-fonts")]
+    // pub avar: Option<avar::Table<'a>>,
+    // #[cfg(feature = "variable-fonts")]
+    // pub cff2: Option<cff2::Table<'a>>,
+    // #[cfg(feature = "variable-fonts")]
+    // pub fvar: Option<fvar::Table<'a>>,
+    // #[cfg(feature = "variable-fonts")]
+    // pub gvar: Option<gvar::Table<'a>>,
+    // #[cfg(feature = "variable-fonts")]
+    // pub hvar: Option<hvar::Table<'a>>,
+    // #[cfg(feature = "variable-fonts")]
+    // pub mvar: Option<mvar::Table<'a>>,
+    // #[cfg(feature = "variable-fonts")]
+    // pub vvar: Option<hvar::Table<'a>>,
+};
+
+const VariableCoordinates = struct {};
+
+data: []const u8,
+tables: Tables,
+coordinates: VariableCoordinates,
+
+test "parsing roboto medium" {}
