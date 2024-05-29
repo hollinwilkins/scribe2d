@@ -1,8 +1,13 @@
 const std = @import("std");
+const Face = @import("./Face.zig");
 const testing = std.testing;
 
 export fn add(a: i32, b: i32) i32 {
     return a + b;
+}
+
+test {
+    std.testing.refAllDecls(Face);
 }
 
 test "basic add functionality" {

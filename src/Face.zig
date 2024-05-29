@@ -1,4 +1,8 @@
 const std = @import("std");
+const mem = std.mem;
+const Allocator = mem.Allocator;
+
+const Face = @This();
 
 const Tables = struct {
     // // Mandatory tables.
@@ -61,9 +65,51 @@ const Tables = struct {
 };
 
 const VariableCoordinates = struct {};
+const Unmanaged = struct {
+    data: []const u8,
+    tables: Tables,
+    coordinates: VariableCoordinates,
 
-data: []const u8,
-tables: Tables,
-coordinates: VariableCoordinates,
+    pub fn deinit(self: *Unmanaged, allocator: Allocator) void {
+        allocator.free(self.data);
+    }
+};
 
-test "parsing roboto medium" {}
+allocator: Allocator,
+unmanaged: Unmanaged,
+
+pub fn initFile(allocator: Allocator, path: []const u8) !Face {
+    const data = try readFileBytesAlloc(allocator, path);
+
+    return Face{
+        .allocator = allocator,
+        .unmanaged = Unmanaged{
+            .data = data,
+            .tables = Tables{},
+            .coordinates = VariableCoordinates{},
+        },
+    };
+}
+
+pub fn deinit(self: *Face) void {
+    self.unmanaged.deinit(self.allocator);
+}
+
+fn readFileBytesAlloc(allocator: Allocator, path: []const u8) ![]const u8 {
+    const absolute_path = try std.fs.realpathAlloc(allocator, path);
+    defer allocator.free(absolute_path);
+
+    var file = try std.fs.openFileAbsolute(absolute_path, .{
+        .mode = .read_only,
+    });
+    defer file.close();
+
+    // Read the file into a buffer.
+    const stat = try file.stat();
+    return try file.readToEndAlloc(allocator, stat.size);
+}
+
+test "parsing roboto medium" {
+    var rm_face = try Face.initFile(std.testing.allocator, "fixtures/fonts/roboto-medium.ttf");
+    defer rm_face.deinit();
+}
