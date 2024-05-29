@@ -1,10 +1,22 @@
 const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const root = @import("./root.zig");
+const Magic = root.Magic;
+const Reader = root.Reader;
+const Offset32 = root.Offset32;
 const table = @import("./table.zig");
+const TableRecord = table.TableRecord;
 const head = table.head;
 
 const Face = @This();
+
+const Error = error{
+    FaceMagicError,
+    FaceParsingError,
+    MalformedFont,
+    FaceIndexOutOfBounds,
+};
 
 const Tables = struct {
     // Mandatory tables.
@@ -68,7 +80,42 @@ const Tables = struct {
 };
 
 pub const Raw = struct {
-    data: []const u8,
+    pub const TableRecords = root.LazyArray(TableRecord);
+    pub const Offsets = root.LazyArray(Offset32);
+
+    table_records: TableRecords,
+
+    pub fn read(reader: *Reader, index: usize) !Raw {
+        const magic = Magic.read(reader) orelse return error.FaceMagicError;
+
+        if (magic == .font_collection) {
+            reader.skip(u32); // version
+            const number_of_faces = reader.read(u32) orelse return error.MalformedFont;
+            const offsets = Offsets.read(reader, number_of_faces) orelse return error.MalformedFont;
+            const face_offset = offsets.get(index) orelse return error.FaceIndexOutOfBounds;
+
+            if (!reader.setCursorChecked(face_offset)) {
+                return error.MalformedFont;
+            }
+
+            const font_magic = Magic.read(reader) orelse return error.FaceMagicError;
+            if (font_magic == .font_collection) {
+                return error.MalformedFont;
+            }
+        } else {
+            if (index != 0) {
+                return error.FaceParsingError;
+            }
+        }
+
+        const num_tables = reader.read(u16) orelse return error.MalformedFont;
+        reader.skipN(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
+        const table_records = TableRecords.read(reader, num_tables) orelse return error.MalformedFont;
+
+        return Raw{
+            .table_records = table_records,
+        };
+    }
 };
 
 const VariableCoordinates = struct {};

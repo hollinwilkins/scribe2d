@@ -22,8 +22,24 @@ pub const Tag = struct {
 };
 
 pub const TableRecord = struct {
+    const ReadSize: usize = @sizeOf(TableRecord);
+
     tag: Tag,
     check_sum: u32,
     offset: u32,
     length: u32,
+
+    pub fn read(reader: *Reader) ?TableRecord {
+        const tag = Tag.read(reader) orelse return null;
+        const check_sum = reader.read(u32) orelse return null;
+        const offset = reader.read(u32) orelse return null;
+        const length = reader.read(u32) orelse return null;
+
+        return TableRecord{
+            .tag = tag,
+            .check_sum = check_sum,
+            .offset = offset,
+            .length = length,
+        };
+    }
 };
