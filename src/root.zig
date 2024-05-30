@@ -1,7 +1,8 @@
 const std = @import("std");
 const Face = @import("./Face.zig");
 const testing = std.testing;
-const table = @import("./table.zig");
+pub const table = @import("./table.zig");
+pub const OutlineBuilder = @import("./OutlineBuilder.zig");
 pub const Reader = @import("./Reader.zig");
 
 pub const Error = error{
