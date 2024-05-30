@@ -115,42 +115,47 @@ pub const Subtable2 = struct {
 
         return @as(u16, @intCast(@as(i32, @intCast(glyph)) + @as(i32, @intCast(sub_header.id_delta)) % 65536));
     }
+
+    pub const Iterator = struct {
+        table: Subtable2,
+        index: usize,
+        first_byte: u16,
+        sub_byte: u16,
+
+        pub fn next(self: *Iterator) ?u32 {
+            if (self.first_byte >= 256) {
+                return null;
+            }
+
+            const first_byte = self.table.sub_header_keys.get(self.first_byte) orelse return null;
+            const i = first_byte / 8;
+            const sub_header = self.table.sub_headers.get(i) orelse return null;
+            const first_code = sub_header.first_code;
+
+            if (i == 0) {
+                // This is a single byte code.
+                const range_end = first_code + sub_header.entry_count;
+
+                self.first_byte += 1;
+                self.sub_byte = 0;
+                if (first_byte >= first_code and first_byte < range_end) {
+                    return @intCast(first_byte);
+                }
+
+                return self.next();
+            } else {
+                // This is a two byte code.
+                const base = first_code + (first_byte << 8);
+                if (self.sub_byte < sub_header.entry_count) {
+                    const codepoint = base + self.sub_byte;
+                    self.sub_byte += 1;
+                    return @intCast(codepoint);
+                }
+
+                self.first_byte += 1;
+                self.sub_byte = 0;
+                return self.next();
+            }
+        }
+    };
 };
-
-//     /// Calls `f` for each codepoint defined in this table.
-//     pub fn codepoints(&self, f: impl FnMut(u32)) {
-//         let _ = self.codepoints_inner(f);
-//     }
-
-//     #[inline]
-//     fn codepoints_inner(&self, mut f: impl FnMut(u32)) -> Option<()> {
-//         for first_byte in 0u16..256 {
-//             let i = self.sub_header_keys.get(first_byte)? / 8;
-//             let sub_header = self.sub_headers.get(i)?;
-//             let first_code = sub_header.first_code;
-
-//             if i == 0 {
-//                 // This is a single byte code.
-//                 let range_end = first_code.checked_add(sub_header.entry_count)?;
-//                 if first_byte >= first_code && first_byte < range_end {
-//                     f(u32::from(first_byte));
-//                 }
-//             } else {
-//                 // This is a two byte code.
-//                 let base = first_code.checked_add(first_byte << 8)?;
-//                 for k in 0..sub_header.entry_count {
-//                     let code_point = base.checked_add(k)?;
-//                     f(u32::from(code_point));
-//                 }
-//             }
-//         }
-
-//         Some(())
-//     }
-// }
-
-// impl core::fmt::Debug for Subtable2<'_> {
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         write!(f, "Subtable2 {{ ... }}")
-//     }
-// }
