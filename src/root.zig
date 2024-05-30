@@ -1,6 +1,7 @@
 const std = @import("std");
 const Face = @import("./Face.zig");
 const testing = std.testing;
+const table = @import("./table.zig");
 pub const Reader = @import("./Reader.zig");
 
 pub const Error = error{
@@ -10,6 +11,12 @@ pub const Error = error{
     FaceIndexOutOfBounds,
     MissingRequiredTable,
     InvalidTable,
+};
+
+pub const GlyphId = u16;
+pub const Range = struct {
+    start: usize,
+    end: usize,
 };
 
 pub const Rect = struct {
@@ -107,7 +114,7 @@ pub fn LazyArray(comptime T: type) type {
             i: usize,
 
             pub fn next(self: *@This()) ?T {
-                if (self.i < self.lazy_array.n) {
+                if (self.i < self.lazy_array.len) {
                     self.i += 1;
                     return self.lazy_array.get(self.i - 1);
                 }
@@ -116,7 +123,7 @@ pub fn LazyArray(comptime T: type) type {
             }
         };
 
-        n: usize,
+        len: usize,
         data: []const u8,
 
         pub fn get(self: @This(), i: usize) ?T {
