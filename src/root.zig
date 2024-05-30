@@ -127,6 +127,13 @@ pub fn LazyArray(comptime T: type) type {
 
             return null;
         }
+
+        pub fn iterator(self: *const @This()) Iter {
+            return Iter{
+                .lazy_array = self,
+                .i = 0,
+            };
+        }
     };
 }
 
