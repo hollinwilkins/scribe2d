@@ -214,6 +214,20 @@ pub const Magic = enum {
 
 pub fn LazyIntArray(comptime T: type) type {
     return struct {
+        pub const Iter = struct {
+            lazy_array: *const @This(),
+            i: usize,
+
+            pub fn next(self: *@This()) ?T {
+                if (self.i < self.lazy_array.len) {
+                    self.i += 1;
+                    return self.lazy_array.get(self.i - 1);
+                }
+
+                return null;
+            }
+        };
+
         data: []T = &.{},
 
         pub fn get(self: @This(), index: usize) ?T {
@@ -234,6 +248,13 @@ pub fn LazyIntArray(comptime T: type) type {
             const bytes = reader.readN(n * @sizeOf(T)) orelse return null;
             return @This(){
                 .data = std.mem.bytesAsSlice(T, bytes),
+            };
+        }
+
+        pub fn iterator(self: *const @This()) Iter {
+            return Iter{
+                .lazy_array = self,
+                .i = 0,
             };
         }
     };
