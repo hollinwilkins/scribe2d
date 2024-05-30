@@ -4,9 +4,13 @@ const OutlineBuilder = root.OutlineBuilder;
 const RectI16 = root.RectI16;
 const RectF32 = root.RectF32;
 const PointF32 = root.PointF32;
+const Transform = root.Transform;
+const F2DOT14 = root.F2DOT14;
 const Error = root.Error;
 const Reader = root.Reader;
 const table = root.table;
+
+pub const MAX_COMPONENTS: u8 = 32;
 
 pub const Table = struct {
     loca: table.loca.Table,
@@ -39,14 +43,18 @@ pub const Table = struct {
 pub const Builder = struct {
     builder: OutlineBuilder,
     bbox: RectF32,
+    transform: Transform,
+    is_default_transform: bool,
     first_on_curve: ?PointF32,
     first_off_curve: ?PointF32,
     last_off_curve: ?PointF32,
 
-    pub fn create(bbox: RectF32, builder: OutlineBuilder) Builder {
+    pub fn create(bbox: RectF32, transform: Transform, builder: OutlineBuilder) Builder {
         return Builder{
             .builder = builder,
             .bbox = bbox,
+            .transform = transform,
+            .is_default_transform = transform.isDefault(),
             .first_on_curve = null,
             .first_off_curve = null,
             .last_off_curve = null,
@@ -54,16 +62,29 @@ pub const Builder = struct {
     }
 
     pub fn moveTo(self: *Builder, x: f32, y: f32) void {
+        if (!self.is_default_transform) {
+            self.transform.applyTo(&x, &y);
+        }
+
         self.bbox.extendBy(x, y);
         self.builder.moveTo(x, y);
     }
 
     pub fn lineTo(self: *Builder, x: f32, y: f32) void {
+        if (!self.is_default_transform) {
+            self.transform.applyTo(&x, &y);
+        }
+
         self.bbox.extendBy(x, y);
         self.builder.lineTo(x, y);
     }
 
     pub fn quadTo(self: *Builder, x1: f32, y1: f32, x: f32, y: f32) void {
+        if (!self.is_default_transform) {
+            self.transform.applyTo(&x1, &y1);
+            self.transform.applyTo(&x, &y);
+        }
+
         self.bbox.extendBy(x1, y1);
         self.bbox.extendBy(x, y);
         self.builder.quadTo(x1, y1, x, y);
@@ -140,87 +161,104 @@ pub const Builder = struct {
     }
 };
 
-// #[derive(Clone, Copy, Debug)]
-// pub(crate) struct CompositeGlyphInfo {
-//     pub glyph_id: GlyphId,
-//     pub transform: Transform,
-//     #[allow(dead_code)]
-//     pub flags: CompositeGlyphFlags,
-// }
+pub const CompositeGlyphFlags = struct {
+    value: u16,
 
-// #[derive(Clone)]
-// pub(crate) struct CompositeGlyphIter<'a> {
-//     stream: Stream<'a>,
-// }
+    pub fn arg_1_and_2_are_words(self: CompositeGlyphFlags) bool {
+        return self.value & 0x0001 != 0;
+    }
 
-// impl<'a> CompositeGlyphIter<'a> {
-//     #[inline]
-//     pub fn new(data: &'a [u8]) -> Self {
-//         CompositeGlyphIter {
-//             stream: Stream::new(data),
-//         }
-//     }
-// }
+    pub fn args_are_xy_values(self: CompositeGlyphFlags) bool {
+        return self.value & 0x0002 != 0;
+    }
 
-// impl<'a> Iterator for CompositeGlyphIter<'a> {
-//     type Item = CompositeGlyphInfo;
+    pub fn we_have_a_scale(self: CompositeGlyphFlags) bool {
+        return self.value & 0x0008 != 0;
+    }
 
-//     #[inline]
-//     fn next(&mut self) -> Option<Self::Item> {
-//         let flags = CompositeGlyphFlags(self.stream.read::<u16>()?);
-//         let glyph_id = self.stream.read::<GlyphId>()?;
+    pub fn more_components(self: CompositeGlyphFlags) bool {
+        return self.value & 0x0020 != 0;
+    }
 
-//         let mut ts = Transform::default();
+    pub fn we_have_an_x_and_y_scale(self: CompositeGlyphFlags) bool {
+        return self.value & 0x0040 != 0;
+    }
 
-//         if flags.args_are_xy_values() {
-//             if flags.arg_1_and_2_are_words() {
-//                 ts.e = f32::from(self.stream.read::<i16>()?);
-//                 ts.f = f32::from(self.stream.read::<i16>()?);
-//             } else {
-//                 ts.e = f32::from(self.stream.read::<i8>()?);
-//                 ts.f = f32::from(self.stream.read::<i8>()?);
-//             }
-//         }
+    pub fn we_have_a_two_by_two(self: CompositeGlyphFlags) bool {
+        return self.value & 0x0080 != 0;
+    }
 
-//         if flags.we_have_a_two_by_two() {
-//             ts.a = self.stream.read::<F2DOT14>()?.to_f32();
-//             ts.b = self.stream.read::<F2DOT14>()?.to_f32();
-//             ts.c = self.stream.read::<F2DOT14>()?.to_f32();
-//             ts.d = self.stream.read::<F2DOT14>()?.to_f32();
-//         } else if flags.we_have_an_x_and_y_scale() {
-//             ts.a = self.stream.read::<F2DOT14>()?.to_f32();
-//             ts.d = self.stream.read::<F2DOT14>()?.to_f32();
-//         } else if flags.we_have_a_scale() {
-//             ts.a = self.stream.read::<F2DOT14>()?.to_f32();
-//             ts.d = ts.a;
-//         }
+    pub fn read(reader: *Reader) ?CompositeGlyphFlags {
+        const value = reader.readInt(u16) orelse return null;
 
-//         if !flags.more_components() {
-//             // Finish the iterator even if stream still has some data.
-//             self.stream.jump_to_end();
-//         }
+        return CompositeGlyphFlags{
+            .value = value,
+        };
+    }
+};
 
-//         Some(CompositeGlyphInfo {
-//             glyph_id,
-//             transform: ts,
-//             flags,
-//         })
-//     }
-// }
+pub const CompositeGlyphInfo = struct {
+    glyph_id: GlyphId,
+    transform: Transform,
+    flags: CompositeGlyphFlags,
 
-// // Due to some optimization magic, using f32 instead of i16
-// // makes the code ~10% slower. At least on my machine.
-// // I guess it's due to the fact that with i16 the struct
-// // fits into the machine word.
-// #[derive(Clone, Copy, Debug)]
-// pub(crate) struct GlyphPoint {
-//     pub x: i16,
-//     pub y: i16,
-//     /// Indicates that a point is a point on curve
-//     /// and not a control point.
-//     pub on_curve_point: bool,
-//     pub last_point: bool,
-// }
+    pub fn read(reader: *Reader) ?CompositeGlyphInfo {
+        const flags = CompositeGlyphFlags.read(reader) orelse return null;
+        const glyph_id = reader.readInt(GlyphId) orelse return null;
+        var ts = Transform{};
+
+        if (flags.args_are_xy_values()) {
+            if (flags.arg_1_and_2_are_words()) {
+                const e = reader.readInt(i16) orelse return null;
+                const f = reader.readInt(i16) orelse return null;
+                ts.e = @floatFromInt(e);
+                ts.f = @floatFromInt(f);
+            } else {
+                const e = reader.readInt(u8) orelse return null;
+                const f = reader.readInt(u8) orelse return null;
+                ts.e = @floatFromInt(e);
+                ts.f = @floatFromInt(f);
+            }
+        }
+
+        if (flags.we_have_a_two_by_two()) {
+            const a = F2DOT14.read(reader) orelse return null;
+            const b = F2DOT14.read(reader) orelse return null;
+            const c = F2DOT14.read(reader) orelse return null;
+            const d = F2DOT14.read(reader) orelse return null;
+            ts.a = a.toF32();
+            ts.b = b.toF32();
+            ts.c = c.toF32();
+            ts.d = d.toF32();
+        } else if (flags.we_have_an_x_and_y_scale()) {
+            const a = F2DOT14.read(reader) orelse return null;
+            const d = F2DOT14.read(reader) orelse return null;
+            ts.a = a;
+            ts.d = d;
+        } else if (flags.we_have_a_scale()) {
+            const a = F2DOT14.read(reader) orelse return null;
+            ts.a = a.toF32();
+            ts.d = ts.a;
+        }
+
+        if (flags.more_components()) {
+            // do nothing
+        }
+
+        return CompositeGlyphInfo{
+            .glyph_id = glyph_id,
+            .transform = ts,
+            .flags = flags,
+        };
+    }
+};
+
+pub const GlyphPoint = struct {
+    x: i16,
+    y: i16,
+    on_curve_point: bool,
+    last_point: bool,
+};
 
 // #[derive(Clone, Default)]
 // pub(crate) struct GlyphPointsIter<'a> {
@@ -417,7 +455,6 @@ pub const Builder = struct {
 // #[derive(Clone, Copy, Debug)]
 // pub(crate) struct CompositeGlyphFlags(u16);
 
-// #[rustfmt::skip]
 // impl CompositeGlyphFlags {
 //     #[inline] pub fn arg_1_and_2_are_words(self) -> bool { self.0 & 0x0001 != 0 }
 //     #[inline] pub fn args_are_xy_values(self) -> bool { self.0 & 0x0002 != 0 }

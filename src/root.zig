@@ -20,6 +20,62 @@ pub const Range = struct {
     end: usize,
 };
 
+pub const Transform = struct {
+    /// The 'a' component of the transform.
+    a: f32 = 1.0,
+    /// The 'b' component of the transform.
+    b: f32 = 0.0,
+    /// The 'c' component of the transform.
+    c: f32 = 0.0,
+    /// The 'd' component of the transform.
+    d: f32 = 1.0,
+    /// The 'e' component of the transform.
+    e: f32 = 0.0,
+    /// The 'f' component of the transform.
+    f: f32 = 0.0,
+
+    pub fn isDefault(self: Transform) bool {
+        return self == Transform{};
+    }
+
+    pub fn applyTo(self: Transform, x: *f32, y: *f32) void {
+        const tx = *x;
+        const ty = *y;
+        x.* = self.a * tx + self.c * ty + self.e;
+        y.* = self.b * tx + self.d * ty + self.f;
+    }
+
+    pub fn combine(self: Transform, other: Transform) Transform {
+        return Transform{
+            .a = self.a * other.a + self.c * other.b,
+            .b = self.b * other.a + self.d * other.b,
+            .c = self.a * other.c + self.c * other.d,
+            .d = self.b * other.c + self.d * other.d,
+            .e = self.a * other.e + self.c * other.f + self.e,
+            .f = self.b * other.e + self.d * other.f + self.f,
+        };
+    }
+};
+
+pub const F2DOT14 = struct {
+    value: i16,
+
+    pub fn toF32(self: F2DOT14) f32 {
+        return @as(f32, self.value) / 16384.0;
+    }
+
+    pub fn applyFloatDelta(self: F2DOT14, delta: f32) f32 {
+        return self.toF32() + @as(f32, (@as(f64, delta) * (1.0 / 16384.0)));
+    }
+
+    pub fn read(reader: *Reader) ?F2DOT14 {
+        const value = reader.readInt(i16) orelse return null;
+        return F2DOT14{
+            .value = value,
+        };
+    }
+};
+
 pub fn Rect(comptime T: type) type {
     return struct {
         x_min: T = 0,
