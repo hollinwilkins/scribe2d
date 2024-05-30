@@ -41,7 +41,7 @@ pub const Table = struct {
         r.skip(u32); // checksum adjustment
         r.skip(u32); // magic number
         r.skip(u16); // flags
-        const units_per_em = r.read(u16).?;
+        const units_per_em = r.readInt(u16).?;
         r.skip(u64); // create time
         r.skip(u64); // modified time
         const global_bbox = Rect.read(&r).?;

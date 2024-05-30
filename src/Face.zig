@@ -79,6 +79,14 @@ const Tables = struct {
     // pub mvar: Option<mvar::Table<'a>>,
     // #[cfg(feature = "variable-fonts")]
     // pub vvar: Option<hvar::Table<'a>>,
+
+    pub fn create(raw: Raw.TableRecords) !Tables {
+        const head_table = try head.Table.create(raw.head);
+
+        return Tables{
+            .head = head_table,
+        };
+    }
 };
 
 pub const Raw = struct {
@@ -304,19 +312,13 @@ pub fn initFile(allocator: Allocator, path: []const u8) !Face {
     const data = try readFileBytesAlloc(allocator, path);
     var reader = Reader.create(data);
     const raw_face = try Raw.read(&reader, 0);
-    _ = try Raw.TableRecords.create(data, raw_face.table_records);
+    const raw_tables = try Raw.TableRecords.create(data, raw_face.table_records);
 
     return Face{
         .allocator = allocator,
         .unmanaged = Unmanaged{
             .data = data,
-            .tables = Tables{
-                .head = head.Table{
-                    .global_bbox = Rect{},
-                    .index_to_location_format = .long,
-                    .units_per_em = 23,
-                },
-            },
+            .tables = try Tables.create(raw_tables),
             .coordinates = VariableCoordinates{},
         },
     };
