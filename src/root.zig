@@ -252,6 +252,14 @@ pub fn LazyArray(comptime T: type) type {
             return T.read(&reader);
         }
 
+        pub fn last(self: @This()) ?T {
+            if (self.data.len > 0) {
+                return self.data[self.data.len - 1];
+            }
+
+            return null;
+        }
+
         pub fn read(reader: *Reader, n: usize) ?@This() {
             if (reader.readN(n * ItemSize)) |data| {
                 return @This(){
