@@ -1,7 +1,9 @@
 const root = @import("../root.zig");
 const GlyphId = root.GlyphId;
 const OutlineBuilder = root.OutlineBuilder;
-const Rect = root.Rect;
+const RectI16 = root.RectI16;
+const RectF32 = root.RectF32;
+const PointF32 = root.PointF32;
 const Error = root.Error;
 const Reader = root.Reader;
 const table = root.table;
@@ -17,7 +19,7 @@ pub const Table = struct {
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, builder: OutlineBuilder) ?Rect {}
+    pub fn outline(self: Table, glyph_id: GlyphId, builder: OutlineBuilder) ?RectI16 {}
 
     //     /// Outlines a glyph.
     //     #[inline]
@@ -36,139 +38,107 @@ pub const Table = struct {
 
 pub const Builder = struct {
     builder: OutlineBuilder,
-    transform: Transform,
+    bbox: RectF32,
+    first_on_curve: ?PointF32,
+    first_off_curve: ?PointF32,
+    last_off_curve: ?PointF32,
+
+    pub fn create(bbox: RectF32, builder: OutlineBuilder) Builder {
+        return Builder{
+            .builder = builder,
+            .bbox = bbox,
+            .first_on_curve = null,
+            .first_off_curve = null,
+            .last_off_curve = null,
+        };
+    }
+
+    pub fn moveTo(self: *Builder, x: f32, y: f32) void {
+        self.bbox.extendBy(x, y);
+        self.builder.moveTo(x, y);
+    }
+
+    pub fn lineTo(self: *Builder, x: f32, y: f32) void {
+        self.bbox.extendBy(x, y);
+        self.builder.lineTo(x, y);
+    }
+
+    pub fn quadTo(self: *Builder, x1: f32, y1: f32, x: f32, y: f32) void {
+        self.bbox.extendBy(x1, y1);
+        self.bbox.extendBy(x, y);
+        self.builder.quadTo(x1, y1, x, y);
+    }
+
+    pub fn pushPoint(self: *Builder, x: f32, y: f32, on_curve_point: bool, last_point: bool) void {
+        const p = PointF32{
+            .x = x,
+            .y = y,
+        };
+
+        if (self.first_on_curve == null) {
+            if (on_curve_point) {
+                self.first_on_curve = p;
+                self.moveTo(x, y);
+            } else {
+                if (self.first_off_curve) |off_curve| {
+                    const mid = off_curve.lerp(p, 0.5);
+                    self.first_on_curve = mid;
+                    self.last_off_curve = p;
+                    self.moveTo(mid.x, mid.y);
+                } else {
+                    self.first_off_curve = p;
+                }
+            }
+        } else {
+            if (self.last_off_curve) |off_curve| {
+                if (on_curve_point) {
+                    self.last_off_curve = null;
+                    self.quadTo(off_curve.x, off_curve.y, p.x, p.y);
+                } else {
+                    self.last_off_curve = p;
+                    const mid = off_curve.lerp(p, 0.5);
+                    self.quadTo(off_curve.x, off_curve.y, mid.x, mid.y);
+                }
+            } else {
+                if (on_curve_point) {
+                    self.lineTo(p.x, p.y);
+                } else {
+                    self.last_off_curve = p;
+                }
+            }
+        }
+
+        if (last_point) {
+            self.finishContour();
+        }
+    }
+
+    fn finishContour(self: *Builder) void {
+        if (self.first_off_curve) |off_curve1| {
+            if (self.last_off_curve) |off_curve2| {
+                self.last_off_curve = null;
+                const mid = off_curve2.lerp(off_curve1, 0.5);
+                self.quadTo(off_curve2.x, off_curve2.y, mid.x, mid.y);
+            }
+        }
+
+        if (self.first_on_curve) |p| {
+            if (self.first_off_curve) |off_curve1| {
+                self.quadTo(off_curve1.x, off_curve1.y, p.x, p.y);
+            } else if (self.last_off_curve) |off_curve2| {
+                self.quadTo(off_curve2.x, off_curve2.y, p.x, p.y);
+            } else {
+                self.lineTo(p.x, p.y);
+            }
+
+            self.first_on_curve = null;
+            self.first_off_curve = null;
+            self.last_off_curve = null;
+
+            self.builder.close();
+        }
+    }
 };
-
-// pub(crate) struct Builder<'a> {
-//     pub builder: &'a mut dyn OutlineBuilder,
-//     pub transform: Transform,
-//     is_default_ts: bool, // `bool` is faster than `Option` or `is_default`.
-//     // We have to always calculate the bbox, because `gvar` doesn't store one
-//     // and in case of a malformed bbox in `glyf`.
-//     pub bbox: RectF,
-//     first_on_curve: Option<Point>,
-//     first_off_curve: Option<Point>,
-//     last_off_curve: Option<Point>,
-// }
-
-// impl<'a> Builder<'a> {
-//     #[inline]
-//     pub fn new(transform: Transform, bbox: RectF, builder: &'a mut dyn OutlineBuilder) -> Self {
-//         Builder {
-//             builder,
-//             transform,
-//             is_default_ts: transform.is_default(),
-//             bbox,
-//             first_on_curve: None,
-//             first_off_curve: None,
-//             last_off_curve: None,
-//         }
-//     }
-
-//     #[inline]
-//     fn move_to(&mut self, mut x: f32, mut y: f32) {
-//         if !self.is_default_ts {
-//             self.transform.apply_to(&mut x, &mut y);
-//         }
-
-//         self.bbox.extend_by(x, y);
-
-//         self.builder.move_to(x, y);
-//     }
-
-//     #[inline]
-//     fn line_to(&mut self, mut x: f32, mut y: f32) {
-//         if !self.is_default_ts {
-//             self.transform.apply_to(&mut x, &mut y);
-//         }
-
-//         self.bbox.extend_by(x, y);
-
-//         self.builder.line_to(x, y);
-//     }
-
-//     #[inline]
-//     fn quad_to(&mut self, mut x1: f32, mut y1: f32, mut x: f32, mut y: f32) {
-//         if !self.is_default_ts {
-//             self.transform.apply_to(&mut x1, &mut y1);
-//             self.transform.apply_to(&mut x, &mut y);
-//         }
-
-//         self.bbox.extend_by(x1, y1);
-//         self.bbox.extend_by(x, y);
-
-//         self.builder.quad_to(x1, y1, x, y);
-//     }
-
-//     // Useful links:
-//     //
-//     // - https://developer.apple.com/fonts/TrueType-Reference-Manual/RM01/Chap1.html
-//     // - https://stackoverflow.com/a/20772557
-//     #[inline]
-//     pub fn push_point(&mut self, x: f32, y: f32, on_curve_point: bool, last_point: bool) {
-//         let p = Point { x, y };
-//         if self.first_on_curve.is_none() {
-//             if on_curve_point {
-//                 self.first_on_curve = Some(p);
-//                 self.move_to(p.x, p.y);
-//             } else {
-//                 if let Some(offcurve) = self.first_off_curve {
-//                     let mid = offcurve.lerp(p, 0.5);
-//                     self.first_on_curve = Some(mid);
-//                     self.last_off_curve = Some(p);
-//                     self.move_to(mid.x, mid.y);
-//                 } else {
-//                     self.first_off_curve = Some(p);
-//                 }
-//             }
-//         } else {
-//             match (self.last_off_curve, on_curve_point) {
-//                 (Some(offcurve), true) => {
-//                     self.last_off_curve = None;
-//                     self.quad_to(offcurve.x, offcurve.y, p.x, p.y);
-//                 }
-//                 (Some(offcurve), false) => {
-//                     self.last_off_curve = Some(p);
-//                     let mid = offcurve.lerp(p, 0.5);
-//                     self.quad_to(offcurve.x, offcurve.y, mid.x, mid.y);
-//                 }
-//                 (None, true) => {
-//                     self.line_to(p.x, p.y);
-//                 }
-//                 (None, false) => {
-//                     self.last_off_curve = Some(p);
-//                 }
-//             }
-//         }
-
-//         if last_point {
-//             self.finish_contour();
-//         }
-//     }
-
-//     #[inline]
-//     fn finish_contour(&mut self) {
-//         if let (Some(offcurve1), Some(offcurve2)) = (self.first_off_curve, self.last_off_curve) {
-//             self.last_off_curve = None;
-//             let mid = offcurve2.lerp(offcurve1, 0.5);
-//             self.quad_to(offcurve2.x, offcurve2.y, mid.x, mid.y);
-//         }
-
-//         if let (Some(p), Some(offcurve1)) = (self.first_on_curve, self.first_off_curve) {
-//             self.quad_to(offcurve1.x, offcurve1.y, p.x, p.y);
-//         } else if let (Some(p), Some(offcurve2)) = (self.first_on_curve, self.last_off_curve) {
-//             self.quad_to(offcurve2.x, offcurve2.y, p.x, p.y);
-//         } else if let Some(p) = self.first_on_curve {
-//             self.line_to(p.x, p.y);
-//         }
-
-//         self.first_on_curve = None;
-//         self.first_off_curve = None;
-//         self.last_off_curve = None;
-
-//         self.builder.close();
-//     }
-// }
 
 // #[derive(Clone, Copy, Debug)]
 // pub(crate) struct CompositeGlyphInfo {

@@ -21,6 +21,10 @@ pub fn curveTo(self: OutlineBuilder, x1: f32, y1: f32, x2: f32, y2: f32, x: f32,
     self.vtable.curveTo(self.ptr, x1, y1, x2, y2, x, y);
 }
 
+pub fn close(self: OutlineBuilder) void {
+    self.vtable.close(self.ptr);
+}
+
 pub const VTable = struct {
     moveTo: *const fn (ctx: *anyopaque, x: f32, y: f32) void,
     lineTo: *const fn (ctx: *anyopaque, x: f32, y: f32) void,

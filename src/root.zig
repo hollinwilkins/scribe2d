@@ -20,50 +20,64 @@ pub const Range = struct {
     end: usize,
 };
 
-pub const Transform = struct {
-    /// The 'a' component of the transform.
-    a: f32,
-    /// The 'b' component of the transform.
-    b: f32,
-    /// The 'c' component of the transform.
-    c: f32,
-    /// The 'd' component of the transform.
-    d: f32,
-    /// The 'e' component of the transform.
-    e: f32,
-    /// The 'f' component of the transform.
-    f: f32,
-};
+pub fn Rect(comptime T: type) type {
+    return struct {
+        x_min: T = 0,
+        y_min: T = 0,
+        x_max: T = 0,
+        y_max: T = 0,
 
-pub const RectI16 = struct {
-    x_min: i16 = 0,
-    y_min: i16 = 0,
-    x_max: i16 = 0,
-    y_max: i16 = 0,
+        pub fn create(x1: i16, x2: i16, y1: i16, y2: i16) @This() {
+            return @This(){
+                .x_min = @min(x1, x2),
+                .y_min = @min(y1, y2),
+                .x_max = @max(x1, x2),
+                .y_max = @max(y1, y2),
+            };
+        }
 
-    pub fn create(x1: i16, x2: i16, y1: i16, y2: i16) RectI16 {
-        return RectI16{
-            .x_min = @min(x1, x2),
-            .y_min = @min(y1, y2),
-            .x_max = @max(x1, x2),
-            .y_max = @max(y1, y2),
-        };
-    }
+        pub fn read(reader: *Reader) ?@This() {
+            const x_min = reader.readInt(T) orelse return null;
+            const y_min = reader.readInt(T) orelse return null;
+            const x_max = reader.readInt(T) orelse return null;
+            const y_max = reader.readInt(T) orelse return null;
 
-    pub fn read(reader: *Reader) ?RectI16 {
-        const x_min = reader.readInt(i16) orelse return null;
-        const y_min = reader.readInt(i16) orelse return null;
-        const x_max = reader.readInt(i16) orelse return null;
-        const y_max = reader.readInt(i16) orelse return null;
+            return @This(){
+                .x_min = x_min,
+                .y_min = y_min,
+                .x_max = x_max,
+                .y_max = y_max,
+            };
+        }
 
-        return RectI16{
-            .x_min = x_min,
-            .y_min = y_min,
-            .x_max = x_max,
-            .y_max = y_max,
-        };
-    }
-};
+        // NOTE: can we use SIMD/NEON to make some of these functions more faster
+        pub fn extendBy(self: *@This(), x: T, y: T) void {
+            self.x_min = @min(self.x_min, x);
+            self.y_min = @min(self.y_min, y);
+            self.x_max = @min(self.x_max, x);
+            self.y_max = @min(self.y_max, y);
+        }
+    };
+}
+
+pub const RectI16 = Rect(i16);
+pub const RectF32 = Rect(f32);
+
+pub fn Point(comptime T: type) type {
+    return struct {
+        x: T,
+        y: T,
+
+        pub fn lerp(self: @This(), other: Point, t: T) @This() {
+            return @This(){
+                .x = self.x + t * (other.x - self.x),
+                .y = self.y + t * (other.y - self.y),
+            };
+        }
+    };
+}
+
+pub const PointF32 = Point(f32);
 
 pub const Fixed = struct {
     value: f32,
