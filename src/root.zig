@@ -255,7 +255,7 @@ pub fn LazyArray(comptime T: type) type {
         pub fn read(reader: *Reader, n: usize) ?@This() {
             if (reader.readN(n * ItemSize)) |data| {
                 return @This(){
-                    .n = n,
+                    .len = n,
                     .data = data,
                 };
             }

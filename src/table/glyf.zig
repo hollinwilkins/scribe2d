@@ -17,12 +17,10 @@ pub const Table = struct {
     data: []const u8,
     loca: table.loca.Table,
 
-    pub fn create(data: []const u8) Error!Table {
-        const loca_table = try table.loca.Table.create(data);
-
+    pub fn create(data: []const u8, loca: table.loca.Table) Error!Table {
         return Table{
             .data = data,
-            .loca = loca_table,
+            .loca = loca,
         };
     }
 
