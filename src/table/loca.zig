@@ -67,7 +67,7 @@ pub const Table = union(u8) {
         return self.len() == 0;
     }
 
-    pub fn glyph_range(self: Table, glyph_id: GlyphId) ?Range {
+    pub fn glyphRange(self: Table, glyph_id: GlyphId) ?Range {
         if (glyph_id == std.math.maxInt(u16)) {
             return null;
         }

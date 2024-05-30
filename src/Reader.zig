@@ -13,6 +13,10 @@ pub fn create(data: []const u8) Reader {
     };
 }
 
+pub fn tail(self: *Reader) []const u8 {
+    return self.data[self.cursor..];
+}
+
 pub fn setCursor(self: *Reader, cursor: usize) void {
     self.cursor = cursor;
 }

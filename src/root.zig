@@ -12,6 +12,8 @@ pub const Error = error{
     FaceIndexOutOfBounds,
     MissingRequiredTable,
     InvalidTable,
+    MaxDepthExceeded,
+    BadOutline,
 };
 
 pub const GlyphId = u16;
@@ -90,6 +92,10 @@ pub fn Rect(comptime T: type) type {
                 .x_max = @max(x1, x2),
                 .y_max = @max(y1, y2),
             };
+        }
+
+        pub fn isDefault(self: @This()) bool {
+            return self == @This(){};
         }
 
         pub fn read(reader: *Reader) ?@This() {
@@ -189,6 +195,33 @@ pub const Magic = enum {
         return null;
     }
 };
+
+pub fn LazyIntArray(comptime T: type) type {
+    return struct {
+        data: []T = &.{},
+
+        pub fn get(self: @This(), index: usize) ?T {
+            if (index < self.data.len) {
+                return std.mem.bigToNative(T, self.data[index]);
+            }
+        }
+
+        pub fn last(self: @This()) ?T {
+            if (self.data.len > 0) {
+                return self.data[self.data.len - 1];
+            }
+
+            return null;
+        }
+
+        pub fn read(reader: *Reader, n: usize) ?@This() {
+            const bytes = reader.readN(n * @sizeOf(T)) orelse return null;
+            return @This(){
+                .data = std.mem.bytesAsSlice(T, bytes),
+            };
+        }
+    };
+}
 
 pub fn LazyArray(comptime T: type) type {
     return struct {
