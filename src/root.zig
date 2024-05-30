@@ -4,6 +4,8 @@ const testing = std.testing;
 pub const table = @import("./table.zig");
 pub const OutlineBuilder = @import("./OutlineBuilder.zig");
 pub const Reader = @import("./Reader.zig");
+pub const language = @import("./language.zig");
+pub const Language = language.Language;
 
 pub const Error = error{
     FaceMagicError,
@@ -158,6 +160,20 @@ pub const Fixed = struct {
     pub fn addDelta(self: Fixed, delta: f32) Fixed {
         return Fixed{
             .value = self.value + @as(f32, @as(f64, delta) * (1.0 / 65536.0)),
+        };
+    }
+};
+
+pub const Offset16 = struct {
+    const ReadSize = @sizeOf(Offset16);
+
+    offset: u16,
+
+    pub fn read(reader: *Reader) ?Offset16 {
+        const offset = reader.read(u16) orelse return null;
+
+        return Offset16{
+            .offset = offset,
         };
     }
 };
