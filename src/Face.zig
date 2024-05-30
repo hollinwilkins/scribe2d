@@ -256,6 +256,11 @@ pub const Raw = struct {
 
     table_records: TableRecordsList,
 
+    pub fn create(data: []const u8, index: usize) !Raw {
+        var r = Reader.create(data);
+        return try read(&r, index);
+    }
+
     pub fn read(reader: *Reader, index: usize) !Raw {
         const magic = Magic.read(reader) orelse return error.FaceMagicError;
 
@@ -340,4 +345,12 @@ fn readFileBytesAlloc(allocator: Allocator, path: []const u8) ![]const u8 {
 test "parsing roboto medium" {
     var rm_face = try Face.initFile(std.testing.allocator, "fixtures/fonts/roboto-medium.ttf");
     defer rm_face.deinit();
+
+    const raw = try Raw.create(rm_face.unmanaged.data, 0);
+    var iter = raw.table_records.iterator();
+
+    while (iter.next()) |tr| {
+        const name = tr.tag.toBytes();
+        std.debug.print("Table: {s}\n", .{&name});
+    }
 }
