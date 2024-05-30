@@ -15,8 +15,7 @@ const Tables = struct {
     // Mandatory tables.
     head: table.head.Table,
     hhea: table.hhea.Table,
-    // pub head: head::Table,
-    // pub hhea: hhea::Table,
+    maxp: table.maxp.Table,
     // pub maxp: maxp::Table,
 
     // pub bdat: Option<cbdt::Table<'a>>,
@@ -75,10 +74,12 @@ const Tables = struct {
     pub fn create(raw: Raw.TableRecords) !Tables {
         const head = try table.head.Table.create(raw.head);
         const hhea = try table.hhea.Table.create(raw.hhea);
+        const maxp = try table.maxp.Table.create(raw.hhea);
 
         return Tables{
             .head = head,
             .hhea = hhea,
+            .maxp = maxp,
         };
     }
 };

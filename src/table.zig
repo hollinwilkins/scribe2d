@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 pub const head = @import("./table/head.zig");
 pub const hhea = @import("./table/hhea.zig");
+pub const maxp = @import("./table/maxp.zig");
 const Reader = @import("./root.zig").Reader;
 
 pub const Tag = struct {
