@@ -1,12 +1,8 @@
 const root = @import("../root.zig");
+const Error = root.Error;
 const Fixed = root.Fixed;
 const Rect = root.Rect;
 const Reader = root.Reader;
-
-pub const Error = error{
-    InvalidHeadTableLength,
-    InvalidHeadTable,
-};
 
 pub const IndexToLocationFormat = enum {
     short,
@@ -32,7 +28,7 @@ pub const Table = struct {
 
     pub fn create(data: []const u8) Error!Table {
         if (data.len < 54) {
-            return error.InvalidHeadTableLength;
+            return error.InvalidTable;
         }
 
         var r = Reader.create(data);
@@ -51,7 +47,7 @@ pub const Table = struct {
         const index_to_location_format = IndexToLocationFormat.read(&r).?;
 
         if (units_per_em < 16 or units_per_em > 16384) {
-            return error.InvalidHeadTable;
+            return error.InvalidTable;
         }
 
         return Table{

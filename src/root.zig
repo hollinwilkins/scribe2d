@@ -3,6 +3,15 @@ const Face = @import("./Face.zig");
 const testing = std.testing;
 pub const Reader = @import("./Reader.zig");
 
+pub const Error = error{
+    FaceMagicError,
+    FaceParsingError,
+    MalformedFont,
+    FaceIndexOutOfBounds,
+    MissingRequiredTable,
+    InvalidTable,
+};
+
 pub const Rect = struct {
     x_min: i16 = 0,
     y_min: i16 = 0,

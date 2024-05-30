@@ -8,21 +8,13 @@ const Reader = root.Reader;
 const Offset32 = root.Offset32;
 const table = @import("./table.zig");
 const TableRecord = table.TableRecord;
-const head = table.head;
 
 const Face = @This();
 
-const Error = error{
-    FaceMagicError,
-    FaceParsingError,
-    MalformedFont,
-    FaceIndexOutOfBounds,
-    MissingRequiredTable,
-};
-
 const Tables = struct {
     // Mandatory tables.
-    head: head.Table,
+    head: table.head.Table,
+    hhea: table.hhea.Table,
     // pub head: head::Table,
     // pub hhea: hhea::Table,
     // pub maxp: maxp::Table,
@@ -81,10 +73,12 @@ const Tables = struct {
     // pub vvar: Option<hvar::Table<'a>>,
 
     pub fn create(raw: Raw.TableRecords) !Tables {
-        const head_table = try head.Table.create(raw.head);
+        const head = try table.head.Table.create(raw.head);
+        const hhea = try table.hhea.Table.create(raw.hhea);
 
         return Tables{
-            .head = head_table,
+            .head = head,
+            .hhea = hhea,
         };
     }
 };
