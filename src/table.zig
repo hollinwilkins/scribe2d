@@ -22,7 +22,7 @@ pub const Tag = struct {
 };
 
 pub const TableRecord = struct {
-    const ReadSize: usize = @sizeOf(TableRecord);
+    pub const ReadSize: usize = @sizeOf(TableRecord);
 
     tag: Tag,
     check_sum: u32,

@@ -59,7 +59,15 @@ pub fn readN(self: *Reader, n: usize) ?[]const u8 {
 
 pub fn read(self: *Reader, comptime T: type) ?T {
     if (self.readN(@sizeOf(T))) |bytes| {
-        return mem.bytesAsValue(T, bytes);
+        return mem.bytesToValue(T, bytes);
+    }
+
+    return null;
+}
+
+pub fn readInt(self: *Reader, comptime T: type) ?T {
+    if (self.readN(@sizeOf(T))) |bytes| {
+        return mem.bigToNative(T, mem.bytesToValue(T, bytes));
     }
 
     return null;

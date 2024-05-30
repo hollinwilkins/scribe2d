@@ -17,7 +17,7 @@ pub const IndexToLocationFormat = enum {
             switch (i) {
                 0 => return .short,
                 1 => return .long,
-                _ => return null,
+                else => return null,
             }
         }
 
@@ -35,20 +35,20 @@ pub const Table = struct {
             return error.InvalidHeadTableLength;
         }
 
-        const r = Reader.create(data);
+        var r = Reader.create(data);
         r.skip(u32); // version
-        _ = Fixed.read(r).?; // font revision
+        _ = Fixed.read(&r).?; // font revision
         r.skip(u32); // checksum adjustment
         r.skip(u32); // magic number
         r.skip(u16); // flags
         const units_per_em = r.read(u16).?;
         r.skip(u64); // create time
         r.skip(u64); // modified time
-        const global_bbox = r.read(Rect).?;
+        const global_bbox = Rect.read(&r).?;
         r.skip(u16); // max style
         r.skip(u16); // lowest PPEM
         r.skip(i16); // font direction hint
-        const index_to_location_format = IndexToLocationFormat.read(r).?;
+        const index_to_location_format = IndexToLocationFormat.read(&r).?;
 
         if (units_per_em < 16 or units_per_em > 16384) {
             return error.InvalidHeadTable;

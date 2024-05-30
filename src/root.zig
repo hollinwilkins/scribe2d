@@ -17,6 +17,20 @@ pub const Rect = struct {
             .y_max = @max(y1, y2),
         };
     }
+
+    pub fn read(reader: *Reader) ?Rect {
+        const x_min = reader.readInt(i16) orelse return null;
+        const y_min = reader.readInt(i16) orelse return null;
+        const x_max = reader.readInt(i16) orelse return null;
+        const y_max = reader.readInt(i16) orelse return null;
+
+        return Rect{
+            .x_min = x_min,
+            .y_min = y_min,
+            .x_max = x_max,
+            .y_max = y_max,
+        };
+    }
 };
 
 pub const Fixed = struct {
@@ -60,12 +74,13 @@ pub const Magic = enum {
     font_collection,
 
     pub fn read(reader: *Reader) ?Magic {
-        if (reader.read(u32)) |i| {
+        if (reader.readInt(u32)) |i| {
             switch (i) {
-                0x00010000 | 0x74727565 => return .true_type,
+                0x00010000 => return .true_type,
+                0x74727565 => return .true_type,
                 0x4F54544F => return .open_type,
                 0x74746366 => return .font_collection,
-                _ => return null,
+                else => return null,
             }
         }
 

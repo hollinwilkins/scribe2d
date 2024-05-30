@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const root = @import("./root.zig");
+const Rect = root.Rect;
 const Magic = root.Magic;
 const Reader = root.Reader;
 const Offset32 = root.Offset32;
@@ -90,11 +91,11 @@ pub const Raw = struct {
 
         if (magic == .font_collection) {
             reader.skip(u32); // version
-            const number_of_faces = reader.read(u32) orelse return error.MalformedFont;
+            const number_of_faces = reader.readInt(u32) orelse return error.MalformedFont;
             const offsets = Offsets.read(reader, number_of_faces) orelse return error.MalformedFont;
             const face_offset = offsets.get(index) orelse return error.FaceIndexOutOfBounds;
 
-            if (!reader.setCursorChecked(face_offset)) {
+            if (!reader.setCursorChecked(face_offset.offset)) {
                 return error.MalformedFont;
             }
 
@@ -108,7 +109,7 @@ pub const Raw = struct {
             }
         }
 
-        const num_tables = reader.read(u16) orelse return error.MalformedFont;
+        const num_tables = reader.readInt(u16) orelse return error.MalformedFont;
         reader.skipN(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
         const table_records = TableRecords.read(reader, num_tables) orelse return error.MalformedFont;
 
@@ -134,13 +135,20 @@ unmanaged: Unmanaged,
 
 pub fn initFile(allocator: Allocator, path: []const u8) !Face {
     const data = try readFileBytesAlloc(allocator, path);
+    var reader = Reader.create(data);
+    const raw_face = try Raw.read(&reader, 0);
+    _ = raw_face;
 
     return Face{
         .allocator = allocator,
         .unmanaged = Unmanaged{
             .data = data,
             .tables = Tables{
-                .head = try head.Table.create(&.{}),
+                .head = head.Table{
+                    .global_bbox = Rect{},
+                    .index_to_location_format = .long,
+                    .units_per_em = 23,
+                },
             },
             .coordinates = VariableCoordinates{},
         },
