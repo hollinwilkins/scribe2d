@@ -20,14 +20,29 @@ pub const Range = struct {
     end: usize,
 };
 
-pub const Rect = struct {
+pub const Transform = struct {
+    /// The 'a' component of the transform.
+    a: f32,
+    /// The 'b' component of the transform.
+    b: f32,
+    /// The 'c' component of the transform.
+    c: f32,
+    /// The 'd' component of the transform.
+    d: f32,
+    /// The 'e' component of the transform.
+    e: f32,
+    /// The 'f' component of the transform.
+    f: f32,
+};
+
+pub const RectI16 = struct {
     x_min: i16 = 0,
     y_min: i16 = 0,
     x_max: i16 = 0,
     y_max: i16 = 0,
 
-    pub fn create(x1: i16, x2: i16, y1: i16, y2: i16) Rect {
-        return Rect{
+    pub fn create(x1: i16, x2: i16, y1: i16, y2: i16) RectI16 {
+        return RectI16{
             .x_min = @min(x1, x2),
             .y_min = @min(y1, y2),
             .x_max = @max(x1, x2),
@@ -35,13 +50,13 @@ pub const Rect = struct {
         };
     }
 
-    pub fn read(reader: *Reader) ?Rect {
+    pub fn read(reader: *Reader) ?RectI16 {
         const x_min = reader.readInt(i16) orelse return null;
         const y_min = reader.readInt(i16) orelse return null;
         const x_max = reader.readInt(i16) orelse return null;
         const y_max = reader.readInt(i16) orelse return null;
 
-        return Rect{
+        return RectI16{
             .x_min = x_min,
             .y_min = y_min,
             .x_max = x_max,

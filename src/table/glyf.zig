@@ -1,5 +1,7 @@
 const root = @import("../root.zig");
 const GlyphId = root.GlyphId;
+const OutlineBuilder = root.OutlineBuilder;
+const Rect = root.Rect;
 const Error = root.Error;
 const Reader = root.Reader;
 const table = root.table;
@@ -15,7 +17,7 @@ pub const Table = struct {
         };
     }
 
-    // pub fn outline(self: Table, glyph_id: GlyphId, builder: )
+    pub fn outline(self: Table, glyph_id: GlyphId, builder: OutlineBuilder) ?Rect {}
 
     //     /// Outlines a glyph.
     //     #[inline]
@@ -30,6 +32,11 @@ pub const Table = struct {
     //         let range = self.loca_table.glyph_range(glyph_id)?;
     //         self.data.get(range)
     //     }
+};
+
+pub const Builder = struct {
+    builder: OutlineBuilder,
+    transform: Transform,
 };
 
 // pub(crate) struct Builder<'a> {
