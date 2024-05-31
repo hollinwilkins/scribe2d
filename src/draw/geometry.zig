@@ -6,6 +6,13 @@ pub fn Point(comptime T: type) type {
     return struct {
         x: T,
         y: T,
+
+        pub fn lerp(self: @This(), other: @This(), t: T) @This() {
+            return @This(){
+                .x = self.x + t * (other.x - self.x),
+                .y = self.y + t * (other.y - self.y),
+            };
+        }
     };
 }
 
@@ -58,7 +65,16 @@ pub fn Rect(comptime T: type) type {
                 },
             };
         }
+
+        // NOTE: can we use SIMD/NEON to make some of these functions more faster
+        pub fn extendBy(self: *@This(), x: T, y: T) void {
+            self.x_min = @min(self.x_min, x);
+            self.y_min = @min(self.y_min, y);
+            self.x_max = @min(self.x_max, x);
+            self.y_max = @min(self.y_max, y);
+        }
     };
 }
 
 pub const RectF32 = Rect(f32);
+pub const RectI16 = Rect(i16);

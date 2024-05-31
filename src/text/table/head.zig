@@ -1,7 +1,7 @@
 const root = @import("../root.zig");
 const Error = root.Error;
 const Fixed = root.Fixed;
-const Rect = root.RectI16;
+const Rect = root.draw.RectI16;
 const Reader = root.Reader;
 
 pub const IndexToLocationFormat = enum {
