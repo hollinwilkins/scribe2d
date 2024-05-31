@@ -3,7 +3,7 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = @import("./root.zig").RectF32;
 const PointF32 = @import("./root.zig").PointF32;
-const OutlineBuilder = @import("./OutlineBuilder.zig");
+const Outliner = @import("./Outliner.zig");
 
 pub const Segment = union(Kind) {
     pub const Kind = enum(u16) {
@@ -44,7 +44,7 @@ pub const Path = struct {
     pub const Builder = struct {
         const SegmentsList = std.ArrayList(Segment);
 
-        const OutlineBuilderFunctions = struct {
+        const OutlinerFunctions = struct {
             fn moveTo(ctx: *anyopaque, x: f32, y: f32) void {
                 @as(*Builder, @ptrCast(ctx)).moveTo(PointF32{ .x = x, .y = y });
             }
@@ -67,11 +67,11 @@ pub const Path = struct {
         };
 
         pub const OutlinerVTable = .{
-            .moveTo = OutlineBuilderFunctions.moveTo,
-            .lineTo = OutlineBuilderFunctions.lineTo,
-            .quadTo = OutlineBuilderFunctions.quadTo,
-            .curveTo = OutlineBuilderFunctions.curveTo,
-            .close = OutlineBuilderFunctions.close,
+            .moveTo = OutlinerFunctions.moveTo,
+            .lineTo = OutlinerFunctions.lineTo,
+            .quadTo = OutlinerFunctions.quadTo,
+            .curveTo = OutlinerFunctions.curveTo,
+            .close = OutlinerFunctions.close,
         };
 
         segments: SegmentsList,
@@ -89,8 +89,8 @@ pub const Path = struct {
             self.segments.deinit();
         }
 
-        pub fn outliner(self: *Builder) OutlineBuilder {
-            return OutlineBuilder{
+        pub fn outliner(self: *Builder) Outliner {
+            return Outliner{
                 .ptr = self,
                 .vtable = &OutlinerVTable,
             };

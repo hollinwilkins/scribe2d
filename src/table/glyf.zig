@@ -1,7 +1,7 @@
 const std = @import("std");
 const root = @import("../root.zig");
 const GlyphId = root.GlyphId;
-const OutlineBuilder = root.OutlineBuilder;
+const Outliner = root.Outliner;
 const LazyIntArray = root.LazyIntArray;
 const RectI16 = root.RectI16;
 const RectF32 = root.RectF32;
@@ -25,8 +25,8 @@ pub const Table = struct {
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, outline_builder: OutlineBuilder) Error!RectI16 {
-        var builder = Builder.create(RectF32{}, Transform{}, outline_builder);
+    pub fn outline(self: Table, glyph_id: GlyphId, outliner: Outliner) Error!RectI16 {
+        var builder = Builder.create(RectF32{}, Transform{}, outliner);
         const glyph_data = self.get(glyph_id) orelse return error.BadOutline;
         return try self.outlineImpl(glyph_data, 0, &builder);
     }
@@ -185,7 +185,7 @@ pub const CoordinatesLength = struct {
 };
 
 pub const Builder = struct {
-    builder: OutlineBuilder,
+    builder: Outliner,
     bbox: RectF32,
     transform: Transform,
     is_default_transform: bool,
@@ -193,7 +193,7 @@ pub const Builder = struct {
     first_off_curve: ?PointF32,
     last_off_curve: ?PointF32,
 
-    pub fn create(bbox: RectF32, transform: Transform, builder: OutlineBuilder) Builder {
+    pub fn create(bbox: RectF32, transform: Transform, builder: Outliner) Builder {
         return Builder{
             .builder = builder,
             .bbox = bbox,

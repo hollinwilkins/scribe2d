@@ -1,27 +1,27 @@
 const std = @import("std");
 
-const OutlineBuilder = @This();
+const Outliner = @This();
 
 ptr: *anyopaque,
 vtable: *const VTable,
 
-pub fn moveTo(self: OutlineBuilder, x: f32, y: f32) void {
+pub fn moveTo(self: Outliner, x: f32, y: f32) void {
     self.vtable.moveTo(self.ptr, x, y);
 }
 
-pub fn lineTo(self: OutlineBuilder, x: f32, y: f32) void {
+pub fn lineTo(self: Outliner, x: f32, y: f32) void {
     self.vtable.lineTo(self.ptr, x, y);
 }
 
-pub fn quadTo(self: OutlineBuilder, x1: f32, y1: f32, x: f32, y: f32) void {
+pub fn quadTo(self: Outliner, x1: f32, y1: f32, x: f32, y: f32) void {
     self.vtable.quadTo(self.ptr, x1, y1, x, y);
 }
 
-pub fn curveTo(self: OutlineBuilder, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void {
+pub fn curveTo(self: Outliner, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void {
     self.vtable.curveTo(self.ptr, x1, y1, x2, y2, x, y);
 }
 
-pub fn close(self: OutlineBuilder) void {
+pub fn close(self: Outliner) void {
     self.vtable.close(self.ptr);
 }
 
@@ -42,28 +42,28 @@ pub const Debug = struct {
         .close = Debug.close,
     };
 
-    pub const Instance = OutlineBuilder{
+    pub const Instance = Outliner{
         .ptr = undefined,
         .vtable = &vtable,
     };
 
     pub fn moveTo(_: *anyopaque, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.moveTo({}, {})\n", .{ x, y });
+        std.debug.print("Outliner.Debug.moveTo({}, {})\n", .{ x, y });
     }
 
     pub fn lineTo(_: *anyopaque, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.lineTo({}, {})\n", .{ x, y });
+        std.debug.print("Outliner.Debug.lineTo({}, {})\n", .{ x, y });
     }
 
     pub fn quadTo(_: *anyopaque, x1: f32, y1: f32, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.quadTo({}, {}, {}, {})\n", .{ x1, y1, x, y });
+        std.debug.print("Outliner.Debug.quadTo({}, {}, {}, {})\n", .{ x1, y1, x, y });
     }
 
     pub fn curveTo(_: *anyopaque, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.curveTo({}, {}, {}, {}, {}, {})\n", .{ x1, y1, x2, y2, x, y });
+        std.debug.print("Outliner.Debug.curveTo({}, {}, {}, {}, {}, {})\n", .{ x1, y1, x2, y2, x, y });
     }
 
     pub fn close(_: *anyopaque) void {
-        std.debug.print("OutlineBuilder.Debug.close()\n", .{});
+        std.debug.print("Outliner.Debug.close()\n", .{});
     }
 };

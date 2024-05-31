@@ -1,8 +1,8 @@
 const std = @import("std");
-const Face = @import("./Face.zig");
 const testing = std.testing;
+pub const Face = @import("./Face.zig");
 pub const table = @import("./table.zig");
-pub const OutlineBuilder = @import("./OutlineBuilder.zig");
+pub const Outliner = @import("./Outliner.zig");
 pub const Reader = @import("./Reader.zig");
 pub const language = @import("./language.zig");
 pub const Language = language.Language;
