@@ -44,8 +44,10 @@ pub const Table = struct {
         var reader = Reader.create(data);
         const numberOfContours = reader.readInt(i16) orelse return error.BadOutline;
         const bbox = RectI16.read(&reader) orelse return error.BadOutline;
-        const x_scale = @as(f64, @floatFromInt(bbox.x_max)) - @as(f64, @floatFromInt(bbox.x_min));
-        const y_scale = @as(f64, @floatFromInt(bbox.y_max)) - @as(f64, @floatFromInt(bbox.y_min));
+        const x_min: f64 = @floatFromInt(bbox.x_min);
+        const y_min: f64 = @floatFromInt(bbox.y_min);
+        const x_scale = @as(f64, @floatFromInt(bbox.x_max)) - x_min;
+        const y_scale = @as(f64, @floatFromInt(bbox.y_max)) - y_min;
 
         if (numberOfContours > 0) {
             // Simple glyph
@@ -60,8 +62,8 @@ pub const Table = struct {
                 var iter = &points_iterator_mut;
                 while (iter.next()) |point| {
                     builder.pushPoint(
-                        @as(f32, @floatCast(@as(f32, @floatFromInt(point.x)) / x_scale)),
-                        @as(f32, @floatCast(@as(f32, @floatFromInt(point.y)) / y_scale)),
+                        @as(f32, @floatCast((@as(f64, @floatFromInt(point.x)) - x_min) / x_scale)),
+                        @as(f32, @floatCast((@as(f64, @floatFromInt(point.y)) - y_min) / y_scale)),
                         point.on_curve_point,
                         point.last_point,
                     );
@@ -132,7 +134,6 @@ pub const Table = struct {
 
         while (flagsLeft > 0) {
             const flags = SimpleGlyphFlags.read(reader) orelse return error.BadOutline;
-            std.debug.print("Flags: {}\n", .{flags});
 
             // The number of times a glyph point repeats.
             if (flags.repeatFlag()) {
@@ -574,7 +575,7 @@ pub const GlyphPoint = struct {
                 if (!isSameOrShort) {
                     n = -n;
                 }
-            } else {
+            } else if (!isSameOrShort) {
                 n = self.reader.readInt(i16) orelse 0;
             }
 
