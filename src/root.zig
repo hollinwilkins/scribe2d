@@ -39,12 +39,12 @@ pub const Transform = struct {
     f: f32 = 0.0,
 
     pub fn isDefault(self: Transform) bool {
-        return self == Transform{};
+        return std.meta.eql(self, Transform{});
     }
 
     pub fn applyTo(self: Transform, x: *f32, y: *f32) void {
-        const tx = *x;
-        const ty = *y;
+        const tx = x.*;
+        const ty = y.*;
         x.* = self.a * tx + self.c * ty + self.e;
         y.* = self.b * tx + self.d * ty + self.f;
     }
@@ -132,7 +132,7 @@ pub fn Point(comptime T: type) type {
         x: T,
         y: T,
 
-        pub fn lerp(self: @This(), other: Point, t: T) @This() {
+        pub fn lerp(self: @This(), other: @This(), t: T) @This() {
             return @This(){
                 .x = self.x + t * (other.x - self.x),
                 .y = self.y + t * (other.y - self.y),
@@ -220,7 +220,7 @@ pub fn LazyIntArray(comptime T: type) type {
 
         pub fn last(self: @This()) ?T {
             if (self.data.len > 0) {
-                return self.data[self.data.len - 1];
+                return self.get(self.data.len - 1);
             }
 
             return null;
@@ -278,7 +278,7 @@ pub fn LazyArray(comptime T: type) type {
 
         pub fn last(self: @This()) ?T {
             if (self.data.len > 0) {
-                return self.data[self.data.len - 1];
+                return self.get(self.data.len - 1);
             }
 
             return null;

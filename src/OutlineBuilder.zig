@@ -34,15 +34,17 @@ pub const VTable = struct {
 };
 
 pub const Debug = struct {
+    const vtable = VTable{
+        .moveTo = Debug.moveTo,
+        .lineTo = Debug.lineTo,
+        .quadTo = Debug.quadTo,
+        .curveTo = Debug.curveTo,
+        .close = Debug.close,
+    };
+
     pub const Instance = OutlineBuilder{
         .ptr = undefined,
-        .vtable = VTable{
-            .moveTo = Debug.moveTo,
-            .lineTo = Debug.lineTo,
-            .quadTo = Debug.quadTo,
-            .curveTo = Debug.curveTo,
-            .close = Debug.close,
-        },
+        .vtable = &vtable,
     };
 
     pub fn moveTo(_: *anyopaque, x: f32, y: f32) void {

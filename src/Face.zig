@@ -68,6 +68,10 @@ test "parsing roboto medium" {
     const family = (try name_table.getNameAlloc(std.testing.allocator, .family)).?;
     defer std.testing.allocator.free(family);
 
+    const outline_builder = root.OutlineBuilder.Debug.Instance;
+    const bounds = try rm_face.unmanaged.tables.glyf.?.outline(97, outline_builder);
+    _ = bounds;
+
     const raw = try RawTables.create(rm_face.unmanaged.data, 0);
     var iter = raw.table_records.iterator();
 

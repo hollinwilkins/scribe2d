@@ -26,7 +26,7 @@ pub const Table = struct {
 
     pub fn outline(self: Table, glyph_id: GlyphId, outline_builder: OutlineBuilder) Error!RectI16 {
         var builder = Builder.create(RectF32{}, Transform{}, outline_builder);
-        const glyph_data = self.get(glyph_id) orelse return null;
+        const glyph_data = self.get(glyph_id) orelse return error.BadOutline;
         return try self.outlineImpl(glyph_data, 0, &builder);
     }
 
@@ -35,14 +35,14 @@ pub const Table = struct {
         return self.data[range.start..range.end];
     }
 
-    fn outlineImpl(self: Table, glyphData: []const u8, depth: u8, builder: *Builder) Error!RectI16 {
+    fn outlineImpl(self: Table, data: []const u8, depth: u8, builder: *Builder) Error!RectI16 {
         if (depth >= MAX_COMPONENTS) {
             return error.MaxDepthExceeded;
         }
 
-        var reader = Reader.create(glyphData);
+        var reader = Reader.create(data);
         const numberOfContours = reader.readInt(i16) orelse return error.BadOutline;
-        reader.skip(8); // skip bbox, we calculate it as we draw
+        reader.skipN(8); // skip bbox, we calculate it as we draw
 
         if (numberOfContours > 0) {
             // Simple glyph
@@ -52,8 +52,9 @@ pub const Table = struct {
                 return error.BadOutline;
             }
 
-            if (try parseSimpleOutline(glyphData, nContours)) |points_iterator| {
-                var iter = &points_iterator;
+            if (try parseSimpleOutline(reader.tail(), nContours)) |points_iterator| {
+                var points_iterator_mut = points_iterator;
+                var iter = &points_iterator_mut;
                 while (iter.next()) |point| {
                     builder.pushPoint(
                         @floatFromInt(point.x),
@@ -79,13 +80,20 @@ pub const Table = struct {
                 }
             }
 
-            return builder.bbox;
+            return RectI16{
+                .x_min = @intFromFloat(builder.bbox.x_min),
+                .y_min = @intFromFloat(builder.bbox.x_min),
+                .x_max = @intFromFloat(builder.bbox.x_max),
+                .y_max = @intFromFloat(builder.bbox.y_max),
+            };
         }
+
+        return RectI16{};
     }
 
-    fn parseSimpleOutline(glyphData: []const u8, numberOfContours: u16) Error!?GlyphPoint.Iterator {
-        var reader = Reader.create(glyphData);
-        const endpoints = GlyphPoint.EndpointsIterator.EndpointsList.read(reader, numberOfContours) orelse return error.BadOutline;
+    fn parseSimpleOutline(glyph_data: []const u8, numberOfContours: u16) Error!?GlyphPoint.Iterator {
+        var reader = Reader.create(glyph_data);
+        const endpoints = GlyphPoint.EndpointsIterator.EndpointsList.read(&reader, numberOfContours) orelse return error.BadOutline;
 
         const lastPoint = endpoints.last() orelse return error.BadOutline;
         const pointsTotal = lastPoint + 1;
@@ -96,19 +104,19 @@ pub const Table = struct {
 
         // Skip instructions byte code.
         const instructionsLength = reader.readInt(u16) orelse return error.BadOutline;
-        reader.skip(@intCast(instructionsLength));
+        reader.skipN(@intCast(instructionsLength));
 
         const flagsOffset = reader.cursor;
-        const coordinateLengths = resolveCoordinatesLength(reader, pointsTotal) orelse return error.BadOutline;
+        const coordinateLengths = try resolveCoordinatesLength(&reader, pointsTotal);
         const xCoordinatesOffset = reader.cursor;
         const yCoordinatesOffset = xCoordinatesOffset + @as(usize, @intCast(coordinateLengths.x));
         const yCoordinatesEnd = yCoordinatesOffset + @as(usize, @intCast(coordinateLengths.y));
 
         return GlyphPoint.Iterator{
-            .endpoints = GlyphPoint.EndpointsIterator.create(endpoints),
-            .flags = GlyphPoint.FlagsIterator.create(glyphData[flagsOffset..xCoordinatesOffset]),
-            .xCoordinates = GlyphPoint.CoordinatesIterator.create(glyphData[xCoordinatesOffset..yCoordinatesOffset]),
-            .yCoordinates = GlyphPoint.CoordinatesIterator.create(glyphData[yCoordinatesOffset..yCoordinatesEnd]),
+            .endpoints = GlyphPoint.EndpointsIterator.create(endpoints) orelse return null,
+            .flags = GlyphPoint.FlagsIterator.create(glyph_data[flagsOffset..xCoordinatesOffset]),
+            .xCoordinates = GlyphPoint.CoordinatesIterator.create(glyph_data[xCoordinatesOffset..yCoordinatesOffset]),
+            .yCoordinates = GlyphPoint.CoordinatesIterator.create(glyph_data[yCoordinatesOffset..yCoordinatesEnd]),
             .pointsLeft = pointsTotal,
         };
     }
@@ -126,6 +134,7 @@ pub const Table = struct {
             if (flags.repeatFlags()) {
                 const r = reader.readInt(u8) orelse return error.BadOutline;
                 repeats = @intCast(r);
+                repeats += 1;
             } else {
                 repeats = 1;
             }
@@ -154,12 +163,6 @@ pub const Table = struct {
                 // Coordinate is 2 bytes long.
                 yCoordinatesLength += repeats * 2;
             }
-
-            xCoordinatesLength += @as(u32, @intCast(flags.value & 0x02 != 0)) * repeats;
-            xCoordinatesLength += @as(u32, @intCast(flags.value & (0x02 | 0x10) == 0)) * (repeats * 2);
-
-            yCoordinatesLength += @as(u32, @intCast(flags.value & 0x04 != 0)) * repeats;
-            yCoordinatesLength += @as(u32, @intCast(flags.value & (0x04 | 0x20) == 0)) * (repeats * 2);
 
             flagsLeft -= repeats;
         }
@@ -198,32 +201,40 @@ pub const Builder = struct {
     }
 
     pub fn moveTo(self: *Builder, x: f32, y: f32) void {
+        var x_mut = x;
+        var y_mut = y;
         if (!self.is_default_transform) {
-            self.transform.applyTo(&x, &y);
+            self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox.extendBy(x, y);
-        self.builder.moveTo(x, y);
+        self.bbox.extendBy(x_mut, y_mut);
+        self.builder.moveTo(x_mut, y_mut);
     }
 
     pub fn lineTo(self: *Builder, x: f32, y: f32) void {
+        var x_mut = x;
+        var y_mut = y;
         if (!self.is_default_transform) {
-            self.transform.applyTo(&x, &y);
+            self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox.extendBy(x, y);
-        self.builder.lineTo(x, y);
+        self.bbox.extendBy(x_mut, y_mut);
+        self.builder.lineTo(x_mut, y_mut);
     }
 
     pub fn quadTo(self: *Builder, x1: f32, y1: f32, x: f32, y: f32) void {
+        var x1_mut = x1;
+        var y1_mut = y1;
+        var x_mut = x;
+        var y_mut = y;
         if (!self.is_default_transform) {
-            self.transform.applyTo(&x1, &y1);
-            self.transform.applyTo(&x, &y);
+            self.transform.applyTo(&x1_mut, &y1_mut);
+            self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox.extendBy(x1, y1);
-        self.bbox.extendBy(x, y);
-        self.builder.quadTo(x1, y1, x, y);
+        self.bbox.extendBy(x1_mut, y1_mut);
+        self.bbox.extendBy(x_mut, y_mut);
+        self.builder.quadTo(x1_mut, y1_mut, x_mut, y_mut);
     }
 
     pub fn pushPoint(self: *Builder, x: f32, y: f32, on_curve_point: bool, last_point: bool) void {
@@ -361,7 +372,7 @@ pub const SimpleGlyphFlags = struct {
     }
 
     pub fn read(reader: *Reader) ?SimpleGlyphFlags {
-        const value = reader.readInt(u8) orelse return null;
+        const value = reader.read(u8) orelse return null;
         return SimpleGlyphFlags{
             .value = value,
         };
@@ -499,7 +510,7 @@ pub const GlyphPoint = struct {
                 }
 
                 const add = @addWithOverflow(self.index, 1);
-                if (add[1]) {
+                if (add[1] == 1) {
                     self.index = add[0];
                 }
 
@@ -512,7 +523,7 @@ pub const GlyphPoint = struct {
     };
 
     pub const FlagsIterator = struct {
-        reader: *Reader,
+        reader: Reader,
         repeats: u8,
         flags: SimpleGlyphFlags,
 
@@ -528,7 +539,7 @@ pub const GlyphPoint = struct {
 
         pub fn next(self: *FlagsIterator) ?SimpleGlyphFlags {
             if (self.repeats == 0) {
-                self.flags = SimpleGlyphFlags.read(self.reader) orelse SimpleGlyphFlags{ .value = 0 };
+                self.flags = SimpleGlyphFlags.read(&self.reader) orelse SimpleGlyphFlags{ .value = 0 };
                 if (self.flags.repeatFlags()) {
                     self.repeats = self.reader.readInt(u8) orelse 0;
                 }
@@ -541,7 +552,7 @@ pub const GlyphPoint = struct {
     };
 
     pub const CoordinatesIterator = struct {
-        reader: *Reader,
+        reader: Reader,
         previous: i16,
 
         pub fn create(data: []const u8) CoordinatesIterator {
@@ -552,7 +563,7 @@ pub const GlyphPoint = struct {
         }
 
         pub fn next(self: *CoordinatesIterator, isShort: bool, isSameOrShort: bool) i16 {
-            var n = 0;
+            var n: i16 = 0;
 
             if (isShort) {
                 n = @intCast(self.reader.readInt(u8) orelse 0);
