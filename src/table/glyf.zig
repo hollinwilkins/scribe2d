@@ -131,7 +131,7 @@ pub const Table = struct {
             const flags = SimpleGlyphFlags.read(reader) orelse return error.BadOutline;
 
             // The number of times a glyph point repeats.
-            if (flags.repeatFlags()) {
+            if (flags.repeatFlag()) {
                 const r = reader.readInt(u8) orelse return error.BadOutline;
                 repeats = @intCast(r);
                 repeats += 1;
@@ -359,7 +359,7 @@ pub const SimpleGlyphFlags = struct {
         return self.value & 0x04 != 0;
     }
 
-    pub fn repeatFlags(self: SimpleGlyphFlags) bool {
+    pub fn repeatFlag(self: SimpleGlyphFlags) bool {
         return self.value & 0x08 != 0;
     }
 
@@ -540,7 +540,7 @@ pub const GlyphPoint = struct {
         pub fn next(self: *FlagsIterator) ?SimpleGlyphFlags {
             if (self.repeats == 0) {
                 self.flags = SimpleGlyphFlags.read(&self.reader) orelse SimpleGlyphFlags{ .value = 0 };
-                if (self.flags.repeatFlags()) {
+                if (self.flags.repeatFlag()) {
                     self.repeats = self.reader.readInt(u8) orelse 0;
                 }
             } else {
