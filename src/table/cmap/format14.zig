@@ -1,139 +1,139 @@
-// use crate::parser::{FromData, LazyArray32, Offset, Offset32, Stream, U24};
-// use crate::GlyphId;
+const std = @import("std");
+const root = @import("../../root.zig");
+const Error = root.Error;
+const Offset32 = root.Offset32;
+const Reader = root.Reader;
+const GlyphId = root.GlyphId;
+const LazyArray = root.LazyArray;
 
-// #[derive(Clone, Copy)]
-// struct VariationSelectorRecord {
-//     var_selector: u32,
-//     default_uvs_offset: Option<Offset32>,
-//     non_default_uvs_offset: Option<Offset32>,
-// }
+pub const VariationSelectorRecord = struct {
+    pub const ReadSize = @sizeOf(VariationSelectorRecord);
 
-// impl FromData for VariationSelectorRecord {
-//     const SIZE: usize = 11;
+    var_selector: u24,
+    default_uvs_offset: ?Offset32,
+    non_default_uvs_offset: ?Offset32,
 
-//     #[inline]
-//     fn parse(data: &[u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         Some(VariationSelectorRecord {
-//             var_selector: s.read::<U24>()?.0,
-//             default_uvs_offset: s.read::<Option<Offset32>>()?,
-//             non_default_uvs_offset: s.read::<Option<Offset32>>()?,
-//         })
-//     }
-// }
+    pub fn read(reader: *Reader) ?VariationSelectorRecord {
+        const var_selector = reader.readInt(u24) orelse return null;
+        const default_uvs_offset = Offset32.read(reader);
+        const non_default_uvs_offset = Offset32.read(reader);
 
-// #[derive(Clone, Copy)]
-// struct UVSMappingRecord {
-//     unicode_value: u32,
-//     glyph_id: GlyphId,
-// }
+        return VariationSelectorRecord{
+            .var_selector = var_selector,
+            .default_uvs_offset = default_uvs_offset,
+            .non_default_uvs_offset = non_default_uvs_offset,
+        };
+    }
+};
 
-// impl FromData for UVSMappingRecord {
-//     const SIZE: usize = 5;
+pub const UVSMappingRecord = struct {
+    pub const ReadSize = @sizeOf(UVSMappingRecord);
 
-//     #[inline]
-//     fn parse(data: &[u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         Some(UVSMappingRecord {
-//             unicode_value: s.read::<U24>()?.0,
-//             glyph_id: s.read::<GlyphId>()?,
-//         })
-//     }
-// }
+    unicode_value: u24,
+    glyph_id: GlyphId,
 
-// #[derive(Clone, Copy)]
-// struct UnicodeRangeRecord {
-//     start_unicode_value: u32,
-//     additional_count: u8,
-// }
+    pub fn read(reader: *Reader) ?UVSMappingRecord {
+        const unicode_value = reader.readInt(u24) orelse return null;
+        const glyph_id = reader.readIng(GlyphId) orelse return null;
 
-// impl UnicodeRangeRecord {
-//     fn contains(&self, c: u32) -> bool {
-//         // Never overflows, since `start_unicode_value` is actually u24.
-//         let end = self.start_unicode_value + u32::from(self.additional_count);
-//         (self.start_unicode_value..=end).contains(&c)
-//     }
-// }
+        return UVSMappingRecord{
+            .unicode_value = unicode_value,
+            .glyph_id = glyph_id,
+        };
+    }
+};
 
-// impl FromData for UnicodeRangeRecord {
-//     const SIZE: usize = 4;
+pub const UnicodeRangeRecord = struct {
+    pub const ReadSize = @sizeOf(UnicodeRangeRecord);
 
-//     #[inline]
-//     fn parse(data: &[u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         Some(UnicodeRangeRecord {
-//             start_unicode_value: s.read::<U24>()?.0,
-//             additional_count: s.read::<u8>()?,
-//         })
-//     }
-// }
+    start_unicode_value: u24,
+    additional_count: u8,
 
-// /// A result of a variation glyph mapping.
-// #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-// pub enum GlyphVariationResult {
-//     /// Glyph was found in the variation encoding table.
-//     Found(GlyphId),
-//     /// Glyph should be looked in other, non-variation tables.
-//     ///
-//     /// Basically, you should use `Encoding::glyph_index` or `Face::glyph_index`
-//     /// in this case.
-//     UseDefault,
-// }
+    pub fn read(reader: *Reader) ?UnicodeRangeRecord {
+        const start_unicode_value = reader.readInt(u24) orelse return null;
+        const additional_count = reader.readInt(u8) orelse return null;
 
-// /// A [format 14](https://docs.microsoft.com/en-us/typography/opentype/spec/cmap#format-14-unicode-variation-sequences)
-// /// subtable.
-// #[derive(Clone, Copy)]
-// pub struct Subtable14<'a> {
-//     records: LazyArray32<'a, VariationSelectorRecord>,
-//     // The whole subtable data.
-//     data: &'a [u8],
-// }
+        return UnicodeRangeRecord{
+            .start_unicode_value = start_unicode_value,
+            .additional_count = additional_count,
+        };
+    }
+};
 
-// impl<'a> Subtable14<'a> {
-//     /// Parses a subtable from raw data.
-//     pub fn parse(data: &'a [u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         s.skip::<u16>(); // format
-//         s.skip::<u32>(); // length
-//         let count = s.read::<u32>()?;
-//         let records = s.read_array32::<VariationSelectorRecord>(count)?;
-//         Some(Self { records, data })
-//     }
+pub const GlyphVariationResult = struct {
+    glyph_id: ?GlyphId,
+};
 
-//     /// Returns a glyph index for a code point.
-//     pub fn glyph_index(&self, code_point: u32, variation: u32) -> Option<GlyphVariationResult> {
-//         let (_, record) = self
-//             .records
-//             .binary_search_by(|v| v.var_selector.cmp(&variation))?;
+pub const Subtable14 = struct {
+    const RecordsList = LazyArray(VariationSelectorRecord);
+    const UnicodeRangeRecordsList = LazyArray(UnicodeRangeRecord);
+    const UVSMappingRecordsList = LazyArray(UVSMappingRecord);
 
-//         if let Some(offset) = record.default_uvs_offset {
-//             let data = self.data.get(offset.to_usize()..)?;
-//             let mut s = Stream::new(data);
-//             let count = s.read::<u32>()?;
-//             let ranges = s.read_array32::<UnicodeRangeRecord>(count)?;
-//             for range in ranges {
-//                 if range.contains(code_point) {
-//                     return Some(GlyphVariationResult::UseDefault);
-//                 }
-//             }
-//         }
+    records: RecordsList,
+    data: []const u8,
 
-//         if let Some(offset) = record.non_default_uvs_offset {
-//             let data = self.data.get(offset.to_usize()..)?;
-//             let mut s = Stream::new(data);
-//             let count = s.read::<u32>()?;
-//             let uvs_mappings = s.read_array32::<UVSMappingRecord>(count)?;
-//             let (_, mapping) =
-//                 uvs_mappings.binary_search_by(|v| v.unicode_value.cmp(&code_point))?;
-//             return Some(GlyphVariationResult::Found(mapping.glyph_id));
-//         }
+    pub fn create(data: []const u8) Error!Subtable14 {
+        var reader = Reader.create(data);
+        reader.skip(u16); // format
+        reader.skip(u32); // length
+        const count = reader.readInt(u32) orelse return error.InvalidTable;
+        const records = RecordsList.read(&reader, count) orelse return error.InvalidTable;
 
-//         None
-//     }
-// }
+        return Subtable14{
+            .records = records,
+            .data = data,
+        };
+    }
 
-// impl core::fmt::Debug for Subtable14<'_> {
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         write!(f, "Subtable14 {{ ... }}")
-//     }
-// }
+    pub fn getGlyphIndex(self: Subtable14, codepoint32: u32, variation: u32) ?GlyphVariationResult {
+        const search = self.records.binarySearchBy(variation, &orderVariation) orelse return null;
+
+        if (search.value.default_uvs_offset) |offset| {
+            const data = self.data[offset..];
+            var reader = Reader.create(data);
+            const count = reader.read(u32) orelse return null;
+            const ranges = UnicodeRangeRecordsList.read(reader, count) orelse return null;
+            for (ranges) |range| {
+                if (range.contains(codepoint32)) {
+                    return GlyphVariationResult{
+                        .glyph_id = null,
+                    };
+                }
+            }
+        }
+
+        if (search.value.non_default_uvs_offset) |offset| {
+            const data = self.data[offset..];
+            var reader = Reader.create(data);
+            const count = reader.readInt(u32) orelse return null;
+            const uvs_mappings = UVSMappingRecordsList.read(&reader, count) orelse return null;
+
+            const uv_search = uvs_mappings.binarySearchBy(codepoint32, orderCodepoint) orelse return null;
+            return GlyphVariationResult{
+                .glyph_id = uv_search.value.glyph_id,
+            };
+        }
+
+        return null;
+    }
+
+    fn orderVariation(variation: u32, record: *const VariationSelectorRecord) std.math.Order {
+        if (record.var_selector < variation) {
+            return .lt;
+        } else if (record.var_selector == variation) {
+            return .eq;
+        } else {
+            return .gt;
+        }
+    }
+
+    fn orderCodepoint(codepoint32: u32, record: *const UVSMappingRecord) std.math.Order {
+        if (codepoint32 < record.unicode_value) {
+            return .lt;
+        } else if (codepoint32 == record.unicode_value) {
+            return .eq;
+        } else {
+            return .gt;
+        }
+    }
+};
