@@ -38,7 +38,7 @@ pub const KnownNameId = enum(u16) {
     variations_post_script_name_prefix = 25,
 };
 
-pub const NameId = union(u8) {
+pub const NameId = union(enum) {
     known: KnownNameId,
     unknown: u16,
 
@@ -54,6 +54,13 @@ pub const NameId = union(u8) {
         return NameId{
             .unknown = value,
         };
+    }
+
+    pub fn equalsKnown(self: NameId, known_id: KnownNameId) bool {
+        switch (self) {
+            .known => |known| return known == known_id,
+            else => return false,
+        }
     }
 };
 
@@ -90,20 +97,20 @@ pub fn isUnicodeEncoding(platform_id: PlatformId, encoding_id: u16) bool {
 }
 
 pub const NameRecord = struct {
-    pub const ReadSize: usize = @sizeOf(NameRecord);
+    pub const ReadSize: usize = 12;
 
-    platform_id: PlatformId,
-    encoding_id: u16,
-    language_id: u16,
-    name_id: u16,
-    length: u16,
-    offset: Offset16,
+    platform_id: PlatformId, // 2 bytes
+    encoding_id: u16, // 2 bytes
+    language_id: u16, // 2 bytes
+    name_id: NameId, // 2 bytes
+    length: u16, // 2 bytes
+    offset: Offset16, // 2 bytes
 
     pub fn read(reader: *Reader) ?NameRecord {
         const platform_id = PlatformId.read(reader) orelse return null;
         const encoding_id = reader.readInt(u16) orelse return null;
         const language_id = reader.readInt(u16) orelse return null;
-        const name_id = reader.readInt(u16) orelse return null;
+        const name_id = NameId.read(reader) orelse return null;
         const length = reader.readInt(u16) orelse return null;
         const offset = Offset16.read(reader) orelse return null;
 
@@ -122,12 +129,25 @@ pub const Name = struct {
     platform_id: PlatformId,
     encoding_id: u16,
     language_id: u16,
-    name_id: u16,
+    name_id: NameId,
     name: []const u8,
 
     pub fn toUtf8Alloc(self: Name, allocator: Allocator) !?[]u8 {
         if (self.isUnicode()) {
-            return try std.unicode.utf16LeToUtf8Alloc(allocator, std.mem.bytesAsSlice(u16, self.name));
+            if (self.name.len % 2 != 0) {
+                // TODO: there is probably a better error type here
+                return error.InvalidTable;
+            }
+
+            const utf16 = try allocator.alloc(u16, self.name.len / 2);
+            defer allocator.free(utf16);
+            const utf16_from8: []const u16 = @alignCast(std.mem.bytesAsSlice(u16, self.name));
+
+            for (utf16_from8, utf16) |c, *c2| {
+                c2.* = std.mem.bigToNative(u16, c);
+            }
+
+            return try std.unicode.utf16LeToUtf8Alloc(allocator, utf16);
         } else {
             return null;
         }
@@ -164,11 +184,11 @@ pub const Names = struct {
     records: NamesList,
     storage: []const u8,
 
-    pub fn get(self: Names, index: u16) ?Name {
+    pub fn get(self: Names, index: usize) ?Name {
         const record = self.records.get(index) orelse return null;
-        const name_start: usize = @intCast(record.offset.value);
+        const name_start: usize = @intCast(record.offset.offset);
         const name_end = name_start + @as(usize, @intCast(record.length));
-        const name = self.storage.get[name_start..name_end];
+        const name = self.storage[name_start..name_end];
 
         return Name{
             .platform_id = record.platform_id,
@@ -185,6 +205,13 @@ pub const Names = struct {
 
     pub fn isEmpty(self: Names) bool {
         return self.len() == 0;
+    }
+
+    pub fn iterator(self: Names) Iterator {
+        return Iterator{
+            .names = self,
+            .index = 0,
+        };
     }
 };
 
@@ -226,5 +253,18 @@ pub const Table = struct {
                 .storage = storage,
             },
         };
+    }
+
+    pub fn getNameAlloc(self: Table, allocator: Allocator, name_id: KnownNameId) !?[]const u8 {
+        var iterator = self.names.records.iterator();
+
+        while (iterator.next()) |record| {
+            if (record.name_id.equalsKnown(name_id)) {
+                const name = self.names.get(iterator.index) orelse return null;
+                return try name.toUtf8Alloc(allocator);
+            }
+        }
+
+        return null;
     }
 };

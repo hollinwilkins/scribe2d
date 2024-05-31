@@ -271,13 +271,13 @@ pub fn LazyArray(comptime T: type) type {
         };
 
         pub const Iter = struct {
-            lazy_array: *const Self,
-            i: usize,
+            array: *const Self,
+            index: usize,
 
             pub fn next(self: *@This()) ?T {
-                if (self.i < self.lazy_array.len) {
-                    self.i += 1;
-                    return self.lazy_array.get(self.i - 1);
+                if (self.index < self.array.len) {
+                    self.index += 1;
+                    return self.array.get(self.index - 1);
                 }
 
                 return null;
@@ -315,8 +315,8 @@ pub fn LazyArray(comptime T: type) type {
 
         pub fn iterator(self: *const @This()) Iter {
             return Iter{
-                .lazy_array = self,
-                .i = 0,
+                .array = self,
+                .index = 0,
             };
         }
 

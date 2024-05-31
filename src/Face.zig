@@ -355,7 +355,10 @@ test "parsing roboto medium" {
     defer rm_face.deinit();
 
     const name_table = rm_face.unmanaged.tables.name.?;
-    _ = name_table;
+    const family = (try name_table.getNameAlloc(std.testing.allocator, .family)).?;
+    defer std.testing.allocator.free(family);
+
+    std.debug.print("Family is: {s}\n", .{family});
 
     const raw = try Raw.create(rm_face.unmanaged.data, 0);
     var iter = raw.table_records.iterator();
