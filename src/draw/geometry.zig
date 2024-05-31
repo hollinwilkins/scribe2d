@@ -1,7 +1,3 @@
-pub const Error = error{
-    DimensionOverflow,
-};
-
 pub fn Point(comptime T: type) type {
     return struct {
         x: T,

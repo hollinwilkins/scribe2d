@@ -10,8 +10,6 @@ const table = @import("./table.zig");
 const Tables = table.Tables;
 const RawTables = table.RawTables;
 
-const Face = @This();
-
 const VariableCoordinates = struct {};
 const Unmanaged = struct {
     data: []const u8,
@@ -23,42 +21,44 @@ const Unmanaged = struct {
     }
 };
 
-allocator: Allocator,
-unmanaged: Unmanaged,
+pub const Face = struct {
+    allocator: Allocator,
+    unmanaged: Unmanaged,
 
-pub fn initFile(allocator: Allocator, path: []const u8) !Face {
-    const data = try readFileBytesAlloc(allocator, path);
-    var reader = Reader.create(data);
-    const raw_face = try RawTables.read(&reader, 0);
-    const raw_tables = try RawTables.TableRecords.create(data, raw_face.table_records);
+    pub fn initFile(allocator: Allocator, path: []const u8) !Face {
+        const data = try readFileBytesAlloc(allocator, path);
+        var reader = Reader.create(data);
+        const raw_face = try RawTables.read(&reader, 0);
+        const raw_tables = try RawTables.TableRecords.create(data, raw_face.table_records);
 
-    return Face{
-        .allocator = allocator,
-        .unmanaged = Unmanaged{
-            .data = data,
-            .tables = try Tables.create(raw_tables),
-            .coordinates = VariableCoordinates{},
-        },
-    };
-}
+        return Face{
+            .allocator = allocator,
+            .unmanaged = Unmanaged{
+                .data = data,
+                .tables = try Tables.create(raw_tables),
+                .coordinates = VariableCoordinates{},
+            },
+        };
+    }
 
-pub fn deinit(self: *Face) void {
-    self.unmanaged.deinit(self.allocator);
-}
+    pub fn deinit(self: *Face) void {
+        self.unmanaged.deinit(self.allocator);
+    }
 
-fn readFileBytesAlloc(allocator: Allocator, path: []const u8) ![]const u8 {
-    const absolute_path = try std.fs.realpathAlloc(allocator, path);
-    defer allocator.free(absolute_path);
+    fn readFileBytesAlloc(allocator: Allocator, path: []const u8) ![]const u8 {
+        const absolute_path = try std.fs.realpathAlloc(allocator, path);
+        defer allocator.free(absolute_path);
 
-    var file = try std.fs.openFileAbsolute(absolute_path, .{
-        .mode = .read_only,
-    });
-    defer file.close();
+        var file = try std.fs.openFileAbsolute(absolute_path, .{
+            .mode = .read_only,
+        });
+        defer file.close();
 
-    // Read the file into a buffer.
-    const stat = try file.stat();
-    return try file.readToEndAlloc(allocator, stat.size);
-}
+        // Read the file into a buffer.
+        const stat = try file.stat();
+        return try file.readToEndAlloc(allocator, stat.size);
+    }
+};
 
 test "parsing roboto medium" {
     var rm_face = try Face.initFile(std.testing.allocator, "fixtures/fonts/roboto-medium.ttf");

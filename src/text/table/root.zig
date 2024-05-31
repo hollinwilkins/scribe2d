@@ -3,13 +3,12 @@ const mem = std.mem;
 const root = @import("./root.zig");
 const LazyArray = root.LazyArray;
 const Offset32 = root.Offset32;
-pub const head = @import("./table/head.zig");
-pub const hhea = @import("./table/hhea.zig");
-pub const maxp = @import("./table/maxp.zig");
-pub const loca = @import("./table/loca.zig");
-pub const name = @import("./table/name.zig");
-pub const glyf = @import("./table/glyf.zig");
-const Reader = @import("./root.zig").Reader;
+pub const head = @import("./head.zig");
+pub const hhea = @import("./hhea.zig");
+pub const maxp = @import("./maxp.zig");
+pub const loca = @import("./loca.zig");
+pub const name = @import("./name.zig");
+pub const glyf = @import("./glyf.zig");
 
 pub const Magic = enum {
     true_type,

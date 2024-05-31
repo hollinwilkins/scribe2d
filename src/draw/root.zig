@@ -1,3 +1,7 @@
+pub const Error = error{
+    DimensionOverflow,
+};
+
 const path = @import("./path.zig");
 const geometry = @import("./geometry.zig");
 
