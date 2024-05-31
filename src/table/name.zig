@@ -9,33 +9,52 @@ const Reader = root.Reader;
 const Offset16 = root.Offset16;
 const Language = root.Language;
 
-pub const NameId = struct {
-    pub const COPYRIGHT_NOTICE: u16 = 0;
-    pub const FAMILY: u16 = 1;
-    pub const SUBFAMILY: u16 = 2;
-    pub const UNIQUE_ID: u16 = 3;
-    pub const FULL_NAME: u16 = 4;
-    pub const VERSION: u16 = 5;
-    pub const POST_SCRIPT_NAME: u16 = 6;
-    pub const TRADEMARK: u16 = 7;
-    pub const MANUFACTURER: u16 = 8;
-    pub const DESIGNER: u16 = 9;
-    pub const DESCRIPTION: u16 = 10;
-    pub const VENDOR_URL: u16 = 11;
-    pub const DESIGNER_URL: u16 = 12;
-    pub const LICENSE: u16 = 13;
-    pub const LICENSE_URL: u16 = 14;
-    //        RESERVED                                  = 15
-    pub const TYPOGRAPHIC_FAMILY: u16 = 16;
-    pub const TYPOGRAPHIC_SUBFAMILY: u16 = 17;
-    pub const COMPATIBLE_FULL: u16 = 18;
-    pub const SAMPLE_TEXT: u16 = 19;
-    pub const POST_SCRIPT_CID: u16 = 20;
-    pub const WWS_FAMILY: u16 = 21;
-    pub const WWS_SUBFAMILY: u16 = 22;
-    pub const LIGHT_BACKGROUND_PALETTE: u16 = 23;
-    pub const DARK_BACKGROUND_PALETTE: u16 = 24;
-    pub const VARIATIONS_POST_SCRIPT_NAME_PREFIX: u16 = 25;
+pub const KnownNameId = enum(u16) {
+    copyright_notice = 0,
+    family = 1,
+    subfamily = 2,
+    unique_id = 3,
+    full_name = 4,
+    version = 5,
+    post_script_name = 6,
+    trademark = 7,
+    manufacturer = 8,
+    designer = 9,
+    description = 10,
+    vendor_url = 11,
+    designer_url = 12,
+    license = 13,
+    license_url = 14,
+    reserved = 15,
+    typographic_family = 16,
+    typographic_subfamily = 17,
+    compatible_full = 18,
+    sample_text = 19,
+    post_script_cid = 20,
+    wws_family = 21,
+    wws_subfamily = 22,
+    light_background_palette = 23,
+    dark_background_palette = 24,
+    variations_post_script_name_prefix = 25,
+};
+
+pub const NameId = union(u8) {
+    known: KnownNameId,
+    unknown: u16,
+
+    pub fn read(reader: *Reader) ?NameId {
+        const value = reader.readInt(u16) orelse return null;
+
+        if (value <= 25) {
+            return NameId{
+                .known = @enumFromInt(value),
+            };
+        }
+
+        return NameId{
+            .unknown = value,
+        };
+    }
 };
 
 pub const PlatformId = enum {

@@ -354,7 +354,8 @@ test "parsing roboto medium" {
     var rm_face = try Face.initFile(std.testing.allocator, "fixtures/fonts/roboto-medium.ttf");
     defer rm_face.deinit();
 
-    const name = rm_face.unmanaged.tables.name.?;
+    const name_table = rm_face.unmanaged.tables.name.?;
+    _ = name_table;
 
     const raw = try Raw.create(rm_face.unmanaged.data, 0);
     var iter = raw.table_records.iterator();
