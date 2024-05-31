@@ -48,22 +48,22 @@ pub const Debug = struct {
     };
 
     pub fn moveTo(_: *anyopaque, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.moveTo({}, {})", .{ x, y });
+        std.debug.print("OutlineBuilder.Debug.moveTo({}, {})\n", .{ x, y });
     }
 
     pub fn lineTo(_: *anyopaque, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.lineTo({}, {})", .{ x, y });
+        std.debug.print("OutlineBuilder.Debug.lineTo({}, {})\n", .{ x, y });
     }
 
     pub fn quadTo(_: *anyopaque, x1: f32, y1: f32, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.quadTo({}, {}, {}, {})", .{ x1, y1, x, y });
+        std.debug.print("OutlineBuilder.Debug.quadTo({}, {}, {}, {})\n", .{ x1, y1, x, y });
     }
 
     pub fn curveTo(_: *anyopaque, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void {
-        std.debug.print("OutlineBuilder.Debug.curveTo({}, {}, {}, {}, {}, {})", .{ x1, y1, x2, y2, x, y });
+        std.debug.print("OutlineBuilder.Debug.curveTo({}, {}, {}, {}, {}, {})\n", .{ x1, y1, x2, y2, x, y });
     }
 
     pub fn close(_: *anyopaque) void {
-        std.debug.print("OutlineBuilder.Debug.close()", .{});
+        std.debug.print("OutlineBuilder.Debug.close()\n", .{});
     }
 };

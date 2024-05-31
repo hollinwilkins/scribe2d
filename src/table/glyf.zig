@@ -159,7 +159,7 @@ pub const Table = struct {
             if (flags.yShort()) {
                 // Coordinate is 1 byte long.
                 yCoordinatesLength += repeats;
-            } else {
+            } else if (flags.yIsSameOrPositiveShort()) {
                 // Coordinate is 2 bytes long.
                 yCoordinatesLength += repeats * 2;
             }
