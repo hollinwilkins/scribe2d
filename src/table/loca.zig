@@ -6,23 +6,23 @@ const GlyphId = root.GlyphId;
 const Range = root.Range;
 const Rect = root.RectI16;
 const Reader = root.Reader;
-const LazyArray = root.LazyArray;
+const LazyIntArray = root.LazyIntArray;
 const table = root.table;
 const IndexToLocationFormat = table.head.IndexToLocationFormat;
 
 pub const Short = struct {
-    const List = LazyArray(u16);
+    const List = LazyIntArray(u16);
 
     offsets: List,
 };
 
 pub const Long = struct {
-    const List = LazyArray(u32);
+    const List = LazyIntArray(u32);
 
     offsets: List,
 };
 
-pub const Table = union(u8) {
+pub const Table = union(enum) {
     short: Short,
     long: Long,
 
@@ -58,8 +58,8 @@ pub const Table = union(u8) {
 
     pub fn len(self: Table) u16 {
         switch (self) {
-            .short => |*short| return short.offsets.len,
-            .long => |*long| return long.offsets.len,
+            .short => |*short| return @intCast(short.offsets.data.len),
+            .long => |*long| return @intCast(long.offsets.data.len),
         }
     }
 

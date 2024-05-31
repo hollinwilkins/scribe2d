@@ -208,12 +208,14 @@ pub fn LazyIntArray(comptime T: type) type {
             }
         };
 
-        data: []T = &.{},
+        data: []const T = &.{},
 
         pub fn get(self: @This(), index: usize) ?T {
             if (index < self.data.len) {
                 return std.mem.bigToNative(T, self.data[index]);
             }
+
+            return null;
         }
 
         pub fn last(self: @This()) ?T {
@@ -227,7 +229,7 @@ pub fn LazyIntArray(comptime T: type) type {
         pub fn read(reader: *Reader, n: usize) ?@This() {
             const bytes = reader.readN(n * @sizeOf(T)) orelse return null;
             return @This(){
-                .data = std.mem.bytesAsSlice(T, bytes),
+                .data = @alignCast(std.mem.bytesAsSlice(T, bytes)),
             };
         }
 

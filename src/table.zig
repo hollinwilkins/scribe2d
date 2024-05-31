@@ -88,6 +88,8 @@ pub const Tables = struct {
     maxp: maxp.Table,
 
     name: ?name.Table,
+    loca: ?loca.Table,
+    glyf: ?glyf.Table,
 
     // pub bdat: Option<cbdt::Table<'a>>,
     // pub cbdt: Option<cbdt::Table<'a>>,
@@ -152,12 +154,30 @@ pub const Tables = struct {
             name_table = try name.Table.create(data);
         }
 
+        var loca_table: ?loca.Table = null;
+        if (raw.loca) |data| {
+            loca_table = try loca.Table.create(
+                data,
+                maxp_table.number_of_glyphs,
+                head_table.index_to_location_format,
+            );
+        }
+
+        var glyf_table: ?glyf.Table = null;
+        if (raw.glyf) |data| {
+            if (loca_table) |lt| {
+                glyf_table = try glyf.Table.create(data, lt);
+            }
+        }
+
         return Tables{
             .head = head_table,
             .hhea = hhea_table,
             .maxp = maxp_table,
 
             .name = name_table,
+            .loca = loca_table,
+            .glyf = glyf_table,
         };
     }
 };
