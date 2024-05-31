@@ -1,284 +1,217 @@
-// /*!
-// A [Character to Glyph Index Mapping Table](
-// https://docs.microsoft.com/en-us/typography/opentype/spec/cmap) implementation.
+const root = @import("../root.zig");
+const GlyphId = root.GlyphId;
+const Error = root.Error;
+const Offset32 = root.Offset32;
+const LazyArray = root.LazyArray;
+const Reader = root.Reader;
+const name = @import("./name.zig");
 
-// This module provides a low-level alternative to
-// [`Face::glyph_index`](../struct.Face.html#method.glyph_index) and
-// [`Face::glyph_variation_index`](../struct.Face.html#method.glyph_variation_index)
-// methods.
-// */
+pub const format0 = @import("./cmap/format0.zig");
+pub const format2 = @import("./cmap/format2.zig");
+pub const format4 = @import("./cmap/format4.zig");
+pub const format6 = @import("./cmap/format6.zig");
+pub const format10 = @import("./cmap/format10.zig");
+pub const format12 = @import("./cmap/format12.zig");
+pub const format13 = @import("./cmap/format13.zig");
+pub const format14 = @import("./cmap/format14.zig");
 
-// use crate::parser::{FromData, LazyArray16, Offset, Offset32, Stream};
-// use crate::{name::PlatformId, GlyphId};
+pub const Format = union(u8) {
+    byte_encoding: format0.Subtable0,
+    high_byte_mapping: format2.Subtable2,
+    segment_mapping_delta: format4.Subtable4,
+    trimmed_table: format6.Subtable6,
+    trimmed_array: format10.Subtable10,
+    segmented_coverage: format12.Subtable12,
+    many_to_one: format13.Subtable13,
+    unicode_variation: format14.Subtable14,
+    unsupported: u8,
+};
 
-// mod format0;
-// mod format10;
-// mod format12;
-// mod format13;
-// mod format14;
-// mod format2;
-// mod format4;
-// mod format6;
+pub const Subtable = struct {
+    platform_id: name.PlatformId,
+    encoding_id: u16,
+    format: Format,
 
-// pub use format0::Subtable0;
-// pub use format10::Subtable10;
-// pub use format12::Subtable12;
-// pub use format13::Subtable13;
-// pub use format14::{GlyphVariationResult, Subtable14};
-// pub use format2::Subtable2;
-// pub use format4::Subtable4;
-// pub use format6::Subtable6;
+    pub fn isUnicode(self: Subtable) bool {
+        const WINDOWS_UNICODE_BMP_ENCODING_ID: u16 = 1;
+        const WINDOWS_UNICODE_FULL_REPERTOIRE_ENCODING_ID: u16 = 10;
 
-// /// A character encoding subtable variant.
-// #[allow(missing_docs)]
-// #[derive(Clone, Copy, Debug)]
-// pub enum Format<'a> {
-//     ByteEncodingTable(Subtable0<'a>),
-//     HighByteMappingThroughTable(Subtable2<'a>),
-//     SegmentMappingToDeltaValues(Subtable4<'a>),
-//     TrimmedTableMapping(Subtable6<'a>),
-//     MixedCoverage, // unsupported
-//     TrimmedArray(Subtable10<'a>),
-//     SegmentedCoverage(Subtable12<'a>),
-//     ManyToOneRangeMappings(Subtable13<'a>),
-//     UnicodeVariationSequences(Subtable14<'a>),
-// }
+        switch (self.platform_id) {
+            .unicode => {
+                return true;
+            },
+            .windows => {
+                if (self.encoding_id == WINDOWS_UNICODE_BMP_ENCODING_ID) {
+                    return true;
+                }
 
-// /// A character encoding subtable.
-// #[derive(Clone, Copy, Debug)]
-// pub struct Subtable<'a> {
-//     /// Subtable platform.
-//     pub platform_id: PlatformId,
-//     /// Subtable encoding.
-//     pub encoding_id: u16,
-//     /// A subtable format.
-//     pub format: Format<'a>,
-// }
+                // "Note: Subtable format 13 has the same structure as format 12; it differs only
+                // in the interpretation of the startGlyphID/glyphID fields".
+                const is_format12_compatible = switch (self.format) {
+                    .segmented_coverage => |_| true,
+                    .many_to_one => |_| true,
+                    else => false,
+                };
 
-// impl<'a> Subtable<'a> {
-//     /// Checks that the current encoding is Unicode compatible.
-//     #[inline]
-//     pub fn is_unicode(&self) -> bool {
-//         // https://docs.microsoft.com/en-us/typography/opentype/spec/name#windows-encoding-ids
-//         const WINDOWS_UNICODE_BMP_ENCODING_ID: u16 = 1;
-//         const WINDOWS_UNICODE_FULL_REPERTOIRE_ENCODING_ID: u16 = 10;
+                // "Fonts that support Unicode supplementary-plane characters (U+10000 to U+10FFFF)
+                // on the Windows platform must have a format 12 subtable for platform ID 3,
+                // encoding ID 10."
+                return self.encoding_id == WINDOWS_UNICODE_FULL_REPERTOIRE_ENCODING_ID and is_format12_compatible;
+            },
+            else => {
+                return false;
+            },
+        }
+    }
 
-//         match self.platform_id {
-//             PlatformId::Unicode => true,
-//             PlatformId::Windows if self.encoding_id == WINDOWS_UNICODE_BMP_ENCODING_ID => true,
-//             PlatformId::Windows => {
-//                 // "Note: Subtable format 13 has the same structure as format 12; it differs only
-//                 // in the interpretation of the startGlyphID/glyphID fields".
-//                 let is_format_12_compatible = matches!(
-//                     self.format,
-//                     Format::SegmentedCoverage(..) | Format::ManyToOneRangeMappings(..)
-//                 );
+    pub fn getGlyphIndex(self: Subtable, codepoint32: u32) ?GlyphId {
+        switch (self.format) {
+            .byte_encoding => |*table| return table.getGlyphIndex(codepoint32),
+            .high_byte_mapping => |*table| return table.getGlyphIndex(codepoint32),
+            .segment_mapping_delta => |*table| return table.getGlyphIndex(codepoint32),
+            .trimmed_table => |*table| return table.getGlyphIndex(codepoint32),
+            .trimmed_array => |*table| return table.getGlyphIndex(codepoint32),
+            .segmented_coverage => |*table| return table.getGlyphIndex(codepoint32),
+            .many_to_one => |*table| return table.getGlyphIndex(codepoint32),
+            .unicode_variation => |_| return null,
+            .unsupported => |_| return null,
+        }
+    }
 
-//                 // "Fonts that support Unicode supplementary-plane characters (U+10000 to U+10FFFF)
-//                 // on the Windows platform must have a format 12 subtable for platform ID 3,
-//                 // encoding ID 10."
-//                 self.encoding_id == WINDOWS_UNICODE_FULL_REPERTOIRE_ENCODING_ID
-//                     && is_format_12_compatible
-//             }
-//             _ => false,
-//         }
-//     }
+    pub fn getGlyphVariationIndex(self: Subtable, codepoint32: u32, variation: u16) ?format14.GlyphVariationResult {
+        switch (self.format) {
+            .unicode_variation => |*table| return table.getGlyphIndex(codepoint32, variation),
+            else => return null,
+        }
+    }
 
-//     /// Maps a character to a glyph ID.
-//     ///
-//     /// This is a low-level method and unlike `Face::glyph_index` it doesn't
-//     /// check that the current encoding is Unicode.
-//     /// It simply maps a `u32` codepoint number to a glyph ID.
-//     ///
-//     /// Returns `None`:
-//     /// - when glyph ID is `0`.
-//     /// - when format is `MixedCoverage`, since it's not supported.
-//     /// - when format is `UnicodeVariationSequences`. Use `glyph_variation_index` instead.
-//     #[inline]
-//     pub fn glyph_index(&self, code_point: u32) -> Option<GlyphId> {
-//         match self.format {
-//             Format::ByteEncodingTable(ref subtable) => subtable.glyph_index(code_point),
-//             Format::HighByteMappingThroughTable(ref subtable) => subtable.glyph_index(code_point),
-//             Format::SegmentMappingToDeltaValues(ref subtable) => subtable.glyph_index(code_point),
-//             Format::TrimmedTableMapping(ref subtable) => subtable.glyph_index(code_point),
-//             Format::MixedCoverage => None,
-//             Format::TrimmedArray(ref subtable) => subtable.glyph_index(code_point),
-//             Format::SegmentedCoverage(ref subtable) => subtable.glyph_index(code_point),
-//             Format::ManyToOneRangeMappings(ref subtable) => subtable.glyph_index(code_point),
-//             // This subtable should be accessed via glyph_variation_index().
-//             Format::UnicodeVariationSequences(_) => None,
-//         }
-//     }
+    pub fn iterator(self: Subtable) ?Iterator {
+        switch (self.format) {
+            .byte_encoding => |table| return Iterator{ .byte_encoding = table.iterator() },
+            .high_byte_mapping => |table| return Iterator{ .high_byte_mapping = table.iterator() },
+            .segment_mapping_delta => |table| return Iterator{ .segment_mapping_delta = table.iterator() },
+            .trimmed_table => |table| return Iterator{ .trimmed_table = table.iterator() },
+            .trimmed_array => |table| return Iterator{ .trimmed_array = table.iterator() },
+            .segmented_coverage => |table| return Iterator{ .segmented_coverage = table.iterator() },
+            .many_to_one => |table| return Iterator{ .many_to_one = table.iterator() },
+            else => return null,
+        }
+    }
 
-//     /// Resolves a variation of a glyph ID from two code points.
-//     ///
-//     /// Returns `None`:
-//     /// - when glyph ID is `0`.
-//     /// - when format is not `UnicodeVariationSequences`.
-//     #[inline]
-//     pub fn glyph_variation_index(
-//         &self,
-//         code_point: u32,
-//         variation: u32,
-//     ) -> Option<GlyphVariationResult> {
-//         match self.format {
-//             Format::UnicodeVariationSequences(ref subtable) => {
-//                 subtable.glyph_index(code_point, variation)
-//             }
-//             _ => None,
-//         }
-//     }
+    pub const Iterator = union(u8) {
+        byte_encoding: format0.Subtable0.Iterator,
+        high_byte_mapping: format2.Subtable2.Iterator,
+        segment_mapping_delta: format4.Subtable4.Iterator,
+        trimmed_table: format6.Subtable6.Iterator,
+        trimmed_array: format10.Subtable10.Iterator,
+        segmented_coverage: format12.Subtable12.Iterator,
+        many_to_one: format13.Subtable13.Iterator,
 
-//     /// Calls `f` for all codepoints contained in this subtable.
-//     ///
-//     /// This is a low-level method and it doesn't check that the current
-//     /// encoding is Unicode. It simply calls the function `f` for all `u32`
-//     /// codepoints that are present in this subtable.
-//     ///
-//     /// Note that this may list codepoints for which `glyph_index` still returns
-//     /// `None` because this method finds all codepoints which were _defined_ in
-//     /// this subtable. The subtable may still map them to glyph ID `0`.
-//     ///
-//     /// Returns without doing anything:
-//     /// - when format is `MixedCoverage`, since it's not supported.
-//     /// - when format is `UnicodeVariationSequences`, since it's not supported.
-//     pub fn codepoints<F: FnMut(u32)>(&self, f: F) {
-//         match self.format {
-//             Format::ByteEncodingTable(ref subtable) => subtable.codepoints(f),
-//             Format::HighByteMappingThroughTable(ref subtable) => subtable.codepoints(f),
-//             Format::SegmentMappingToDeltaValues(ref subtable) => subtable.codepoints(f),
-//             Format::TrimmedTableMapping(ref subtable) => subtable.codepoints(f),
-//             Format::MixedCoverage => {} // unsupported
-//             Format::TrimmedArray(ref subtable) => subtable.codepoints(f),
-//             Format::SegmentedCoverage(ref subtable) => subtable.codepoints(f),
-//             Format::ManyToOneRangeMappings(ref subtable) => subtable.codepoints(f),
-//             Format::UnicodeVariationSequences(_) => {} // unsupported
-//         };
-//     }
-// }
+        pub fn next(self: *Iterator) ?u32 {
+            switch (self) {
+                .byte_encoding => |*it| return it.next(),
+                .high_byte_mapping => |*it| return it.next(),
+                .segment_mapping_delta => |*it| return it.next(),
+                .trimmed_table => |*it| return it.next(),
+                .trimmed_array => |*it| return it.next(),
+                .segmented_coverage => |*it| return it.next(),
+                .many_to_one => |*it| return it.next(),
+            }
+        }
+    };
+};
 
-// #[derive(Clone, Copy)]
-// struct EncodingRecord {
-//     platform_id: PlatformId,
-//     encoding_id: u16,
-//     offset: Offset32,
-// }
+pub const EncodingRecord = struct {
+    pub const ReadSize = @sizeOf(EncodingRecord);
 
-// impl FromData for EncodingRecord {
-//     const SIZE: usize = 8;
+    platform_id: name.PlatformId,
+    encoding_id: u16,
+    offset: Offset32,
 
-//     #[inline]
-//     fn parse(data: &[u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         Some(EncodingRecord {
-//             platform_id: s.read::<PlatformId>()?,
-//             encoding_id: s.read::<u16>()?,
-//             offset: s.read::<Offset32>()?,
-//         })
-//     }
-// }
+    pub fn read(reader: *Reader) ?EncodingRecord {
+        const platform_id = name.PlatformId.read(reader) orelse return null;
+        const encoding_id = reader.readInt(u16) orelse return null;
+        const offset = Offset32.read(reader) orelse return null;
 
-// /// A list of subtables.
-// #[derive(Clone, Copy, Default)]
-// pub struct Subtables<'a> {
-//     data: &'a [u8],
-//     records: LazyArray16<'a, EncodingRecord>,
-// }
+        return EncodingRecord{
+            .platform_id = platform_id,
+            .encoding_id = encoding_id,
+            .offset = offset,
+        };
+    }
+};
 
-// impl core::fmt::Debug for Subtables<'_> {
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         write!(f, "Subtables {{ ... }}")
-//     }
-// }
+pub const Subtables = struct {
+    const EncodingRecordsList = LazyArray(EncodingRecord);
 
-// impl<'a> Subtables<'a> {
-//     /// Returns a subtable at an index.
-//     pub fn get(&self, index: u16) -> Option<Subtable<'a>> {
-//         let record = self.records.get(index)?;
-//         let data = self.data.get(record.offset.to_usize()..)?;
-//         let format = match Stream::read_at::<u16>(data, 0)? {
-//             0 => Format::ByteEncodingTable(Subtable0::parse(data)?),
-//             2 => Format::HighByteMappingThroughTable(Subtable2::parse(data)?),
-//             4 => Format::SegmentMappingToDeltaValues(Subtable4::parse(data)?),
-//             6 => Format::TrimmedTableMapping(Subtable6::parse(data)?),
-//             8 => Format::MixedCoverage, // unsupported
-//             10 => Format::TrimmedArray(Subtable10::parse(data)?),
-//             12 => Format::SegmentedCoverage(Subtable12::parse(data)?),
-//             13 => Format::ManyToOneRangeMappings(Subtable13::parse(data)?),
-//             14 => Format::UnicodeVariationSequences(Subtable14::parse(data)?),
-//             _ => return None,
-//         };
+    data: []const u8,
+    records: EncodingRecordsList,
 
-//         Some(Subtable {
-//             platform_id: record.platform_id,
-//             encoding_id: record.encoding_id,
-//             format,
-//         })
-//     }
+    pub fn get(self: Subtables, index: usize) ?Subtable {
+        const record = self.records.get(index) orelse return null;
+        const data = self.data[record.offset..];
+        var reader = Reader.create(data);
+        const format_kind = reader.readInt(u16) orelse return null;
 
-//     /// Returns the number of subtables.
-//     #[inline]
-//     pub fn len(&self) -> u16 {
-//         self.records.len()
-//     }
+        const format: ?Format = switch (format_kind) {
+            0 => Format{ .byte_encoding = format0.Subtable0.create(data) orelse null },
+            2 => Format{ .high_byte_mapping = format2.Subtable2.create(data) orelse null },
+            4 => Format{ .segment_mapping_delta = format4.Subtable4.create(data) orelse null },
+            6 => Format{ .trimmed_table = format6.Subtable6.create(data) orelse null },
+            10 => Format{ .trimmed_array = format10.Subtable10.create(data) orelse null },
+            12 => Format{ .segmented_coverage = format12.Subtable12.create(data) orelse null },
+            13 => Format{ .many_to_one = format13.Subtable13.create(data) orelse null },
+            14 => Format{ .unicode_variation = format14.Subtable14.create(data) orelse null },
+        };
 
-//     /// Checks if there are any subtables.
-//     pub fn is_empty(&self) -> bool {
-//         self.records.is_empty()
-//     }
-// }
+        if (format) |f| {
+            return Subtable{
+                .platform_id = record.platform_id,
+                .encoding_id = record.encoding_id,
+                .format = f,
+            };
+        }
 
-// impl<'a> IntoIterator for Subtables<'a> {
-//     type Item = Subtable<'a>;
-//     type IntoIter = SubtablesIter<'a>;
+        return null;
+    }
 
-//     #[inline]
-//     fn into_iter(self) -> Self::IntoIter {
-//         SubtablesIter {
-//             subtables: self,
-//             index: 0,
-//         }
-//     }
-// }
+    pub fn len(self: Subtables) usize {
+        return self.records.len;
+    }
 
-// /// An iterator over [`Subtables`].
-// #[allow(missing_debug_implementations)]
-// pub struct SubtablesIter<'a> {
-//     subtables: Subtables<'a>,
-//     index: u16,
-// }
+    pub fn isEmpty(self: Subtables) bool {
+        return self.len() == 0;
+    }
 
-// impl<'a> Iterator for SubtablesIter<'a> {
-//     type Item = Subtable<'a>;
+    pub const Iterator = struct {
+        subtables: Subtables,
+        index: usize,
 
-//     #[inline]
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.index < self.subtables.len() {
-//             self.index += 1;
-//             self.subtables.get(self.index - 1)
-//         } else {
-//             None
-//         }
-//     }
-// }
+        pub fn next(self: *Iterator) ?Subtable {
+            if (self.index < self.subtables.len()) {
+                self.index += 1;
+                return self.subtables.get(self.index - 1);
+            } else {
+                return null;
+            }
+        }
+    };
+};
 
-// /// A [Character to Glyph Index Mapping Table](
-// /// https://docs.microsoft.com/en-us/typography/opentype/spec/cmap).
-// #[derive(Clone, Copy, Debug)]
-// pub struct Table<'a> {
-//     /// A list of subtables.
-//     pub subtables: Subtables<'a>,
-// }
+pub const Table = struct {
+    subtables: Subtables,
 
-// impl<'a> Table<'a> {
-//     /// Parses a table from raw data.
-//     pub fn parse(data: &'a [u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         s.skip::<u16>(); // version
-//         let count = s.read::<u16>()?;
-//         let records = s.read_array16::<EncodingRecord>(count)?;
-//         Some(Table {
-//             subtables: Subtables { data, records },
-//         })
-//     }
-// }
+    pub fn create(data: []const u8) Error!Table {
+        var reader = Reader.create(data);
+        reader.skip(u16); // version
+        const count = reader.readInt(u16) orelse return error.InvalidTable;
+        const records = Subtables.EncodingRecordsList.read(&reader, count) orelse return error.InvalidTable;
+
+        return Table{
+            .subtables = Subtables{
+                .records = records,
+                .data = data,
+            },
+        };
+    }
+};
