@@ -1,122 +1,129 @@
-// use core::convert::TryFrom;
+const std = @import("std");
+const root = @import("../root.zig");
+const Error = root.Error;
+const Reader = root.Reader;
+const GlyphId = root.GlyphId;
+const LazyIntArray = root.LazyIntArray;
 
-// use crate::parser::{LazyArray16, Stream};
-// use crate::GlyphId;
+pub const Subtable4 = struct {
+    const StartCodesList = LazyIntArray(u16);
+    const EndCodesList = LazyIntArray(u16);
+    const IdDeltasList = LazyIntArray(u16);
+    const IdRangeOffsetsList = LazyIntArray(u16);
 
-// /// A [format 4](https://docs.microsoft.com/en-us/typography/opentype/spec/cmap#format-4-segment-mapping-to-delta-values)
-// /// subtable.
-// #[derive(Clone, Copy)]
-// pub struct Subtable4<'a> {
-//     start_codes: LazyArray16<'a, u16>,
-//     end_codes: LazyArray16<'a, u16>,
-//     id_deltas: LazyArray16<'a, i16>,
-//     id_range_offsets: LazyArray16<'a, u16>,
-//     id_range_offset_pos: usize,
-//     // The whole subtable data.
-//     data: &'a [u8],
-// }
+    start_codes: StartCodesList,
+    end_codes: EndCodesList,
+    id_deltas: IdDeltasList,
+    id_range_offsets: IdRangeOffsetsList,
+    id_range_offset_pos: usize,
+    data: []const u8,
 
-// impl<'a> Subtable4<'a> {
-//     /// Parses a subtable from raw data.
-//     pub fn parse(data: &'a [u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         s.advance(6); // format + length + language
-//         let seg_count_x2 = s.read::<u16>()?;
-//         if seg_count_x2 < 2 {
-//             return None;
-//         }
+    pub fn create(data: []const u8) Error!Subtable4 {
+        var reader = Reader.create(data);
+        reader.skip(6); // format + length + language
+        const seg_count_s2 = reader.readInt(u16) orelse return error.InvalidTable;
+        if (seg_count_s2 < 2) {
+            return error.InvalidTable;
+        }
 
-//         let seg_count = seg_count_x2 / 2;
-//         s.advance(6); // searchRange + entrySelector + rangeShift
+        const seg_count = seg_count_s2 / 2;
+        reader.skip(6); // searchRange + entrySelector + rangeShift
 
-//         let end_codes = s.read_array16::<u16>(seg_count)?;
-//         s.skip::<u16>(); // reservedPad
-//         let start_codes = s.read_array16::<u16>(seg_count)?;
-//         let id_deltas = s.read_array16::<i16>(seg_count)?;
-//         let id_range_offset_pos = s.offset();
-//         let id_range_offsets = s.read_array16::<u16>(seg_count)?;
+        const end_codes = EndCodesList.read(reader, seg_count) orelse return error.InvalidTable;
+        reader.skip(u16); // reservedPad
+        const start_codes = StartCodesList.read(reader, seg_count) orelse return error.InvalidTable;
+        const id_deltas = IdDeltasList.read(reader, seg_count) orelse return error.InvalidTable;
+        const id_range_offset_pos = reader.cursor;
+        const id_range_offsets = IdRangeOffsetsList.read(reader, seg_count) orelse return error.InvalidTable;
 
-//         Some(Self {
-//             start_codes,
-//             end_codes,
-//             id_deltas,
-//             id_range_offsets,
-//             id_range_offset_pos,
-//             data,
-//         })
-//     }
+        return Subtable4{
+            .start_codes = start_codes,
+            .end_codes = end_codes,
+            .id_deltas = id_deltas,
+            .id_range_offsets = id_range_offsets,
+            .id_range_offset_pos = id_range_offset_pos,
+            .data = data,
+        };
+    }
 
-//     /// Returns a glyph index for a code point.
-//     ///
-//     /// Returns `None` when `code_point` is larger than `u16`.
-//     pub fn glyph_index(&self, code_point: u32) -> Option<GlyphId> {
-//         // This subtable supports code points only in a u16 range.
-//         let code_point = u16::try_from(code_point).ok()?;
+    pub fn getGlyphIndex(self: Subtable4, codepoint32: u32) ?GlyphId {
+        if (codepoint32 > std.math.maxInt(u16)) {
+            return null;
+        }
+        const codepoint: u16 = @intCast(codepoint32);
 
-//         // A custom binary search.
-//         let mut start = 0;
-//         let mut end = self.start_codes.len();
-//         while end > start {
-//             let index = (start + end) / 2;
-//             let end_value = self.end_codes.get(index)?;
-//             if end_value >= code_point {
-//                 let start_value = self.start_codes.get(index)?;
-//                 if start_value > code_point {
-//                     end = index;
-//                 } else {
-//                     let id_range_offset = self.id_range_offsets.get(index)?;
-//                     let id_delta = self.id_deltas.get(index)?;
-//                     if id_range_offset == 0 {
-//                         return Some(GlyphId(code_point.wrapping_add(id_delta as u16)));
-//                     } else if id_range_offset == 0xFFFF {
-//                         // Some malformed fonts have 0xFFFF as the last offset,
-//                         // which is invalid and should be ignored.
-//                         return None;
-//                     }
+        // Binary search
+        var start: usize = 0;
+        var end: usize = self.start_codes.len;
 
-//                     let delta = (u32::from(code_point) - u32::from(start_value)) * 2;
-//                     let delta = u16::try_from(delta).ok()?;
+        while (end > start) {
+            const index = (start + end) / 2;
+            const end_value = self.end_codes.get(index) orelse return null;
 
-//                     let id_range_offset_pos =
-//                         (self.id_range_offset_pos + usize::from(index) * 2) as u16;
-//                     let pos = id_range_offset_pos.wrapping_add(delta);
-//                     let pos = pos.wrapping_add(id_range_offset);
+            if (end_value >= codepoint) {
+                const start_value = self.start_codes.get(index) orelse return null;
 
-//                     let glyph_array_value: u16 = Stream::read_at(self.data, usize::from(pos))?;
+                if (start_value >= codepoint) {
+                    end = index;
+                } else {
+                    const id_range_offset = self.id_range_offsets.get(index) orelse return null;
+                    const id_delta = self.id_deltas.get(index) orelse return null;
 
-//                     // 0 indicates missing glyph.
-//                     if glyph_array_value == 0 {
-//                         return None;
-//                     }
+                    if (id_range_offset == 0) {
+                        return codepoint + id_delta;
+                    } else if (id_range_offset == 0xffff) {
+                        // Some malformed fonts have 0xFFFF as the last offset,
+                        // which is invalid and should be ignored.
+                        return null;
+                    }
 
-//                     let glyph_id = (glyph_array_value as i16).wrapping_add(id_delta);
-//                     return u16::try_from(glyph_id).ok().map(GlyphId);
-//                 }
-//             } else {
-//                 start = index + 1;
-//             }
-//         }
+                    const delta32 = @as(u32, @intCast(codepoint)) - @as(u32, @intCast(start_value));
+                    const delta: u16 = @intCast(delta32);
 
-//         None
-//     }
+                    const id_range_offset_pos: u16 = @intCast(self.id_range_offset_pos + @as(usize, @intCast(index)) * 2);
+                    const pos = id_range_offset_pos + delta + id_range_offset;
 
-//     /// Calls `f` for each codepoint defined in this table.
-//     pub fn codepoints(&self, mut f: impl FnMut(u32)) {
-//         for (start, end) in self.start_codes.into_iter().zip(self.end_codes) {
-//             // OxFFFF value is special and indicates codes end.
-//             if start == end && start == 0xFFFF {
-//                 break;
-//             }
+                    const glyph_array_value: u16 = std.mem.bigToNative(u16, std.mem.bytesToValue(u16, self.data[pos .. pos + @sizeOf(u16)]));
 
-//             for code_point in start..=end {
-//                 f(u32::from(code_point));
-//             }
-//         }
-//     }
-// }
+                    // 0 indicates missing glyph.
+                    if (glyph_array_value == 0) {
+                        return null;
+                    }
 
-// impl core::fmt::Debug for Subtable4<'_> {
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         write!(f, "Subtable4 {{ ... }}")
-//     }
-// }
+                    const glyph_id = @as(i16, @intCast(glyph_array_value)) + id_delta;
+                    return @intCast(glyph_id);
+                }
+            } else {
+                start = index + 1;
+            }
+        }
+
+        return null;
+    }
+
+    pub const Iterator = struct {
+        table: Subtable4,
+        index: usize,
+        i: u16,
+
+        pub fn next(self: *Iterator) ?u32 {
+            const start = self.table.start_codes.get(self.index) orelse return null;
+            const end = self.table.end_codes.get(self.index) orelse return null;
+
+            if (start == end and start == 0xffff) {
+                return null;
+            }
+
+            if (self.i < (end - start)) {
+                const n = start + self.i;
+                self.i += 1;
+                return @intCast(n);
+            } else {
+                self.index += 1;
+                self.i = 0;
+
+                return self.next();
+            }
+        }
+    };
+};
