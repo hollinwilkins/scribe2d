@@ -265,6 +265,11 @@ pub fn LazyArray(comptime T: type) type {
         const Self = @This();
         const ItemSize = T.ReadSize;
 
+        pub const Search = struct {
+            index: usize,
+            value: T,
+        };
+
         pub const Iter = struct {
             lazy_array: *const Self,
             i: usize,
@@ -313,6 +318,37 @@ pub fn LazyArray(comptime T: type) type {
                 .lazy_array = self,
                 .i = 0,
             };
+        }
+
+        pub fn binarySearchBy(
+            self: @This(),
+            key: anytype,
+            f: *const fn (@TypeOf(key), *const T) std.math.Order,
+        ) ?Search {
+            var size = self.len;
+            if (size == 0) {
+                return null;
+            }
+
+            var base = 0;
+            while (size > 1) {
+                const half = size / 2;
+                const mid = base + half;
+                const item = self.get(mid) orelse return null;
+                const cmp = f(key, &item);
+                base = if (cmp == .gt) base else mid;
+                size -= half;
+            }
+
+            const item = self.get(base) orelse return null;
+            if (f(key, &item) == .eq) {
+                return Search{
+                    .index = base,
+                    .value = item,
+                };
+            } else {
+                return null;
+            }
         }
     };
 }

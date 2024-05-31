@@ -1,82 +1,86 @@
-// use core::convert::TryFrom;
+const std = @import("std");
+const root = @import("../../root.zig");
+const Error = root.Error;
+const Reader = root.Reader;
+const GlyphId = root.GlyphId;
+const LazyArray = root.LazyArray;
 
-// use crate::parser::{FromData, LazyArray32, Stream};
-// use crate::GlyphId;
+pub const SequentialMapGroup = struct {
+    pub const ReadSize = @sizeOf(SequentialMapGroup);
 
-// #[derive(Clone, Copy)]
-// pub struct SequentialMapGroup {
-//     pub start_char_code: u32,
-//     pub end_char_code: u32,
-//     pub start_glyph_id: u32,
-// }
+    start_char_code: u32,
+    end_char_code: u32,
+    start_glyph_id: u32,
 
-// impl FromData for SequentialMapGroup {
-//     const SIZE: usize = 12;
+    pub fn read(reader: *Reader) ?SequentialMapGroup {
+        const start_char_code = reader.readInt(u32) orelse return null;
+        const end_char_code = reader.readInt(u32) orelse return null;
+        const start_glyph_id = reader.readInt(u32) orelse return null;
 
-//     #[inline]
-//     fn parse(data: &[u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         Some(SequentialMapGroup {
-//             start_char_code: s.read::<u32>()?,
-//             end_char_code: s.read::<u32>()?,
-//             start_glyph_id: s.read::<u32>()?,
-//         })
-//     }
-// }
+        return SequentialMapGroup{
+            .start_char_code = start_char_code,
+            .end_char_code = end_char_code,
+            .start_glyph_id = start_glyph_id,
+        };
+    }
+};
 
-// /// A [format 12](https://docs.microsoft.com/en-us/typography/opentype/spec/cmap#format-12-segmented-coverage)
-// /// subtable.
-// #[derive(Clone, Copy)]
-// pub struct Subtable12<'a> {
-//     groups: LazyArray32<'a, SequentialMapGroup>,
-// }
+pub const Subtable12 = struct {
+    const SequentialMapGroupsList = LazyArray(SequentialMapGroup);
 
-// impl<'a> Subtable12<'a> {
-//     /// Parses a subtable from raw data.
-//     pub fn parse(data: &'a [u8]) -> Option<Self> {
-//         let mut s = Stream::new(data);
-//         s.skip::<u16>(); // format
-//         s.skip::<u16>(); // reserved
-//         s.skip::<u32>(); // length
-//         s.skip::<u32>(); // language
-//         let count = s.read::<u32>()?;
-//         let groups = s.read_array32::<SequentialMapGroup>(count)?;
-//         Some(Self { groups })
-//     }
+    groups: SequentialMapGroupsList,
 
-//     /// Returns a glyph index for a code point.
-//     pub fn glyph_index(&self, code_point: u32) -> Option<GlyphId> {
-//         let (_, group) = self.groups.binary_search_by(|range| {
-//             use core::cmp::Ordering;
+    pub fn create(data: []const u8) Error!Subtable12 {
+        var reader = Reader.create(data);
+        reader.skip(u16); // format
+        reader.skip(u16); // reserved
+        reader.skip(u16); // length
+        reader.skip(u16); // language
+        const count = reader.readInt(u32) orelse return error.InvalidTable;
+        const groups = SequentialMapGroupsList.read(&reader, count) orelse return error.InvalidTable;
 
-//             if range.start_char_code > code_point {
-//                 Ordering::Greater
-//             } else if range.end_char_code < code_point {
-//                 Ordering::Less
-//             } else {
-//                 Ordering::Equal
-//             }
-//         })?;
+        return Subtable12{
+            .groups = groups,
+        };
+    }
 
-//         let id = group
-//             .start_glyph_id
-//             .checked_add(code_point)?
-//             .checked_sub(group.start_char_code)?;
-//         u16::try_from(id).ok().map(GlyphId)
-//     }
+    pub fn getGlyphIndex(self: Subtable12, codepoint32: u32) ?GlyphId {
+        // const search = self.groups.binarySearchBy(f: *const fn(*const T)std.math.Order)
+        if (self.groups.binarySearchBy(codepoint32, &order)) |search| {
+            const id = search.value.start_glyph_id + codepoint32 - search.value.start_char_code;
+            return @intCast(id);
+        }
 
-//     /// Calls `f` for each codepoint defined in this table.
-//     pub fn codepoints(&self, mut f: impl FnMut(u32)) {
-//         for group in self.groups {
-//             for code_point in group.start_char_code..=group.end_char_code {
-//                 f(code_point);
-//             }
-//         }
-//     }
-// }
+        return null;
+    }
 
-// impl core::fmt::Debug for Subtable12<'_> {
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         write!(f, "Subtable12 {{ ... }}")
-//     }
-// }
+    fn order(codepoint: u32, group: *const SequentialMapGroup) std.math.Order {
+        if (group.start_char_code > codepoint) {
+            return .gt;
+        } else if (group.end_char_code < codepoint) {
+            return .lt;
+        }
+
+        return .eq;
+    }
+
+    pub const Iterator = struct {
+        table: Subtable12,
+        index: usize,
+        i: usize,
+
+        pub fn next(self: *Iterator) ?u32 {
+            const group = self.table.groups.get(self.index) orelse return null;
+            const codepoint = group.start_char_code + self.i;
+
+            if (codepoint < group.end_char_code) {
+                self.i += 1;
+                return codepoint;
+            } else {
+                self.i = 0;
+                self.index += 1;
+                return self.next(0);
+            }
+        }
+    };
+};
