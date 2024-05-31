@@ -101,6 +101,14 @@ pub const Subtable4 = struct {
         return null;
     }
 
+    pub fn iterator(self: Subtable4) Iterator {
+        return Iterator{
+            .table = self,
+            .index = 0,
+            .i = 0,
+        };
+    }
+
     pub const Iterator = struct {
         table: Subtable4,
         index: usize,

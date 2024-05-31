@@ -116,6 +116,15 @@ pub const Subtable2 = struct {
         return @as(u16, @intCast(@as(i32, @intCast(glyph)) + @as(i32, @intCast(sub_header.id_delta)) % 65536));
     }
 
+    pub fn iterator(self: Subtable2) Iterator {
+        return Iterator{
+            .table = self,
+            .index = 0,
+            .first_byte = 0,
+            .sub_byte = 0,
+        };
+    }
+
     pub const Iterator = struct {
         table: Subtable2,
         index: usize,
