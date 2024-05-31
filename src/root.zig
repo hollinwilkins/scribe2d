@@ -192,26 +192,6 @@ pub const Offset32 = struct {
     }
 };
 
-pub const Magic = enum {
-    true_type,
-    open_type,
-    font_collection,
-
-    pub fn read(reader: *Reader) ?Magic {
-        if (reader.readInt(u32)) |i| {
-            switch (i) {
-                0x00010000 => return .true_type,
-                0x74727565 => return .true_type,
-                0x4F54544F => return .open_type,
-                0x74746366 => return .font_collection,
-                else => return null,
-            }
-        }
-
-        return null;
-    }
-};
-
 pub fn LazyIntArray(comptime T: type) type {
     return struct {
         pub const Iter = struct {
