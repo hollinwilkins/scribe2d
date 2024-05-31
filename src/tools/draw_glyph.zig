@@ -21,4 +21,6 @@ pub fn main() !void {
     _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, path_outliner.outliner());
     const path = try path_outliner.createPathAlloc(allocator);
     defer path.deinit();
+
+    path.debug();
 }

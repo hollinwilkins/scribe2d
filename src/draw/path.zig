@@ -58,6 +58,13 @@ pub const Path = struct {
     pub fn segments(self: *const Path) []const Segment {
         return self.unmanaged.segments;
     }
+
+    pub fn debug(self: *const Path) void {
+        std.debug.print("Path\n", .{});
+        for (self.unmanaged.segments) |segment| {
+            std.debug.print("\t{}\n", .{segment});
+        }
+    }
 };
 
 pub const PathOutliner = struct {
@@ -65,15 +72,24 @@ pub const PathOutliner = struct {
 
     const OutlinerFunctions = struct {
         fn moveTo(ctx: *anyopaque, x: f32, y: f32) void {
-            @as(*PathOutliner, @alignCast(@ptrCast(ctx))).moveTo(PointF32{ .x = x, .y = y });
+            var po = @as(*PathOutliner, @alignCast(@ptrCast(ctx)));
+            po.moveTo(PointF32{ .x = x, .y = y }) catch {
+                po.is_error = true;
+            };
         }
 
         fn lineTo(ctx: *anyopaque, x: f32, y: f32) void {
-            @as(*PathOutliner, @alignCast(@ptrCast(ctx))).lineTo(PointF32{ .x = x, .y = y });
+            var po = @as(*PathOutliner, @alignCast(@ptrCast(ctx)));
+            po.lineTo(PointF32{ .x = x, .y = y }) catch {
+                po.is_error = true;
+            };
         }
 
         fn quadTo(ctx: *anyopaque, x1: f32, y1: f32, x: f32, y: f32) void {
-            @as(*PathOutliner, @alignCast(@ptrCast(ctx))).quadTo(PointF32{ .x = x, .y = y }, PointF32{ .x = x1, .y = y1 });
+            var po = @as(*PathOutliner, @alignCast(@ptrCast(ctx)));
+            po.quadTo(PointF32{ .x = x, .y = y }, PointF32{ .x = x1, .y = y1 }) catch {
+                po.is_error = true;
+            };
         }
 
         fn curveTo(_: *anyopaque, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {
@@ -81,7 +97,10 @@ pub const PathOutliner = struct {
         }
 
         fn close(ctx: *anyopaque) void {
-            @as(*PathOutliner, @alignCast(@ptrCast(ctx))).close();
+            var po = @as(*PathOutliner, @alignCast(@ptrCast(ctx)));
+            po.close() catch {
+                po.is_error = true;
+            };
         }
     };
 
@@ -97,6 +116,7 @@ pub const PathOutliner = struct {
     bounds: RectF32 = RectF32{},
     start: ?PointF32 = null,
     location: PointF32 = PointF32{},
+    is_error: bool = false,
 
     pub fn init(allocator: Allocator) Allocator.Error!PathOutliner {
         return PathOutliner{
@@ -124,9 +144,9 @@ pub const PathOutliner = struct {
         };
     }
 
-    pub fn moveTo(self: *PathOutliner, point: PointF32) void {
+    pub fn moveTo(self: *PathOutliner, point: PointF32) !void {
         // make sure to close any current subpath
-        self.close();
+        try self.close();
 
         // set current location to point
         self.location = point;
@@ -149,7 +169,7 @@ pub const PathOutliner = struct {
         // attempt to add a quadratic segment from current location to point
         const ao = try self.segments.addOne();
         ao.* = Segment{
-            .line = Segment.QuadraticBezier{
+            .quadratic_bezier = Segment.QuadraticBezier{
                 .start = self.location,
                 .end = point,
                 .control = control,
@@ -162,14 +182,12 @@ pub const PathOutliner = struct {
     /// Closes the current subpath, if there is one
     pub fn close(self: *PathOutliner) !void {
         if (self.start) |start| {
-            if (self.location) |end| {
-                if (start != end) {
-                    try self.lineTo(start);
-                }
-
-                self.location = start;
-                self.start = null;
+            if (std.meta.eql(start, self.location)) {
+                try self.lineTo(start);
             }
+
+            self.location = start;
+            self.start = null;
         }
     }
 };
