@@ -16,6 +16,9 @@ pub fn main() !void {
     var face = try scriobh.Face.initFile(allocator, font_file);
     defer face.deinit();
 
-    const outliner = scriobh.Outliner.Debug.Instance;
-    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, outliner);
+    var path_outliner = try scriobh.draw.PathOutliner.init(allocator);
+    defer path_outliner.deinit();
+    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, path_outliner.outliner());
+    const path = try path_outliner.createPathAlloc(allocator);
+    defer path.deinit();
 }

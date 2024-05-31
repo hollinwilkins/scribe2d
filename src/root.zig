@@ -2,10 +2,11 @@ const std = @import("std");
 const testing = std.testing;
 pub const Face = @import("./Face.zig");
 pub const table = @import("./table.zig");
-pub const Outliner = @import("./Outliner.zig");
 pub const Reader = @import("./Reader.zig");
 pub const language = @import("./language.zig");
 pub const Language = language.Language;
+pub const draw = @import("./draw/root.zig");
+pub const Outliner = draw.Outliner;
 
 pub const Error = error{
     FaceMagicError,
@@ -129,8 +130,8 @@ pub const RectF32 = Rect(f32);
 
 pub fn Point(comptime T: type) type {
     return struct {
-        x: T,
-        y: T,
+        x: T = 0,
+        y: T = 0,
 
         pub fn lerp(self: @This(), other: @This(), t: T) @This() {
             return @This(){
