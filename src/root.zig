@@ -170,7 +170,7 @@ pub const Offset16 = struct {
     offset: u16,
 
     pub fn read(reader: *Reader) ?Offset16 {
-        const offset = reader.read(u16) orelse return null;
+        const offset = reader.readInt(u16) orelse return null;
 
         return Offset16{
             .offset = offset,
@@ -184,7 +184,7 @@ pub const Offset32 = struct {
     offset: u32,
 
     pub fn read(reader: *Reader) ?Offset32 {
-        const offset = reader.read(u32) orelse return null;
+        const offset = reader.readInt(u32) orelse return null;
 
         return Offset32{
             .offset = offset,

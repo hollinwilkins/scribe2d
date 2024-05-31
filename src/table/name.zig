@@ -143,7 +143,7 @@ pub const Names = struct {
     };
 
     records: NamesList,
-    storage: []u8,
+    storage: []const u8,
 
     pub fn get(self: Names, index: u16) ?Name {
         const record = self.records.get(index) orelse return null;
@@ -180,28 +180,29 @@ pub const Table = struct {
         var reader = Reader.create(data);
         const version = reader.readInt(u16) orelse return error.InvalidTable;
         const count = reader.readInt(u16) orelse return error.InvalidTable;
-        const storage_offset = Offset16.read(reader) orelse return error.InvalidTable;
+        const storage_offset = Offset16.read(&reader) orelse return error.InvalidTable;
 
         if (version == 0) {
             // Do nothing
         } else if (version == 1) {
             const lang_tag_count = reader.readInt(u16) orelse return error.InvalidTable;
             const lang_tag_len = lang_tag_count * LANG_TAG_RECORD_SIZE;
-            reader.skip(@intCast(lang_tag_len));
+            reader.skipN(@intCast(lang_tag_len));
         } else {
-            return null;
+            return error.InvalidTable;
         }
 
-        const records = NameRecordsList.read(reader, count) orelse return error.InvalidTable;
+        const records = NameRecordsList.read(&reader, count) orelse return error.InvalidTable;
 
-        if (reader.cursor < storage_offset) {
-            reader.skip(storage_offset - reader.cursor);
+        const offset: usize = @intCast(storage_offset.offset);
+        if (reader.cursor < offset) {
+            reader.skipN(offset - reader.cursor);
         }
 
         const storage = reader.tail();
 
         return Table{
-            .name = Names{
+            .names = Names{
                 .records = records,
                 .storage = storage,
             },

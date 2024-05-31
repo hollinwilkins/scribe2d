@@ -4,6 +4,7 @@ pub const head = @import("./table/head.zig");
 pub const hhea = @import("./table/hhea.zig");
 pub const maxp = @import("./table/maxp.zig");
 pub const loca = @import("./table/loca.zig");
+pub const name = @import("./table/name.zig");
 const Reader = @import("./root.zig").Reader;
 
 pub const Tag = struct {

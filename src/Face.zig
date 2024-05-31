@@ -16,7 +16,8 @@ const Tables = struct {
     head: table.head.Table,
     hhea: table.hhea.Table,
     maxp: table.maxp.Table,
-    // pub maxp: maxp::Table,
+
+    name: ?table.name.Table,
 
     // pub bdat: Option<cbdt::Table<'a>>,
     // pub cbdt: Option<cbdt::Table<'a>>,
@@ -76,10 +77,17 @@ const Tables = struct {
         const hhea = try table.hhea.Table.create(raw.hhea);
         const maxp = try table.maxp.Table.create(raw.hhea);
 
+        var name: ?table.name.Table = null;
+        if (raw.name) |data| {
+            name = try table.name.Table.create(data);
+        }
+
         return Tables{
             .head = head,
             .hhea = hhea,
             .maxp = maxp,
+
+            .name = name,
         };
     }
 };
@@ -345,6 +353,8 @@ fn readFileBytesAlloc(allocator: Allocator, path: []const u8) ![]const u8 {
 test "parsing roboto medium" {
     var rm_face = try Face.initFile(std.testing.allocator, "fixtures/fonts/roboto-medium.ttf");
     defer rm_face.deinit();
+
+    const name = rm_face.unmanaged.tables.name.?;
 
     const raw = try Raw.create(rm_face.unmanaged.data, 0);
     var iter = raw.table_records.iterator();
