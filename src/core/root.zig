@@ -4,6 +4,7 @@ const range = @import("./range.zig");
 pub const Point = geometry.Point;
 pub const PointF32 = geometry.PointF32;
 pub const PointI16 = geometry.PointI16;
+pub const PointU32 = geometry.PointU32;
 
 pub const Rect = geometry.Rect;
 pub const RectF32 = geometry.RectF32;

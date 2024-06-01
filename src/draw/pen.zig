@@ -14,6 +14,7 @@ const RectU32 = core.RectU32;
 const OutlinePoint = struct {
     point: PointF32 = PointF32{},
     num_segments: u16 = 0,
+    distance: f32 = 0.0,
 };
 
 const UnmanagedOutlinePointTexture = UnmanagedTexture(OutlinePoint);
