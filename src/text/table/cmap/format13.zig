@@ -1,9 +1,10 @@
 const std = @import("std");
-const root = @import("../../root.zig");
-const Error = root.Error;
-const Reader = root.Reader;
-const GlyphId = root.GlyphId;
-const LazyArray = root.LazyArray;
+const text = @import("../../root.zig");
+const util = @import("../../util.zig");
+const Error = text.Error;
+const GlyphId = text.GlyphId;
+const Reader = util.Reader;
+const LazyArray = util.LazyArray;
 const SequentialMapGroup = @import("./format12.zig").SequentialMapGroup;
 
 pub const Subtable13 = struct {

@@ -182,6 +182,11 @@ pub const Offset32 = struct {
     }
 };
 
+pub const Range = struct {
+    start: usize,
+    end: usize,
+};
+
 pub fn LazyIntArray(comptime T: type) type {
     return struct {
         pub const Iter = struct {

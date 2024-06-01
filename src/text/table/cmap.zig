@@ -1,19 +1,20 @@
-const root = @import("../root.zig");
-const GlyphId = root.GlyphId;
-const Error = root.Error;
-const Offset32 = root.Offset32;
-const LazyArray = root.LazyArray;
-const Reader = root.Reader;
+const text = @import("../root.zig");
+const util = @import("../util..zig");
+const GlyphId = text.GlyphId;
+const Error = text.Error;
+const Offset32 = util.Offset32;
+const LazyArray = util.LazyArray;
+const Reader = util.Reader;
 const name = @import("./name.zig");
 
-pub const format0 = @import("./cmap/format0.zig");
-pub const format2 = @import("./cmap/format2.zig");
-pub const format4 = @import("./cmap/format4.zig");
-pub const format6 = @import("./cmap/format6.zig");
-pub const format10 = @import("./cmap/format10.zig");
-pub const format12 = @import("./cmap/format12.zig");
-pub const format13 = @import("./cmap/format13.zig");
-pub const format14 = @import("./cmap/format14.zig");
+const format0 = @import("./cmap/format0.zig");
+const format2 = @import("./cmap/format2.zig");
+const format4 = @import("./cmap/format4.zig");
+const format6 = @import("./cmap/format6.zig");
+const format10 = @import("./cmap/format10.zig");
+const format12 = @import("./cmap/format12.zig");
+const format13 = @import("./cmap/format13.zig");
+const format14 = @import("./cmap/format14.zig");
 
 pub const Format = union(u8) {
     byte_encoding: format0.Subtable0,

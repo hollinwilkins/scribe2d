@@ -19,11 +19,11 @@ pub fn Dimensions(comptime T: type) type {
         width: T,
         height: T,
 
-        pub fn create(width: T, height: T) !@This() {
+        pub fn create(width: T, height: T) ?@This() {
             const r = @mulWithOverflow(width, height);
 
             if (r[1] == 1) {
-                return error.DimensionOverflow;
+                return null;
             }
 
             return @This(){

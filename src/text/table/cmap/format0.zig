@@ -1,7 +1,8 @@
-const root = @import("../root.zig");
-const Error = root.Error;
-const Reader = root.Reader;
-const GlyphId = root.GlyphId;
+const text = @import("../../root.zig");
+const util = @import("../../util.zig");
+const Error = text.Error;
+const GlyphId = text.GlyphId;
+const Reader = util.Reader;
 
 pub const Subtable0 = struct {
     // Just a list of 256 8bit glyph IDs.

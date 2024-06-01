@@ -1,9 +1,10 @@
 const std = @import("std");
-const root = @import("../../root.zig");
-const Error = root.Error;
-const Reader = root.Reader;
-const GlyphId = root.GlyphId;
-const LazyIntArray = root.LazyIntArray;
+const text = @import("../../root.zig");
+const util = @import("../../util.zig");
+const Error = text.Error;
+const GlyphId = text.GlyphId;
+const Reader = util.Reader;
+const LazyIntArray = util.LazyIntArray;
 
 pub const Subtable10 = struct {
     const GlyphsList = LazyIntArray(u32);

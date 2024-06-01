@@ -1,31 +1,33 @@
 const std = @import("std");
-const root = @import("../root.zig");
-const GlyphId = root.GlyphId;
-const Outliner = root.Outliner;
-const LazyIntArray = root.LazyIntArray;
-const RectI16 = root.RectI16;
-const RectF32 = root.RectF32;
-const PointF32 = root.PointF32;
-const Transform = root.Transform;
-const F2DOT14 = root.F2DOT14;
-const Error = root.Error;
-const Reader = root.Reader;
-const table = root.table;
+const text = @import("../root.zig");
+const util = @import("../util.zig");
+const core = @import("../../core/root.zig");
+const Error = text.Error;
+const GlyphId = text.GlyphId;
+const TextOutliner = @import("../TextOutliner.zig");
+const LazyIntArray = util.LazyIntArray;
+const RectI16 = core.RectI16;
+const RectF32 = core.RectF32;
+const PointF32 = core.PointF32;
+const Transform = util.Transform;
+const F2DOT14 = util.F2DOT14;
+const Reader = util.Reader;
+const loca = @import("./loca.zig");
 
 pub const MAX_COMPONENTS: u8 = 32;
 
 pub const Table = struct {
     data: []const u8,
-    loca: table.loca.Table,
+    loca: loca.Table,
 
-    pub fn create(data: []const u8, loca: table.loca.Table) Error!Table {
+    pub fn create(data: []const u8, loca_table: loca.Table) Error!Table {
         return Table{
             .data = data,
-            .loca = loca,
+            .loca = loca_table,
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, outliner: Outliner) Error!RectI16 {
+    pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!RectI16 {
         var builder = Builder.create(RectF32{}, Transform{}, outliner);
         const glyph_data = self.get(glyph_id) orelse return error.BadOutline;
         return try self.outlineImpl(glyph_data, 0, &builder);
@@ -76,7 +78,7 @@ pub const Table = struct {
                     if (self.loca.glyphRange(info.glyph_id)) |range| {
                         const glyph_data = self.data[range.start..range.end];
                         const transform = builder.transform.combine(info.transform);
-                        var b = Builder.create(builder.bbox, transform, builder.builder);
+                        var b = Builder.create(builder.bbox, transform, builder.outliner);
                         self.outlineImpl(glyph_data, depth + 1, &b);
 
                         // Take updated bbox
@@ -185,7 +187,7 @@ pub const CoordinatesLength = struct {
 };
 
 pub const Builder = struct {
-    builder: Outliner,
+    outliner: TextOutliner,
     bbox: RectF32,
     transform: Transform,
     is_default_transform: bool,
@@ -193,9 +195,9 @@ pub const Builder = struct {
     first_off_curve: ?PointF32,
     last_off_curve: ?PointF32,
 
-    pub fn create(bbox: RectF32, transform: Transform, builder: Outliner) Builder {
+    pub fn create(bbox: RectF32, transform: Transform, outliner: TextOutliner) Builder {
         return Builder{
-            .builder = builder,
+            .builder = outliner,
             .bbox = bbox,
             .transform = transform,
             .is_default_transform = transform.isDefault(),
@@ -213,7 +215,7 @@ pub const Builder = struct {
         }
 
         self.bbox.extendBy(x_mut, y_mut);
-        self.builder.moveTo(x_mut, y_mut);
+        self.outliner.moveTo(x_mut, y_mut);
     }
 
     pub fn lineTo(self: *Builder, x: f32, y: f32) void {
@@ -224,7 +226,7 @@ pub const Builder = struct {
         }
 
         self.bbox.extendBy(x_mut, y_mut);
-        self.builder.lineTo(x_mut, y_mut);
+        self.outliner.lineTo(x_mut, y_mut);
     }
 
     pub fn quadTo(self: *Builder, x1: f32, y1: f32, x: f32, y: f32) void {
@@ -239,7 +241,7 @@ pub const Builder = struct {
 
         self.bbox.extendBy(x1_mut, y1_mut);
         self.bbox.extendBy(x_mut, y_mut);
-        self.builder.quadTo(x1_mut, y1_mut, x_mut, y_mut);
+        self.outliner.quadTo(x1_mut, y1_mut, x_mut, y_mut);
     }
 
     pub fn pushPoint(self: *Builder, x: f32, y: f32, on_curve_point: bool, last_point: bool) void {
@@ -308,7 +310,7 @@ pub const Builder = struct {
             self.first_off_curve = null;
             self.last_off_curve = null;
 
-            self.builder.close();
+            self.outliner.close();
         }
     }
 };

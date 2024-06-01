@@ -1,8 +1,15 @@
 const std = @import("std");
 const mem = std.mem;
-const root = @import("./root.zig");
-const LazyArray = root.LazyArray;
-const Offset32 = root.Offset32;
+const head = @import("./head.zig");
+const hhea = @import("./hhea.zig");
+const maxp = @import("./maxp.zig");
+const loca = @import("./loca.zig");
+const name = @import("./name.zig");
+const glyf = @import("./glyf.zig");
+const util = @import("../util.zig");
+const Reader = util.Reader;
+const LazyArray = util.LazyArray;
+const Offset32 = util.Offset32;
 
 pub const Magic = enum {
     true_type,
