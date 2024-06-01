@@ -17,3 +17,4 @@ pub const DimensionsU32 = geometry.DimensionsU32;
 
 pub const Range = range.Range;
 pub const RangeU32 = range.RangeU32;
+pub const RangeF32 = range.RangeF32;

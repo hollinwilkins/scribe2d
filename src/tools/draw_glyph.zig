@@ -26,11 +26,12 @@ pub fn main() !void {
     defer path.deinit();
 
     var pen = draw.Pen{};
-    var texture = try draw.UnmanagedTextureRgba.create(std.testing.allocator, core.DimensionsU32{
+    var texture = try draw.UnmanagedTextureRgba.create(allocator, core.DimensionsU32{
         .width = 64,
         .height = 64,
     });
-    const texture_view = texture.createView(core.RectU32{
+    defer texture.deinit(allocator);
+    var texture_view = texture.createView(core.RectU32{
         .min = core.PointU32{
             .x = 0,
             .y = 0,
@@ -40,7 +41,7 @@ pub fn main() !void {
             .y = 64,
         },
     }).?;
-    pen.drawToTextureViewRgba(std.testing.allocator, path, texture_view);
+    try pen.drawToTextureViewRgba(allocator, path, &texture_view);
 
     path.debug();
 }

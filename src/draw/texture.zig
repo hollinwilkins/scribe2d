@@ -15,7 +15,7 @@ pub fn TextureView(comptime T: type) type {
         view: RectU32,
         texture: UnmanagedTexture(T),
 
-        pub fn getDimensions(self: *@This()) DimensionsU32 {
+        pub fn getDimensions(self: *const @This()) DimensionsU32 {
             return self.view.getDimensions();
         }
 
@@ -131,7 +131,7 @@ pub fn UnmanagedTexture(comptime T: type) type {
         }
 
         pub fn getPixelUnsafe(self: *@This(), point: PointU32) *T {
-            return self.pixels[(self.dimensions.height - point.y) * self.dimensions.width + point.x];
+            return &self.pixels[(self.dimensions.height - point.y) * self.dimensions.width + point.x];
         }
 
         pub fn getRow(self: *@This(), row: u32) ?[]T {
@@ -152,7 +152,7 @@ pub fn UnmanagedTexture(comptime T: type) type {
 
             return TextureView(T){
                 .view = view,
-                .texture = self,
+                .texture = self.*,
             };
         }
     };

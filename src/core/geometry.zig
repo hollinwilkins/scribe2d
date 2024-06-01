@@ -21,6 +21,7 @@ pub fn Point(comptime T: type) type {
 
 pub const PointF32 = Point(f32);
 pub const PointI16 = Point(i16);
+pub const PointU32 = Point(u32);
 
 pub fn Dimensions(comptime T: type) type {
     return struct {
@@ -44,7 +45,7 @@ pub fn Dimensions(comptime T: type) type {
             return self.width * self.height;
         }
 
-        pub fn fitsInside(self: *const @This(), other: *const @This()) bool {
+        pub fn fitsInside(self: @This(), other: @This()) bool {
             return self.width <= other.width and self.height <= other.height;
         }
     };
@@ -89,7 +90,7 @@ pub fn Rect(comptime T: type) type {
             };
         }
 
-        pub fn fitsInside(self: *const @This(), other: *const @This()) bool {
+        pub fn fitsInside(self: @This(), other: @This()) bool {
             return self.getDimensions().fitsInside(other.getDimensions());
         }
 

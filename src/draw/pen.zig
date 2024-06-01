@@ -20,7 +20,7 @@ const OutlinePoint = struct {
 const UnmanagedOutlinePointTexture = UnmanagedTexture(OutlinePoint);
 
 pub const Pen = struct {
-    pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: TextureViewRgba) !void {
+    pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
         _ = self;
         const view_dimensions = view.getDimensions();
         const view_scale_width: f32 = @floatFromInt(view_dimensions.width);
@@ -48,7 +48,9 @@ pub const Pen = struct {
                 // this will be used to:
                 //   1. determine if a point is inside or outside of the path
                 //   2. calculate distance field from pixels to closest segment
-                if (points_outline.createView(scaled_segment_bounds)) |points_outline_view| {
+                if (points_outline.createView(scaled_segment_bounds)) |pov| {
+                    var points_outline_view = pov;
+
                     // move along the x-axis of the segment pixels, calculating y
                     // save data into the points_outline_view
 

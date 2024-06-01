@@ -5,6 +5,7 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
+const RangeF32 = core.RangeF32;
 
 pub const SegmentShape = union(Kind) {
     pub const Kind = enum(u16) {
@@ -19,14 +20,44 @@ pub const SegmentShape = union(Kind) {
         start: PointF32,
         end: PointF32,
 
-        pub fn applyX(self: *Line, x: f32) f32 {
+        pub fn applyX(self: *const Line, x: f32) f32 {
             const delta_y = (self.end.y - self.start.y);
+
+            if (delta_y == 0) {
+                return 0.0;
+            }
+
             const delta_x = (self.end.x - self.start.x);
+
+            if (delta_x == 0.0) {
+                return std.math.inf(f32);
+            }
+
             const m = delta_y / delta_x;
             const b = self.start.y - (m / self.start.x);
-            const scaled_x = @min(1.0, x) * delta_x;
+            const scaled_x = @min(1.0, x) * delta_x + self.start.x;
             const scaled_y = m * scaled_x + b;
-            return scaled_y / delta_y;
+            return (scaled_y - self.start.y) / delta_y;
+        }
+
+        pub fn applyY(self: *const Line, y: f32) f32 {
+            const delta_y = (self.end.y - self.start.y);
+
+            if (delta_y == 0) {
+                return std.math.inf(f32);
+            }
+
+            const delta_x = (self.end.x - self.start.x);
+
+            if (delta_x == 0.0) {
+                return 0.0;
+            }
+
+            const m = delta_y / delta_x;
+            const b = self.start.y - (m / self.start.x);
+            const scaled_y = @min(1.0, y) * delta_y + self.start.y;
+            const scaled_x = (scaled_y - b) / m;
+            return (scaled_x - self.start.x) / delta_x;
         }
     };
 
@@ -35,7 +66,7 @@ pub const SegmentShape = union(Kind) {
         end: PointF32,
         control: PointF32, // control point
 
-        pub fn applyX(self: *Line, x: f32) f32 {
+        pub fn applyX(self: *const QuadraticBezier, x: f32) f32 {
             _ = self;
             return x;
         }
@@ -65,6 +96,7 @@ pub const Segment = struct {
 
     // x is [0.0, 1.0]
     // returns y value at x, scaled between [0.0, 1.0]
+    // returns std.math.inf(f32) for vertical lines
     pub fn applyX(self: *const Segment, x: f32) f32 {
         switch (self.shape) {
             .line => |*shape| return shape.applyX(x),
@@ -192,7 +224,7 @@ pub const PathOutliner = struct {
         ao.* = Segment{
             .bounds = RectF32.create(self.location, point),
             .shape = SegmentShape{
-                .line = Segment.Line{
+                .line = SegmentShape.Line{
                     .start = self.location,
                     .end = point,
                 },
@@ -211,7 +243,7 @@ pub const PathOutliner = struct {
         ao.* = Segment{
             .bounds = RectF32.create(self.location, point),
             .shape = SegmentShape{
-                .quadratic_bezier = Segment.QuadraticBezier{
+                .quadratic_bezier = SegmentShape.QuadraticBezier{
                     .start = self.location,
                     .end = point,
                     .control = control,

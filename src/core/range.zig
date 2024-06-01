@@ -5,4 +5,5 @@ pub fn Range(comptime T: type) type {
     };
 }
 
+pub const RangeF32 = Range(f32);
 pub const RangeU32 = Range(u32);
