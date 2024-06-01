@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("../core/root.zig");
 const mem = std.mem;
 
 pub const Reader = struct {
@@ -76,6 +77,24 @@ pub const Reader = struct {
         return null;
     }
 };
+
+pub fn readRect(comptime T: type, reader: *Reader) ?core.Rect(T) {
+    const x_min = reader.readInt(T) orelse return null;
+    const y_min = reader.readInt(T) orelse return null;
+    const x_max = reader.readInt(T) orelse return null;
+    const y_max = reader.readInt(T) orelse return null;
+
+    return core.Rect(T){
+        .min = core.Point(T){
+            .x = x_min,
+            .y = y_min,
+        },
+        .max = core.Point(T){
+            .x = x_max,
+            .y = y_max,
+        },
+    };
+}
 
 pub const Transform = struct {
     /// The 'a' component of the transform.

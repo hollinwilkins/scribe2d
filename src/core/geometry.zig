@@ -1,7 +1,7 @@
 pub fn Point(comptime T: type) type {
     return struct {
-        x: T,
-        y: T,
+        x: T = 0,
+        y: T = 0,
 
         pub fn lerp(self: @This(), other: @This(), t: T) @This() {
             return @This(){
@@ -13,6 +13,7 @@ pub fn Point(comptime T: type) type {
 }
 
 pub const PointF32 = Point(f32);
+pub const PointI16 = Point(i16);
 
 pub fn Dimensions(comptime T: type) type {
     return struct {
@@ -46,8 +47,8 @@ pub fn Rect(comptime T: type) type {
     return struct {
         const P = Point(T);
 
-        min: P,
-        max: P,
+        min: P = P{},
+        max: P = P{},
 
         pub fn create(p1: P, p2: P) @This() {
             return @This(){
@@ -64,10 +65,10 @@ pub fn Rect(comptime T: type) type {
 
         // NOTE: can we use SIMD/NEON to make some of these functions more faster
         pub fn extendBy(self: *@This(), x: T, y: T) void {
-            self.x_min = @min(self.x_min, x);
-            self.y_min = @min(self.y_min, y);
-            self.x_max = @min(self.x_max, x);
-            self.y_max = @min(self.y_max, y);
+            self.min.x = @min(self.min.x, x);
+            self.min.y = @min(self.min.y, y);
+            self.max.x = @max(self.max.x, x);
+            self.max.y = @max(self.max.y, y);
         }
     };
 }

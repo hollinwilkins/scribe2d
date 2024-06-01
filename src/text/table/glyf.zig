@@ -8,6 +8,7 @@ const Error = text.Error;
 const GlyphId = text.GlyphId;
 const LazyIntArray = util.LazyIntArray;
 const RectI16 = core.RectI16;
+const PointI16 = core.PointI16;
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 const Transform = util.Transform;
@@ -29,7 +30,7 @@ pub const Table = struct {
 
     pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!RectI16 {
         var builder = Builder.create(RectF32{}, Transform{}, outliner);
-        const glyph_data = self.get(glyph_id) orelse return error.BadOutline;
+        const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
         return try self.outlineImpl(glyph_data, 0, &builder);
     }
 
@@ -44,19 +45,19 @@ pub const Table = struct {
         }
 
         var reader = Reader.create(data);
-        const numberOfContours = reader.readInt(i16) orelse return error.BadOutline;
-        const bbox = RectI16.read(&reader) orelse return error.BadOutline;
-        const x_min: f64 = @floatFromInt(bbox.x_min);
-        const y_min: f64 = @floatFromInt(bbox.y_min);
-        const x_scale = @as(f64, @floatFromInt(bbox.x_max)) - x_min;
-        const y_scale = @as(f64, @floatFromInt(bbox.y_max)) - y_min;
+        const numberOfContours = reader.readInt(i16) orelse return error.InvalidOutline;
+        const bbox = util.readRect(i16, &reader) orelse return error.InvalidOutline;
+        const x_min: f64 = @floatFromInt(bbox.min.x);
+        const y_min: f64 = @floatFromInt(bbox.min.y);
+        const x_scale = @as(f64, @floatFromInt(bbox.max.x)) - x_min;
+        const y_scale = @as(f64, @floatFromInt(bbox.max.y)) - y_min;
 
         if (numberOfContours > 0) {
             // Simple glyph
 
             const nContours: u16 = @intCast(numberOfContours);
             if (nContours == 0) {
-                return error.BadOutline;
+                return error.InvalidOutline;
             }
 
             if (try parseSimpleOutline(reader.tail(), nContours)) |points_iterator| {
@@ -88,10 +89,14 @@ pub const Table = struct {
             }
 
             return RectI16{
-                .x_min = @intFromFloat(builder.bbox.x_min),
-                .y_min = @intFromFloat(builder.bbox.x_min),
-                .x_max = @intFromFloat(builder.bbox.x_max),
-                .y_max = @intFromFloat(builder.bbox.y_max),
+                .min = PointI16{
+                    .x = @intFromFloat(builder.bbox.min.x),
+                    .y = @intFromFloat(builder.bbox.min.y),
+                },
+                .max = PointI16{
+                    .x = @intFromFloat(builder.bbox.max.x),
+                    .y = @intFromFloat(builder.bbox.max.y),
+                },
             };
         }
 
@@ -100,9 +105,9 @@ pub const Table = struct {
 
     fn parseSimpleOutline(glyph_data: []const u8, numberOfContours: u16) Error!?GlyphPoint.Iterator {
         var reader = Reader.create(glyph_data);
-        const endpoints = GlyphPoint.EndpointsIterator.EndpointsList.read(&reader, numberOfContours) orelse return error.BadOutline;
+        const endpoints = GlyphPoint.EndpointsIterator.EndpointsList.read(&reader, numberOfContours) orelse return error.InvalidOutline;
 
-        const lastPoint = endpoints.last() orelse return error.BadOutline;
+        const lastPoint = endpoints.last() orelse return error.InvalidOutline;
         const pointsTotal = lastPoint + 1;
 
         if (pointsTotal == 1) {
@@ -110,7 +115,7 @@ pub const Table = struct {
         }
 
         // Skip instructions byte code.
-        const instructionsLength = reader.readInt(u16) orelse return error.BadOutline;
+        const instructionsLength = reader.readInt(u16) orelse return error.InvalidOutline;
         reader.skipN(@intCast(instructionsLength));
 
         const flagsOffset = reader.cursor;
@@ -135,11 +140,11 @@ pub const Table = struct {
         var yCoordinatesLength: u32 = 0;
 
         while (flagsLeft > 0) {
-            const flags = SimpleGlyphFlags.read(reader) orelse return error.BadOutline;
+            const flags = SimpleGlyphFlags.read(reader) orelse return error.InvalidOutline;
 
             // The number of times a glyph point repeats.
             if (flags.repeatFlag()) {
-                const r = reader.readInt(u8) orelse return error.BadOutline;
+                const r = reader.readInt(u8) orelse return error.InvalidOutline;
                 repeats = @intCast(r);
                 repeats += 1;
             } else {
@@ -147,7 +152,7 @@ pub const Table = struct {
             }
 
             if (repeats > flagsLeft) {
-                return error.BadOutline;
+                return error.InvalidOutline;
             }
 
             // No need to check for `*_coords_len` overflow since u32 is more than enough.
@@ -197,7 +202,7 @@ pub const Builder = struct {
 
     pub fn create(bbox: RectF32, transform: Transform, outliner: TextOutliner) Builder {
         return Builder{
-            .builder = outliner,
+            .outliner = outliner,
             .bbox = bbox,
             .transform = transform,
             .is_default_transform = transform.isDefault(),

@@ -1,12 +1,12 @@
 const std = @import("std");
+const table = @import("./table/table.zig");
+const util = @import("./util.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const root = @import("./root.zig");
-const Rect = root.RectI16;
-const Magic = root.Magic;
-const Reader = root.Reader;
-const Offset32 = root.Offset32;
-const table = @import("./table.zig");
+const Rect = util.RectI16;
+const Magic = util.Magic;
+const Reader = util.Reader;
+const Offset32 = util.Offset32;
 const Tables = table.Tables;
 const RawTables = table.RawTables;
 
@@ -61,6 +61,8 @@ pub const Face = struct {
 };
 
 test "parsing roboto medium" {
+    const TextOutliner = @import("./TextOutliner.zig");
+
     var rm_face = try Face.initFile(std.testing.allocator, "fixtures/fonts/roboto-medium.ttf");
     defer rm_face.deinit();
 
@@ -68,7 +70,7 @@ test "parsing roboto medium" {
     const family = (try name_table.getNameAlloc(std.testing.allocator, .family)).?;
     defer std.testing.allocator.free(family);
 
-    const outliner = root.Outliner.Debug.Instance;
+    const outliner = TextOutliner.Debug.Instance;
     const bounds = try rm_face.unmanaged.tables.glyf.?.outline(48, outliner);
     _ = bounds;
 

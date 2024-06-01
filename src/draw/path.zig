@@ -1,9 +1,10 @@
 const std = @import("std");
+const text = @import("../text/root.zig");
+const core = @import("../core/root.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const RectF32 = @import("../root.zig").RectF32;
-const PointF32 = @import("../root.zig").PointF32;
-const Outliner = @import("./Outliner.zig");
+const RectF32 = core.RectF32;
+const PointF32 = core.PointF32;
 
 pub const Segment = union(Kind) {
     pub const Kind = enum(u16) {
@@ -70,7 +71,7 @@ pub const Path = struct {
 pub const PathOutliner = struct {
     const SegmentsList = std.ArrayList(Segment);
 
-    const OutlinerFunctions = struct {
+    const TextOutlinerFunctions = struct {
         fn moveTo(ctx: *anyopaque, x: f32, y: f32) void {
             var po = @as(*PathOutliner, @alignCast(@ptrCast(ctx)));
             po.moveTo(PointF32{ .x = x, .y = y }) catch {
@@ -104,12 +105,12 @@ pub const PathOutliner = struct {
         }
     };
 
-    pub const OutlinerVTable = .{
-        .moveTo = OutlinerFunctions.moveTo,
-        .lineTo = OutlinerFunctions.lineTo,
-        .quadTo = OutlinerFunctions.quadTo,
-        .curveTo = OutlinerFunctions.curveTo,
-        .close = OutlinerFunctions.close,
+    pub const TextOutlinerVTable = .{
+        .moveTo = TextOutlinerFunctions.moveTo,
+        .lineTo = TextOutlinerFunctions.lineTo,
+        .quadTo = TextOutlinerFunctions.quadTo,
+        .curveTo = TextOutlinerFunctions.curveTo,
+        .close = TextOutlinerFunctions.close,
     };
 
     segments: SegmentsList,
@@ -128,10 +129,10 @@ pub const PathOutliner = struct {
         self.segments.deinit();
     }
 
-    pub fn outliner(self: *PathOutliner) Outliner {
-        return Outliner{
+    pub fn textOutliner(self: *PathOutliner) text.TextOutliner {
+        return text.TextOutliner{
             .ptr = self,
-            .vtable = &OutlinerVTable,
+            .vtable = &TextOutlinerVTable,
         };
     }
 

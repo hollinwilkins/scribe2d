@@ -1,9 +1,9 @@
 const text = @import("../root.zig");
 const util = @import("../util.zig");
-const core = @import("../core.zig");
+const core = @import("../../core/root.zig");
 const Error = text.Error;
 const Fixed = util.Fixed;
-const Rect = core.RectI16;
+const RectI16 = core.RectI16;
 const Reader = util.Reader;
 
 pub const IndexToLocationFormat = enum {
@@ -25,7 +25,7 @@ pub const IndexToLocationFormat = enum {
 
 pub const Table = struct {
     units_per_em: u16,
-    global_bbox: Rect,
+    global_bbox: RectI16,
     index_to_location_format: IndexToLocationFormat,
 
     pub fn create(data: []const u8) Error!Table {
@@ -42,7 +42,7 @@ pub const Table = struct {
         const units_per_em = r.readInt(u16).?;
         r.skip(u64); // create time
         r.skip(u64); // modified time
-        const global_bbox = Rect.read(&r).?;
+        const global_bbox = util.readRect(i16, &r).?;
         r.skip(u16); // max style
         r.skip(u16); // lowest PPEM
         r.skip(i16); // font direction hint
