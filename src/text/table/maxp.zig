@@ -1,6 +1,7 @@
-const root = @import("../root.zig");
-const Error = root.Error;
-const Reader = root.Reader;
+const text = @import("../root.zig");
+const util = @import("../util.zig");
+const Error = text.Error;
+const Reader = util.Reader;
 
 pub const Table = struct {
     number_of_glyphs: u16,

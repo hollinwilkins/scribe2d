@@ -1,8 +1,10 @@
-const root = @import("../root.zig");
-const Error = root.Error;
-const Fixed = root.Fixed;
-const Rect = root.draw.RectI16;
-const Reader = root.Reader;
+const text = @import("../root.zig");
+const util = @import("../util.zig");
+const core = @import("../core.zig");
+const Error = text.Error;
+const Fixed = util.Fixed;
+const Rect = core.RectI16;
+const Reader = util.Reader;
 
 pub const IndexToLocationFormat = enum {
     short,

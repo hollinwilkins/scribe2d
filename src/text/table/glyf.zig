@@ -2,9 +2,10 @@ const std = @import("std");
 const text = @import("../root.zig");
 const util = @import("../util.zig");
 const core = @import("../../core/root.zig");
+const loca = @import("./loca.zig");
+const TextOutliner = @import("../TextOutliner.zig");
 const Error = text.Error;
 const GlyphId = text.GlyphId;
-const TextOutliner = @import("../TextOutliner.zig");
 const LazyIntArray = util.LazyIntArray;
 const RectI16 = core.RectI16;
 const RectF32 = core.RectF32;
@@ -12,7 +13,6 @@ const PointF32 = core.PointF32;
 const Transform = util.Transform;
 const F2DOT14 = util.F2DOT14;
 const Reader = util.Reader;
-const loca = @import("./loca.zig");
 
 pub const MAX_COMPONENTS: u8 = 32;
 

@@ -1,14 +1,15 @@
 const std = @import("std");
-const root = @import("../root.zig");
-const Error = root.Error;
-const Fixed = root.Fixed;
-const GlyphId = root.GlyphId;
-const Range = root.Range;
-const Rect = root.RectI16;
-const Reader = root.Reader;
-const LazyIntArray = root.LazyIntArray;
-const table = root.table;
-const IndexToLocationFormat = table.head.IndexToLocationFormat;
+const text = @import("../root.zig");
+const util = @import("../util.zig");
+const head = @import("./head.zig");
+const Error = text.Error;
+const GlyphId = text.GlyphId;
+const Reader = util.Reader;
+const Fixed = util.Fixed;
+const Range = util.Range;
+const Rect = util.RectI16;
+const LazyIntArray = util.LazyIntArray;
+const IndexToLocationFormat = head.IndexToLocationFormat;
 
 pub const Short = struct {
     const List = LazyIntArray(u16);

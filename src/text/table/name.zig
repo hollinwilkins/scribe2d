@@ -1,13 +1,15 @@
 const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const root = @import("../root.zig");
-const Error = root.Error;
-const LazyArray = root.LazyArray;
-const GlyphId = root.GlyphId;
-const Reader = root.Reader;
-const Offset16 = root.Offset16;
-const Language = root.Language;
+const text = @import("../root.zig");
+const util = @import("../util.zig");
+const Error = text.Error;
+const GlyphId = text.GlyphId;
+const Language = text.Language;
+const Reader = util.Reader;
+const LazyArray = util.LazyArray;
+const LazyIntArray = util.LazyIntArray;
+const Offset16 = util.Offset16;
 
 pub const KnownNameId = enum(u16) {
     copyright_notice = 0,
