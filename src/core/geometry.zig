@@ -3,6 +3,13 @@ pub fn Point(comptime T: type) type {
         x: T = 0,
         y: T = 0,
 
+        pub fn add(self: @This(), other: @This()) @This() {
+            return @This(){
+                .x = self.x + other.x,
+                .y = self.y + other.y,
+            };
+        }
+
         pub fn lerp(self: @This(), other: @This(), t: T) @This() {
             return @This(){
                 .x = self.x + t * (other.x - self.x),
@@ -36,6 +43,10 @@ pub fn Dimensions(comptime T: type) type {
         pub fn size(self: *const @This()) T {
             return self.width * self.height;
         }
+
+        pub fn fitsInside(self: *const @This(), other: *const @This()) bool {
+            return self.width <= other.width and self.height <= other.height;
+        }
     };
 }
 
@@ -63,6 +74,25 @@ pub fn Rect(comptime T: type) type {
             };
         }
 
+        pub fn getWidth(self: *const @This()) T {
+            return self.max.x - self.min.x;
+        }
+
+        pub fn getHeight(self: *const @This()) T {
+            return self.max.y - self.min.y;
+        }
+
+        pub fn getDimensions(self: *const @This()) Dimensions(T) {
+            return Dimensions(T){
+                .width = self.max.x - self.min.x,
+                .height = self.max.y - self.min.y,
+            };
+        }
+
+        pub fn fitsInside(self: *const @This(), other: *const @This()) bool {
+            return self.getDimensions().fitsInside(other.getDimensions());
+        }
+
         // NOTE: can we use SIMD/NEON to make some of these functions more faster
         pub fn extendBy(self: *@This(), x: T, y: T) void {
             self.min.x = @min(self.min.x, x);
@@ -75,3 +105,4 @@ pub fn Rect(comptime T: type) type {
 
 pub const RectF32 = Rect(f32);
 pub const RectI16 = Rect(i16);
+pub const RectU32 = Rect(u32);

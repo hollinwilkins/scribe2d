@@ -6,7 +6,7 @@ const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 
-pub const Segment = union(Kind) {
+pub const SegmentShape = union(Kind) {
     pub const Kind = enum(u16) {
         line,
         quadratic_bezier,
@@ -16,19 +16,34 @@ pub const Segment = union(Kind) {
     };
 
     pub const Line = struct {
-        start: PointF32, // start point
-        end: PointF32, // end point
+        start: PointF32,
+        end: PointF32,
+
+        pub fn applyX(self: *Line, x: f32) f32 {
+            const delta_y = (self.end.y - self.start.y);
+            const delta_x = (self.end.x - self.start.x);
+            const m = delta_y / delta_x;
+            const b = self.start.y - (m / self.start.x);
+            const scaled_x = @min(1.0, x) * delta_x;
+            const scaled_y = m * scaled_x + b;
+            return scaled_y / delta_y;
+        }
     };
 
     pub const QuadraticBezier = struct {
-        start: PointF32, // start point
-        end: PointF32, // end point
+        start: PointF32,
+        end: PointF32,
         control: PointF32, // control point
+
+        pub fn applyX(self: *Line, x: f32) f32 {
+            _ = self;
+            return x;
+        }
     };
 
     pub const CubicBezier = struct {
-        start: PointF32, // start point
-        end: PointF32, // end point
+        start: PointF32,
+        end: PointF32,
         control1: PointF32, // control point 1
         control2: PointF32, // control point 2
     };
@@ -38,6 +53,25 @@ pub const Segment = union(Kind) {
     cubic_bezier: CubicBezier,
     curve: void,
     elliptical: void,
+};
+
+pub const Segment = struct {
+    bounds: RectF32,
+    shape: SegmentShape,
+
+    pub fn getBounds(self: *const Segment) RectF32 {
+        return self.bounds;
+    }
+
+    // x is [0.0, 1.0]
+    // returns y value at x, scaled between [0.0, 1.0]
+    pub fn applyX(self: *const Segment, x: f32) f32 {
+        switch (self.shape) {
+            .line => |*shape| return shape.applyX(x),
+            .quadratic_bezier => |*shape| return shape.applyX(x),
+            else => return 0.0,
+        }
+    }
 };
 
 pub const Path = struct {
@@ -146,8 +180,7 @@ pub const PathOutliner = struct {
     }
 
     pub fn moveTo(self: *PathOutliner, point: PointF32) !void {
-        // make sure to close any current subpath
-        try self.close();
+        self.start = null;
 
         // set current location to point
         self.location = point;
@@ -157,12 +190,18 @@ pub const PathOutliner = struct {
         // attempt to add a line segment from current location to point
         const ao = try self.segments.addOne();
         ao.* = Segment{
-            .line = Segment.Line{
-                .start = self.location,
-                .end = point,
+            .bounds = RectF32.create(self.location, point),
+            .shape = SegmentShape{
+                .line = Segment.Line{
+                    .start = self.location,
+                    .end = point,
+                },
             },
         };
 
+        if (self.start == null) {
+            self.start = self.location;
+        }
         self.location = point;
     }
 
@@ -170,13 +209,19 @@ pub const PathOutliner = struct {
         // attempt to add a quadratic segment from current location to point
         const ao = try self.segments.addOne();
         ao.* = Segment{
-            .quadratic_bezier = Segment.QuadraticBezier{
-                .start = self.location,
-                .end = point,
-                .control = control,
+            .bounds = RectF32.create(self.location, point),
+            .shape = SegmentShape{
+                .quadratic_bezier = Segment.QuadraticBezier{
+                    .start = self.location,
+                    .end = point,
+                    .control = control,
+                },
             },
         };
 
+        if (self.start == null) {
+            self.start = self.location;
+        }
         self.location = point;
     }
 
