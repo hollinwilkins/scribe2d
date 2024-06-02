@@ -45,15 +45,6 @@ pub const Pen = struct {
         for (path.getCurves()) |curve| {
             const scaled_curve = curve.scale(scaled_pixel_dimensions);
             const scaled_curve_bounds = scaled_curve.getBounds();
-            // get x intersections
-            //     const scaled_pixel_x_range = RangeF32{
-            //         .start = (scaled_curve_bounds.min.x / scaled_pixel_dimensions.width),
-            //         .end = (scaled_curve_bounds.max.x / scaled_pixel_dimensions.width),
-            //     };
-            //     const pixel_x_range = RangeI32{
-            //         .start = @intFromFloat(scaled_pixel_x_range.start),
-            //         .end = @intFromFloat(scaled_pixel_x_range.end),
-            //     };
 
             try scanX(
                 scaled_curve_bounds.min.x,
@@ -79,36 +70,29 @@ pub const Pen = struct {
                 &intersections,
             );
 
-            //     // get y intersections
-            //     const scaled_pixel_y_range = RangeF32{
-            //         .start = (scaled_curve_bounds.min.y / scaled_pixel_dimensions.height),
-            //         .end = (scaled_curve_bounds.max.y / scaled_pixel_dimensions.height),
-            //     };
-            //     const pixel_y_range = RangeI32{
-            //         .start = @intFromFloat(scaled_pixel_y_range.start),
-            //         .end = @intFromFloat(scaled_pixel_y_range.end),
-            //     };
-            //     try scanY(
-            //         scaled_curve_bounds.min.y,
-            //         curve,
-            //         scaled_curve_bounds,
-            //         &intersections,
-            //     );
-            //     for (0..pixel_y_range.size() - 1) |y_offset| {
-            //         const pixel_y = pixel_y_range.start + @as(i32, @intCast(y_offset)) + 1;
-            //         try scanY(
-            //             @as(f32, @floatFromInt(pixel_y)) * scaled_pixel_dimensions.height,
-            //             curve,
-            //             scaled_curve_bounds,
-            //             &intersections,
-            //         );
-            //     }
-            //     try scanY(
-            //         scaled_curve_bounds.max.y,
-            //         curve,
-            //         scaled_curve_bounds,
-            //         &intersections,
-            //     );
+            try scanY(
+                scaled_curve_bounds.min.y,
+                scaled_curve,
+                scaled_curve_bounds,
+                &intersections,
+            );
+            const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
+            const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
+            for (1..grid_y_size) |y_offset| {
+                const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
+                try scanY(
+                    @as(f32, @floatFromInt(grid_y)),
+                    scaled_curve,
+                    scaled_curve_bounds,
+                    &intersections,
+                );
+            }
+            try scanY(
+                scaled_curve_bounds.max.y,
+                scaled_curve,
+                scaled_curve_bounds,
+                &intersections,
+            );
 
             //     // build pixel fragments
         }
@@ -117,7 +101,7 @@ pub const Pen = struct {
     }
 
     fn scanX(
-        scaled_x: f32,
+        grid_x: f32,
         curve: Curve,
         scaled_curve_bounds: RectF32,
         intersections: *IntersectionList,
@@ -125,11 +109,11 @@ pub const Pen = struct {
         var scaled_intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
         const line = Line.create(
             PointF32{
-                .x = scaled_x,
+                .x = grid_x,
                 .y = scaled_curve_bounds.min.y,
             },
             PointF32{
-                .x = scaled_x,
+                .x = grid_x,
                 .y = scaled_curve_bounds.max.y,
             },
         );
@@ -142,7 +126,7 @@ pub const Pen = struct {
     }
 
     fn scanY(
-        scaled_y: f32,
+        grid_y: f32,
         curve: Curve,
         scaled_curve_bounds: RectF32,
         intersections: *IntersectionList,
@@ -151,11 +135,11 @@ pub const Pen = struct {
         const line = Line.create(
             PointF32{
                 .x = scaled_curve_bounds.min.x,
-                .y = scaled_y,
+                .y = grid_y,
             },
             PointF32{
                 .x = scaled_curve_bounds.max.x,
-                .y = scaled_y,
+                .y = grid_y,
             },
         );
         const scaled_intersections = curve.intersectLine(line, &scaled_intersections_result);
