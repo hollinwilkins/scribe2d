@@ -10,6 +10,20 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn sub(self: @This(), other: @This()) @This() {
+            return @This(){
+                .x = self.x - other.x,
+                .y = self.y - other.y,
+            };
+        }
+
+        pub fn mul(self: @This(), other: @This()) @This() {
+            return @This(){
+                .x = self.x * other.x,
+                .y = self.y * other.y,
+            };
+        }
+
         pub fn lerp(self: @This(), other: @This(), t: T) @This() {
             return @This(){
                 .x = self.x + t * (other.x - self.x),

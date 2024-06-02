@@ -22,28 +22,39 @@ pub const Line = struct {
         return self.start.y == self.end.y;
     }
 
-    pub fn deltaY(self: Line) f32 {
+    pub fn getBounds(self: Line) RectF32 {
+        return RectF32.create(self.start, self.end);
+    }
+
+    pub fn getDeltaY(self: Line) f32 {
         return self.end.y - self.start.y;
     }
 
-    pub fn deltaX(self: Line) f32 {
+    pub fn getDeltaX(self: Line) f32 {
         return self.end.x - self.start.x;
+    }
+
+    pub fn getNormal(self: Line) PointF32 {
+        return PointF32{
+            .x = -self.getDeltaY(),
+            .y = self.getDeltaX(),
+        };
     }
 
     // Java code from: https://www.geeksforgeeks.org/program-for-point-of-intersection-of-two-lines/
     pub fn intersectLine(self: Line, line: Line) ?PointF32 {
         // Line AB represented as a1x + b1y = c1
-        const a1 = self.deltaY();
+        const a1 = self.getDeltaY();
         // double a1 = B.y - A.y;
-        const b1 = -self.deltaX();
+        const b1 = -self.getDeltaX();
         // double b1 = A.x - B.x;
         const c1 = a1 * (self.start.x) + b1 * (self.start.y);
         // double c1 = a1*(A.x) + b1*(A.y);
 
         // Line CD represented as a2x + b2y = c2
-        const a2 = line.deltaY();
+        const a2 = line.getDeltaY();
         // double a2 = D.y - C.y;
-        const b2 = -line.deltaX();
+        const b2 = -line.getDeltaX();
         // double b2 = C.x - D.x;
         const c2 = a2 * (line.start.x) + b2 * (line.start.y);
         // double c2 = a2*(C.x)+ b2*(C.y);
@@ -81,22 +92,34 @@ pub const QuadraticBezier = struct {
 
     // code from: https://github.com/w8r/bezier-intersect
     pub fn getRoots(c0: f32, c1: f32, c2: f32, result: *[2]f32) []const f32 {
-        const a = c2;
+        const a = c0;
+        //   var a = C2;
         const b = c1 / a;
-        const c = c0 / a;
+        //   var b = C1 / a;
+        const c = c2 / a;
+        //   var c = C0 / a;
         const d = b * b - 4 * c;
+        //   var d = b * b - 4 * c;
 
         if (d > 0) {
+            //   if (d > 0) {
             const e = std.math.sqrt(d);
+            //     var e = Math.sqrt(d);
             result[0] = 0.5 * (-b + e);
+            //     results.push(0.5 * (-b + e));
             result[1] = 0.5 * (-b - e);
+            //     results.push(0.5 * (-b - e));
             return result;
         } else if (d == 0) {
+            //   } else if (d === 0) {
             result[0] = 0.5 * -b;
+            //     results.push( 0.5 * -b);
             return result[0..1];
         }
+        //   }
 
         return result[0..0];
+        //   return results;
     }
 
     //     export function quadBezierLine(
@@ -105,65 +128,67 @@ pub const QuadraticBezier = struct {
 
     // p1 = a, p2 = c, p3 = b
     // code from: https://github.com/w8r/bezier-intersect
+    // code from: https://stackoverflow.com/questions/27664298/calculating-intersection-point-of-quadratic-bezier-curve
     pub fn intersectLine(self: QuadraticBezier, line: Line, result: *[2]PointF32) []const PointF32 {
+        const bounds = line.getBounds();
+        // inverse line normal
+        //   var normal={
+        //     x: a1.y-a2.y,
+        //     y: a2.x-a1.x,
+        //   }
+        const normal = line.getNormal();
 
-        // var ax, ay, bx, by;                // temporary variables
-        //   var c2x, c2y, c1x, c1y, c0x, c0y;  // coefficients of quadratic
-        //   var cl;               // c coefficient for normal form of line
-        //   var nx, ny;           // normal for normal form of line
-        //   // used to determine if point is on line segment
-        //   var minx = Math.min(a1x, a2x),
-        //       miny = Math.min(a1y, a2y),
-        //       maxx = Math.max(a1x, a2x),
-        //       maxy = Math.max(a1y, a2y);
-        const bounds = RectF32.create(line.start, line.end);
+        //   // Q-coefficients
+        //   var c2={
+        //     x: p1.x + p2.x*-2 + p3.x,
+        //     y: p1.y + p2.y*-2 + p3.y
+        //   }
+        const p2 = self.start.add(
+            self.control.mul(PointF32{
+                .x = -2.0,
+                .y = -2.0,
+            }),
+        ).add(self.end);
 
-        //   ax = p2x * -2; ay = p2y * -2;
-        //   c2x = p1x + ax + p3x;
-        //   c2y = p1y + ay + p3y;
-        const ax_1 = self.control.x * -2.0;
-        const ay_1 = self.control.y * -2.0;
-        const c2x = self.start.x + ax_1 + self.end.x;
-        const c2y = self.start.y + ay_1 + self.end.y;
+        //   var c1={
+        //     x: p1.x*-2 + p2.x*2,
+        //     y: p1.y*-2 + p2.y*2,
+        //   }
+        const p1 = self.start.mul(
+            PointF32{
+                .x = -2.0,
+                .y = -2.0,
+            },
+        ).add(self.control.mul(
+            PointF32{
+                .x = 2.0,
+                .y = 2.0,
+            },
+        ));
 
-        //   ax = p1x * -2; ay = p1y * -2;
-        //   bx = p2x * 2;  by = p2y * 2;
-        //   c1x = ax + bx;
-        //   c1y = ay + by;
-        const ax_2 = self.start.x * -2.0;
-        const ay_2 = self.start.y * -2.0;
-        const bx_2 = self.control.x * 2.0;
-        const by_2 = self.control.y * 2.0;
-        const c1x = ax_2 + bx_2;
-        const c1y = ay_2 + by_2;
+        //   var c0={
+        //     x: p1.x,
+        //     y: p1.y
+        //   }
+        const p0 = self.start;
 
-        //   c0x = p1x; c0y = p1y; // vec
-        const c0x = self.start.x;
-        const c0y = self.start.y;
-
-        //   // Convert line to normal form: ax + by + c = 0
-        //   // Find normal to line: negative inverse of original line's slope
-        //   nx = a1y - a2y; ny = a2x - a1x;
-        const nx = line.start.y - line.end.y;
-        const ny = line.end.x - line.start.x;
-
-        //   // Determine new c coefficient
-        //   cl = a1x * a2y - a2x * a1y;
-        const cl = line.start.x * line.end.y - line.end.x * line.start.y;
+        //   // Transform to line
+        //   var coefficient=a1.x*a2.y-a2.x*a1.y;
+        const coefficient = line.start.x * line.end.y - line.end.x * line.start.y;
+        //   var a=normal.x*c2.x + normal.y*c2.y;
+        const c0 = normal.x * p2.x + normal.y * p2.y;
+        //   var b=(normal.x*c1.x + normal.y*c1.y)/a;
+        const c1 = normal.x * p1.x + normal.y * p1.y;
+        //   var c=(normal.x*c0.x + normal.y*c0.y + coefficient)/a;
+        const c2 = normal.x * p0.x + normal.y * p0.y + coefficient;
 
         //   // Transform cubic coefficients to line's coordinate system
         //   // and find roots of cubic
-        //   var roots = getPolynomialRoots(
-        //     // dot products => x * x + y * y
-        //     nx * c2x + ny * c2y,
-        //     nx * c1x + ny * c1y,
-        //     nx * c0x + ny * c0y + cl
-        //   );
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
         const roots = getRoots(
-            nx * c2x + ny * c2y,
-            nx * c1x + ny * c1y,
-            nx * c0x + ny * c0y + cl,
+            c0,
+            c1,
+            c2,
             &roots_result,
         );
 
@@ -180,16 +205,18 @@ pub const QuadraticBezier = struct {
                 //       // lerp: x1 + (x2 - x1) * t
                 //       var p4x = p1x + (p2x - p1x) * t;
                 //       var p4y = p1y + (p2y - p1y) * t;
-                const p4 = self.start.lerp(self.end, t);
-
                 //       var p5x = p2x + (p3x - p2x) * t;
                 //       var p5y = p2y + (p3y - p2y) * t;
-                const p5 = self.control.lerp(self.end, t);
-
                 //       // candidate
                 //       var p6x = p4x + (p5x - p4x) * t;
                 //       var p6y = p4y + (p5y - p4y) * t;
-                const p6 = p4.lerp(p5, t);
+                const candidate = self.start.lerp(
+                    self.control,
+                    t,
+                ).lerp(
+                    self.control.lerp(self.end, t),
+                    t,
+                );
 
                 //       // See if point is on line segment
                 //       // Had to make special cases for vertical and horizontal lines due
@@ -197,25 +224,25 @@ pub const QuadraticBezier = struct {
                 //       if (a1x === a2x) {
                 if (line.isVertical()) {
                     //         if (miny <= p6y && p6y <= maxy) {
-                    if (bounds.min.y <= p6.y and p6.y <= bounds.max.y) {
+                    if (bounds.min.y <= candidate.y and candidate.y <= bounds.max.y) {
                         //           if (result) result.push(p6x, p6y);
                         //           else        return 1;
-                        result[ri] = p6;
+                        result[ri] = candidate;
                         ri += 1;
                     }
                     //         }
                     //       } else if (a1y === a2y) {
                 } else if (line.isHorizontal()) {
                     //         if (minx <= p6x && p6x <= maxx) {
-                    if (bounds.min.x <= p6.x and p6.x <= bounds.max.x) {
+                    if (bounds.min.x <= candidate.x and candidate.x <= bounds.max.x) {
                         //           if (result) result.push(p6x, p6y);
                         //           else        return 1;
-                        result[ri] = p6;
+                        result[ri] = candidate;
                         ri += 1;
                     }
                     //         }
-                } else if (bounds.containsPoint(p6)) {
-                    result[ri] = p6;
+                } else if (bounds.containsPoint(candidate)) {
+                    result[ri] = candidate;
                     ri += 1;
                 }
                 //       // gte: (x1 >= x2 && y1 >= y2)
@@ -266,7 +293,7 @@ test "intersect quadratic bezier with line" {
         .y = 1.0,
     }, PointF32{
         .x = 1.0,
-        .y = 1.0,
+        .y = 0.0,
     });
     const line = Line.create(PointF32{
         .x = 0.0,
