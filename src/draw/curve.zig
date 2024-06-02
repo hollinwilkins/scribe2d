@@ -3,6 +3,11 @@ const core = @import("../core/root.zig");
 const PointF32 = core.PointF32;
 const RectF32 = core.RectF32;
 
+pub const Intersection = struct {
+    t: f32,
+    point: PointF32,
+};
+
 pub const Curve = union(enum) {
     line: Line,
     quadratic_bezier: QuadraticBezier,
@@ -14,7 +19,7 @@ pub const Curve = union(enum) {
         }
     }
 
-    pub fn intersectLine(self: Curve, line: Line, result: *[3]PointF32) []const PointF32 {
+    pub fn intersectLine(self: Curve, line: Line, result: *[3]Intersection) []const Intersection {
         switch (self) {
             .line => |*l| {
                 if (l.intersectLine(line)) |intersection| {
@@ -70,7 +75,7 @@ pub const Line = struct {
     }
 
     // Java code from: https://www.geeksforgeeks.org/program-for-point-of-intersection-of-two-lines/
-    pub fn intersectLine(self: Line, line: Line) ?PointF32 {
+    pub fn intersectLine(self: Line, line: Line) ?Intersection {
         // Line AB represented as a1x + b1y = c1
         const a1 = self.getDeltaY();
         // double a1 = B.y - A.y;
@@ -94,9 +99,12 @@ pub const Line = struct {
             // The lines are parallel. This is simplified
             return null;
         } else {
-            return PointF32{
-                .x = (b2 * c1 - b1 * c2) / determinant,
-                .y = (a1 * c2 - a2 * c1) / determinant,
+            return Intersection{
+                .t = c2,
+                .point = PointF32{
+                    .x = (b2 * c1 - b1 * c2) / determinant,
+                    .y = (a1 * c2 - a2 * c1) / determinant,
+                },
             };
             //     double x = (b2*c1 - b1*c2)/determinant;
             //     double y = (a1*c2 - a2*c1)/determinant;
@@ -161,7 +169,7 @@ pub const QuadraticBezier = struct {
     // p1 = a, p2 = c, p3 = b
     // code from: https://github.com/w8r/bezier-intersect
     // code from: https://stackoverflow.com/questions/27664298/calculating-intersection-point-of-quadratic-bezier-curve
-    pub fn intersectLine(self: QuadraticBezier, line: Line, result: *[2]PointF32) []const PointF32 {
+    pub fn intersectLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {
         const bounds = line.getBounds();
         // inverse line normal
         //   var normal={
@@ -259,7 +267,10 @@ pub const QuadraticBezier = struct {
                     if (bounds.min.y <= candidate.y and candidate.y <= bounds.max.y) {
                         //           if (result) result.push(p6x, p6y);
                         //           else        return 1;
-                        result[ri] = candidate;
+                        result[ri] = Intersection{
+                            .t = t,
+                            .point = candidate,
+                        };
                         ri += 1;
                     }
                     //         }
@@ -269,12 +280,18 @@ pub const QuadraticBezier = struct {
                     if (bounds.min.x <= candidate.x and candidate.x <= bounds.max.x) {
                         //           if (result) result.push(p6x, p6y);
                         //           else        return 1;
-                        result[ri] = candidate;
+                        result[ri] = Intersection{
+                            .t = t,
+                            .point = candidate,
+                        };
                         ri += 1;
                     }
                     //         }
                 } else if (bounds.containsPoint(candidate)) {
-                    result[ri] = candidate;
+                    result[ri] = Intersection{
+                        .t = t,
+                        .point = candidate,
+                    };
                     ri += 1;
                 }
                 //       // gte: (x1 >= x2 && y1 >= y2)
@@ -335,7 +352,7 @@ test "intersect quadratic bezier with line" {
         .y = 0.25,
     });
 
-    var intersections_result: [2]PointF32 = [_]PointF32{undefined} ** 2;
+    var intersections_result: [2]Intersection = [_]Intersection{undefined} ** 2;
     const intersections = bezier.intersectLine(line, &intersections_result);
 
     std.debug.print("\n================ Bezier x Line\n", .{});
