@@ -20,21 +20,15 @@ const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 
 const PIXEL_TOLERANCE: f32 = 1e-6;
-const BoundaryFragment = struct {
+const FragmentIntersection = struct {
     pixel: PointI32,
-    num_intersections: u8, // 1 or 2
-    intersection1: PointF32 = PointF32{},
-    intersection2: PointF32 = PointF32{},
-
-    pub fn create(pixel: PointU32, intersection: PointF32) BoundaryFragment {
-        return BoundaryFragment{
-            .pixel = pixel,
-            .num_intersections = 1,
-            .intersection1 = intersection,
-        };
-    }
+    intersection: PointF32,
 };
-const BoundaryFragmentsList = std.ArrayList(BoundaryFragment);
+const FragmentIntersectionList = std.ArrayList(FragmentIntersection);
+
+const CurveData = struct {
+    intersections: FragmentIntersectionList,
+};
 
 pub const Pen = struct {
     pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
