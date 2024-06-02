@@ -3,8 +3,8 @@ pub fn Range(comptime T: type) type {
         start: T,
         end: T,
 
-        pub fn size(self: @This()) T {
-            return self.end - self.start;
+        pub fn size(self: @This()) usize {
+            return @intCast(self.end - self.start);
         }
     };
 }

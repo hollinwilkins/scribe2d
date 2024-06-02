@@ -14,10 +14,19 @@ pub const Curve = union(enum) {
         }
     }
 
-    pub fn intersectLine(self: Curve, line: Line, result: *[3]PointF32) []PointF32 {
+    pub fn intersectLine(self: Curve, line: Line, result: *[3]PointF32) []const PointF32 {
         switch (self) {
-            .line => |*l| return l.intersectLine(line, result),
-            .quadratic_bezier => |*qb| return qb.intersectLine(line, result),
+            .line => |*l| {
+                if (l.intersectLine(line)) |intersection| {
+                    result[0] = intersection;
+                    return result[0..1];
+                } else {
+                    return &.{};
+                }
+            },
+            .quadratic_bezier => |*qb| {
+                return qb.intersectLine(line, @ptrCast(result));
+            },
         }
     }
 };

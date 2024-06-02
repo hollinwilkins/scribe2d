@@ -5,4 +5,5 @@ pub const text = @import("./text/root.zig");
 test {
     const std = @import("std");
     std.testing.refAllDecls(draw.QuadraticBezier);
+    std.testing.refAllDecls(draw.Pen);
 }

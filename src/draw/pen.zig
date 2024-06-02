@@ -2,17 +2,17 @@ const std = @import("std");
 const path_module = @import("./path.zig");
 const curve_module = @import("./curve.zig");
 const core = @import("../core/root.zig");
-const texture = @import("./texture.zig");
+const texture_module = @import("./texture.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const UnmanagedTexture = texture.UnmanagedTexture;
-const TextureViewRgba = texture.TextureViewRgba;
+const TextureViewRgba = texture_module.TextureViewRgba;
 const Path = path_module.Path;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
 const PointI32 = core.PointI32;
 const DimensionsF32 = core.DimensionsF32;
 const RectU32 = core.RectU32;
+const RectF32 = core.RectF32;
 const RangeF32 = core.RangeF32;
 const RangeU32 = core.RangeU32;
 const RangeI32 = core.RangeI32;
@@ -26,10 +26,6 @@ const FragmentIntersection = struct {
 };
 const FragmentIntersectionList = std.ArrayList(FragmentIntersection);
 
-const CurveData = struct {
-    intersections: FragmentIntersectionList,
-};
-
 pub const Pen = struct {
     pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
         _ = self;
@@ -39,178 +35,197 @@ pub const Pen = struct {
         return;
     }
 
-    pub fn createBoundaryFragments(allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
+    pub fn createBoundaryFragments(allocator: Allocator, path: Path, view: *TextureViewRgba) !FragmentIntersectionList {
+        var x_intersections = FragmentIntersectionList.init(allocator);
+        defer x_intersections.deinit();
+        var y_intersections = FragmentIntersectionList.init(allocator);
+        errdefer y_intersections.deinit();
+
         const pixel_view_dimensions = view.getDimensions();
         const scaled_pixel_dimensions = DimensionsF32{
-            .height = 1.0 / @as(f32, @floatFromInt(pixel_view_dimensions.height())),
-            .width = 1.0 / @as(f32, @floatFromInt(pixel_view_dimensions.width())),
+            .width = 1.0 / @as(f32, @floatFromInt(pixel_view_dimensions.width)),
+            .height = 1.0 / @as(f32, @floatFromInt(pixel_view_dimensions.height)),
         };
-        var boundary_fragments = try BoundaryFragmentsList.init(allocator);
-        var previous_boundary_fragments: []BoundaryFragment = &.{};
 
         for (path.getCurves()) |curve| {
-            const scaled_bounds = curve.getBounds();
+            const scaled_curve_bounds = curve.getBounds();
+            // get x intersections
+            const scaled_pixel_x_range = RangeF32{
+                .start = (scaled_curve_bounds.min.x / scaled_pixel_dimensions.width),
+                .end = (scaled_curve_bounds.max.x / scaled_pixel_dimensions.width),
+            };
+            const pixel_x_range = RangeI32{
+                .start = @intFromFloat(scaled_pixel_x_range.start),
+                .end = @intFromFloat(scaled_pixel_x_range.end),
+            };
+
+            try scanX(
+                scaled_pixel_x_range.start,
+                @intFromFloat(scaled_pixel_x_range.start),
+                curve,
+                scaled_curve_bounds,
+                &x_intersections,
+            );
+            for (0..pixel_x_range.size()) |x_offset| {
+                const pixel_x = pixel_x_range.start + @as(i32, @intCast(x_offset)) + 1;
+                try scanX(
+                    @as(f32, @floatFromInt(pixel_x)) * scaled_pixel_dimensions.width,
+                    pixel_x,
+                    curve,
+                    scaled_curve_bounds,
+                    &x_intersections,
+                );
+            }
+            try scanX(
+                scaled_pixel_x_range.end,
+                @intFromFloat(scaled_pixel_x_range.end),
+                curve,
+                scaled_curve_bounds,
+                &x_intersections,
+            );
+
+            // get y intersections
+            const scaled_pixel_y_range = RangeF32{
+                .start = (scaled_curve_bounds.min.y / scaled_pixel_dimensions.height),
+                .end = (scaled_curve_bounds.max.y / scaled_pixel_dimensions.height),
+            };
             const pixel_y_range = RangeI32{
-                .start = @intFromFloat(@ceil(scaled_bounds.min.y / scaled_pixel_dimensions.height)),
-                .end = @intFromFloat(@floor(scaled_bounds.max.y / scaled_pixel_dimensions.height)),
+                .start = @intFromFloat(scaled_pixel_y_range.start),
+                .end = @intFromFloat(scaled_pixel_y_range.end),
             };
-
-            const scaled_x_range = RangeF32{
-                .start = scaled_bounds.min.x,
-                .end = scaled_bounds.max.x,
-            };
-
-            if (scaled_bounds.min.y != 0.0) {
-                // we don't start on the first actual scan line, this is the common case
-                previous_boundary_fragments = try scanY(
-                    curve,
-                    scaled_bounds.min.y,
-                    @intFromFloat(@floor(scaled_bounds.min.y / scaled_pixel_dimensions.height)),
-                    scaled_pixel_dimensions,
-                    scaled_x_range,
-                    // disable x scanning for first virtual fragment
-                    false,
-                    // there are no previous fragments for the first
-                    previous_boundary_fragments,
-                    &boundary_fragments,
-                );
-            }
-
-            // pixel_y is the scanline pixel
-            for (0..pixel_y_range.size()) |pixel_y_offset| {
-                const pixel_y: i32 = pixel_y_range.start + @as(i32, @intCast(pixel_y_offset));
-                // scan the current pixel y line
-                previous_boundary_fragments = try scanY(
-                    curve,
+            try scanY(
+                scaled_pixel_y_range.start,
+                @intFromFloat(scaled_pixel_y_range.start),
+                curve,
+                scaled_curve_bounds,
+                &y_intersections,
+            );
+            for (0..pixel_y_range.size()) |y_offset| {
+                const pixel_y = pixel_y_range.start + @as(i32, @intCast(y_offset)) + 1;
+                try scanX(
                     @as(f32, @floatFromInt(pixel_y)) * scaled_pixel_dimensions.height,
-                    scaled_pixel_dimensions,
-                    scaled_x_range,
-                    true,
-                    previous_boundary_fragments,
-                    &boundary_fragments,
-                );
-            }
-
-            if (scaled_bounds.max.y != 1.0) {
-                // we don't end on the last actual scan line, this is the common case
-                previous_boundary_fragments = try scanY(
+                    pixel_y,
                     curve,
-                    scaled_bounds.max.y,
-                    pixel_y_range.end,
-                    scaled_pixel_dimensions,
-                    scaled_x_range,
-                    true,
-                    previous_boundary_fragments,
-                    &boundary_fragments,
+                    scaled_curve_bounds,
+                    &y_intersections,
                 );
             }
+            try scanX(
+                scaled_pixel_y_range.end,
+                @intFromFloat(scaled_pixel_y_range.end),
+                curve,
+                scaled_curve_bounds,
+                &y_intersections,
+            );
+
+            // build pixel fragments
+        }
+
+        try y_intersections.appendSlice(x_intersections.items);
+        return y_intersections;
+    }
+
+    fn scanX(
+        scaled_x: f32,
+        pixel_x: i32,
+        curve: Curve,
+        scaled_curve_bounds: RectF32,
+        x_intersections: *FragmentIntersectionList,
+    ) !void {
+        var scaled_intersections_result: [3]PointF32 = [_]PointF32{undefined} ** 3;
+        const line = Line.create(
+            PointF32{
+                .x = scaled_x,
+                .y = scaled_curve_bounds.min.y,
+            },
+            PointF32{
+                .x = scaled_x,
+                .y = scaled_curve_bounds.max.y,
+            },
+        );
+        const scaled_intersections = curve.intersectLine(line, &scaled_intersections_result);
+
+        for (scaled_intersections) |intersection| {
+            const ao = try x_intersections.addOne();
+            ao.* = FragmentIntersection{
+                .pixel = PointI32{
+                    .x = pixel_x,
+                    .y = @intFromFloat(intersection.y),
+                },
+                .intersection = intersection,
+            };
         }
     }
 
-    // this will produce intersections on a horizontal pixel row
-    // returns the array of new boundary fragments that were added
     fn scanY(
-        curve: Curve,
         scaled_y: f32,
         pixel_y: i32,
-        scaled_pixel_dimensions: DimensionsF32,
-        scaled_x_range: RangeF32,
-        enable_x_scanning: bool,
-        previous_boundary_fragments: []BoundaryFragment,
-        boundary_fragments: *BoundaryFragmentsList,
-    ) ![]BoundaryFragment {
-        var intersections_result: [3]PointF32 = [_]PointF32{undefined} ** 3;
-        const intersections = curve.intersectLine(Line.create(
-            PointF32{
-                .x = scaled_x_range.start,
-                .y = scaled_y,
-            },
-            PointF32{
-                .x = scaled_x_range.end,
-                .y = scaled_y,
-            },
-        ), &intersections_result);
-
-        var new_boundary_fragments = RangeU32{
-            .start = boundary_fragments.items.len,
-            .end = boundary_fragments.items.len,
-        };
-        for (intersections) |intersection| {
-            // set to true if we add this intersection to an existing boundary fragment
-            var added_to_previous_boundary_fragment: bool = false;
-
-            // calculate the current pixel where the intersection occurred
-            const current_pixel = PointI32{
-                .x = @intFromFloat(intersection.x / scaled_pixel_dimensions.width),
-                .y = pixel_y,
-            };
-
-            // attempt to add intersection to previous boundary fragment if it occurs on a matching pixel
-            for (previous_boundary_fragments) |*previous_boundary_fragment| {
-                if (std.mem.eql(previous_boundary_fragment.pixel, current_pixel)) {
-                    std.debug.assert(previous_boundary_fragment.num_intersections == 1);
-                    previous_boundary_fragment.intersection2 = intersection;
-                    added_to_previous_boundary_fragment = true;
-                }
-            }
-
-            // if we did not add the intersection to a previous boundary fragment
-            // then create a new boundary fragment and add it to the list
-            // this indicates we need to do some scanning along x
-            const ao = try boundary_fragments.addOne();
-            ao.* = BoundaryFragment.create(current_pixel, intersection);
-            new_boundary_fragments.end += 1;
-        }
-
-        // return the array of newly-created boundary fragments
-        if (new_boundary_fragments.start < boundary_fragments.items.len) {
-            if (enable_x_scanning) {
-                var x_previous_boundary_fragments: []BoundaryFragment = &.{};
-                // perform x scanning, we added some new fragments and need to
-                const pixel_x_range = RangeI32{
-                    .start = boundary_fragments.items[new_boundary_fragments.start].pixel.x + 1,
-                    .end = boundary_fragments.items[new_boundary_fragments.end].pixel.x + 1,
-                };
-
-                std.debug.assert(pixel_x_range.start < pixel_x_range.end);
-
-                for (0..pixel_x_range.size()) |pixel_x_offset| {
-                    const pixel_x = pixel_x_range.start + @as(i32, @intCast(pixel_x_offset));
-                    const pixel = PointI32{
-                        .x = pixel_x,
-                        .y = pixel_y,
-                    };
-                    x_previous_boundary_fragments = try scanPixelX(
-                        curve,
-                        pixel,
-                        x_previous_boundary_fragments,
-                        boundary_fragments,
-                    );
-                }
-            }
-
-            return boundary_fragments.items[new_boundary_fragments.start..new_boundary_fragments.end];
-        } else {
-            return &.{};
-        }
-    }
-
-    fn scanPixelX(
         curve: Curve,
-        pixel: PointU32,
-        previous_boundary_fragments: []BoundaryFragment,
-        boundary_fragments: *BoundaryFragmentsList,
-    ) ![]BoundaryFragment {
-        var intersections_result: [3]PointF32 = [_]PointF32{undefined} ** 3;
-        const intersections = curve.intersectLine(Line.create(
+        scaled_curve_bounds: RectF32,
+        y_intersections: *FragmentIntersectionList,
+    ) !void {
+        var scaled_intersections_result: [3]PointF32 = [_]PointF32{undefined} ** 3;
+        const line = Line.create(
             PointF32{
-                .x = scaled_x_range.start,
+                .x = scaled_curve_bounds.min.x,
                 .y = scaled_y,
             },
             PointF32{
-                .x = scaled_x_range.end,
+                .x = scaled_curve_bounds.max.x,
                 .y = scaled_y,
             },
-        ), &intersections_result);
+        );
+        const scaled_intersections = curve.intersectLine(line, &scaled_intersections_result);
+
+        for (scaled_intersections) |intersection| {
+            const ao = try y_intersections.addOne();
+            ao.* = FragmentIntersection{
+                .pixel = PointI32{
+                    .x = @intFromFloat(intersection.x),
+                    .y = pixel_y,
+                },
+                .intersection = intersection,
+            };
+        }
     }
 };
+
+test "scan for intersections" {
+    const UnmanagedTextureRgba = texture_module.UnmanagedTextureRgba;
+    const DimensionsU32 = core.DimensionsU32;
+    const PathOutliner = path_module.PathOutliner;
+
+    var texture = try UnmanagedTextureRgba.create(std.testing.allocator, DimensionsU32{
+        .width = 64,
+        .height = 64,
+    });
+    defer texture.deinit(std.testing.allocator);
+    var texture_view = texture.createView(RectU32.create(
+        PointU32{
+            .x = 0,
+            .y = 0,
+        },
+        PointU32{
+            .x = 64,
+            .y = 64,
+        },
+    )).?;
+
+    var path_outliner = try PathOutliner.init(std.testing.allocator);
+    defer path_outliner.deinit();
+
+    try path_outliner.moveTo(PointF32{
+        .x = 0.0,
+        .y = 0.0,
+    });
+    try path_outliner.lineTo(PointF32{
+        .x = 1.0,
+        .y = 1.0,
+    });
+
+    var path = try path_outliner.createPathAlloc(std.testing.allocator);
+    defer path.deinit();
+
+    var intersections = try Pen.createBoundaryFragments(std.testing.allocator, path, &texture_view);
+    defer intersections.deinit();
+}

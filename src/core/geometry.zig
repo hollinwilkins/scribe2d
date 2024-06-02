@@ -127,7 +127,7 @@ pub fn Rect(comptime T: type) type {
             return self.min.x <= point.x and self.max.x >= point.x and self.min.y <= point.y and self.max.y >= point.y;
         }
 
-        pub fn extendBy(self: *@This(), point: Point(T)) @This() {
+        pub fn extendBy(self: @This(), point: Point(T)) @This() {
             return @This(){
                 .min = self.min.min(point),
                 .max = self.max.max(point),
