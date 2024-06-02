@@ -94,10 +94,20 @@ pub const Pen = struct {
                 &intersections,
             );
 
-            //     // build pixel fragments
+            // sort by t
+            std.mem.sort(
+                Intersection,
+                intersections.items,
+                @as(u32, 0),
+                intersectionLessThan,
+            );
         }
 
         return intersections;
+    }
+
+    fn intersectionLessThan(_: u32, left: Intersection, right: Intersection) bool {
+        return left.t < right.t;
     }
 
     fn scanX(
