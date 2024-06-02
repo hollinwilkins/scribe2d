@@ -24,6 +24,20 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn min(self: @This(), other: @This()) @This() {
+            return @This(){
+                .x = @min(self.x, other.x),
+                .y = @min(self.y, other.y),
+            };
+        }
+
+        pub fn max(self: @This(), other: @This()) @This() {
+            return @This(){
+                .x = @max(self.x, other.x),
+                .y = @max(self.y, other.y),
+            };
+        }
+
         pub fn lerp(self: @This(), other: @This(), t: T) @This() {
             return @This(){
                 .x = self.x + t * (other.x - self.x),
@@ -112,12 +126,11 @@ pub fn Rect(comptime T: type) type {
             return self.min.x <= point.x and self.max.x >= point.x and self.min.y <= point.y and self.max.y >= point.y;
         }
 
-        // NOTE: can we use SIMD/NEON to make some of these functions more faster
-        pub fn extendBy(self: *@This(), x: T, y: T) void {
-            self.min.x = @min(self.min.x, x);
-            self.min.y = @min(self.min.y, y);
-            self.max.x = @max(self.max.x, x);
-            self.max.y = @max(self.max.y, y);
+        pub fn extendBy(self: *@This(), point: Point(T)) @This() {
+            return @This(){
+                .min = self.min.min(point),
+                .max = self.max.max(point),
+            };
         }
     };
 }

@@ -219,7 +219,10 @@ pub const Builder = struct {
             self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox.extendBy(x_mut, y_mut);
+        self.bbox = self.bbox.extendBy(PointF32{
+            .x = x_mut,
+            .y = y_mut,
+        });
         self.outliner.moveTo(x_mut, y_mut);
     }
 
@@ -230,7 +233,10 @@ pub const Builder = struct {
             self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox.extendBy(x_mut, y_mut);
+        self.bbox = self.bbox.extendBy(PointF32{
+            .x = x_mut,
+            .y = y_mut,
+        });
         self.outliner.lineTo(x_mut, y_mut);
     }
 
@@ -244,8 +250,13 @@ pub const Builder = struct {
             self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox.extendBy(x1_mut, y1_mut);
-        self.bbox.extendBy(x_mut, y_mut);
+        self.bbox = self.bbox.extendBy(PointF32{
+            .x = x1_mut,
+            .y = y1_mut,
+        }).extendBy(PointF32{
+            .x = x_mut,
+            .y = y_mut,
+        });
         self.outliner.quadTo(x1_mut, y1_mut, x_mut, y_mut);
     }
 

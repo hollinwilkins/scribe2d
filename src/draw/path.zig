@@ -1,64 +1,22 @@
 const std = @import("std");
 const text = @import("../text/root.zig");
 const core = @import("../core/root.zig");
-const segment_module = @import("./segment.zig");
+const curve_module = @import("./curve.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 const RangeF32 = core.RangeF32;
-const QuadraticBezier = segment_module.QuadraticBezier;
-const Line = segment_module.Line;
-
-pub const SegmentShape = union(Kind) {
-    pub const Kind = enum(u16) {
-        line,
-        quadratic_bezier,
-        cubic_bezier,
-        curve,
-        elliptical,
-    };
-
-    pub const CubicBezier = struct {
-        start: PointF32,
-        end: PointF32,
-        control1: PointF32, // control point 1
-        control2: PointF32, // control point 2
-    };
-
-    line: Line,
-    quadratic_bezier: QuadraticBezier,
-    cubic_bezier: CubicBezier,
-    curve: void,
-    elliptical: void,
-};
-
-pub const Segment = struct {
-    bounds: RectF32,
-    shape: SegmentShape,
-
-    pub fn getBounds(self: *const Segment) RectF32 {
-        return self.bounds;
-    }
-
-    // x is [0.0, 1.0]
-    // returns y value at x, scaled between [0.0, 1.0]
-    // returns std.math.inf(f32) for vertical lines
-    pub fn applyX(self: *const Segment, x: f32) f32 {
-        switch (self.shape) {
-            .line => |*shape| return shape.applyX(x),
-            .quadratic_bezier => |*shape| return shape.applyX(x),
-            else => return 0.0,
-        }
-    }
-};
+const Curve = curve_module.Curve;
+const Line = curve_module.Line;
+const QuadraticBezier = curve_module.QuadraticBezier;
 
 pub const Path = struct {
     pub const Unmanaged = struct {
-        segments: []const Segment,
+        curves: []const Curve,
 
         pub fn deinit(self: Unmanaged, allocator: Allocator) void {
-            allocator.free(self.segments);
+            allocator.free(self.curves);
         }
     };
 
@@ -69,20 +27,20 @@ pub const Path = struct {
         self.unmanaged.deinit(self.allocator);
     }
 
-    pub fn segments(self: *const Path) []const Segment {
-        return self.unmanaged.segments;
+    pub fn getCurves(self: *const Path) []const Curve {
+        return self.unmanaged.curves;
     }
 
     pub fn debug(self: *const Path) void {
         std.debug.print("Path\n", .{});
-        for (self.unmanaged.segments) |segment| {
-            std.debug.print("\t{}\n", .{segment});
+        for (self.unmanaged.curves) |curve| {
+            std.debug.print("\t{}\n", .{curve});
         }
     }
 };
 
 pub const PathOutliner = struct {
-    const SegmentsList = std.ArrayList(Segment);
+    const CurvesList = std.ArrayList(Curve);
 
     const TextOutlinerFunctions = struct {
         fn moveTo(ctx: *anyopaque, x: f32, y: f32) void {
@@ -126,7 +84,7 @@ pub const PathOutliner = struct {
         .close = TextOutlinerFunctions.close,
     };
 
-    segments: SegmentsList,
+    curves: CurvesList,
     bounds: RectF32 = RectF32{},
     start: ?PointF32 = null,
     location: PointF32 = PointF32{},
@@ -134,12 +92,12 @@ pub const PathOutliner = struct {
 
     pub fn init(allocator: Allocator) Allocator.Error!PathOutliner {
         return PathOutliner{
-            .segments = SegmentsList.init(allocator),
+            .curves = CurvesList.init(allocator),
         };
     }
 
     pub fn deinit(self: *PathOutliner) void {
-        self.segments.deinit();
+        self.curves.deinit();
     }
 
     pub fn textOutliner(self: *PathOutliner) text.TextOutliner {
@@ -153,7 +111,7 @@ pub const PathOutliner = struct {
         return Path{
             .allocator = allocator,
             .unmanaged = Path.Unmanaged{
-                .segments = try allocator.dupe(Segment, self.segments.items),
+                .curves = try allocator.dupe(Curve, self.curves.items),
             },
         };
     }
@@ -166,15 +124,12 @@ pub const PathOutliner = struct {
     }
 
     pub fn lineTo(self: *PathOutliner, point: PointF32) !void {
-        // attempt to add a line segment from current location to point
-        const ao = try self.segments.addOne();
-        ao.* = Segment{
-            .bounds = RectF32.create(self.location, point),
-            .shape = SegmentShape{
-                .line = SegmentShape.Line{
-                    .start = self.location,
-                    .end = point,
-                },
+        // attempt to add a line curve from current location to point
+        const ao = try self.curves.addOne();
+        ao.* = Curve{
+            .line = Line{
+                .start = self.location,
+                .end = point,
             },
         };
 
@@ -185,16 +140,13 @@ pub const PathOutliner = struct {
     }
 
     pub fn quadTo(self: *PathOutliner, point: PointF32, control: PointF32) !void {
-        // attempt to add a quadratic segment from current location to point
-        const ao = try self.segments.addOne();
-        ao.* = Segment{
-            .bounds = RectF32.create(self.location, point),
-            .shape = SegmentShape{
-                .quadratic_bezier = SegmentShape.QuadraticBezier{
-                    .start = self.location,
-                    .end = point,
-                    .control = control,
-                },
+        // attempt to add a quadratic curve from current location to point
+        const ao = try self.curves.addOne();
+        ao.* = Curve{
+            .quadratic_bezier = QuadraticBezier{
+                .start = self.location,
+                .end = point,
+                .control = control,
             },
         };
 

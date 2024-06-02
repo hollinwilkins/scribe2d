@@ -3,6 +3,11 @@ const core = @import("../core/root.zig");
 const PointF32 = core.PointF32;
 const RectF32 = core.RectF32;
 
+pub const Curve = union(enum) {
+    line: Line,
+    quadratic_bezier: QuadraticBezier,
+};
+
 pub const Line = struct {
     start: PointF32,
     end: PointF32,
@@ -88,6 +93,10 @@ pub const QuadraticBezier = struct {
             .end = end,
             .control = control,
         };
+    }
+
+    pub fn getBounds(self: QuadraticBezier) RectF32 {
+        return RectF32.create(self.start, self.end).extendBy(self.control);
     }
 
     // code from: https://github.com/w8r/bezier-intersect
