@@ -75,26 +75,29 @@ pub const Pen = struct {
             };
 
             try scanX(
-                scaled_pixel_x_range.start,
+                scaled_curve_bounds.min.x,
                 @intFromFloat(scaled_pixel_x_range.start),
                 curve,
+                scaled_pixel_dimensions,
                 scaled_curve_bounds,
                 &intersections.x_intersections,
             );
-            for (0..pixel_x_range.size()) |x_offset| {
+            for (0..pixel_x_range.size() - 1) |x_offset| {
                 const pixel_x = pixel_x_range.start + @as(i32, @intCast(x_offset)) + 1;
                 try scanX(
                     @as(f32, @floatFromInt(pixel_x)) * scaled_pixel_dimensions.width,
                     pixel_x,
                     curve,
+                    scaled_pixel_dimensions,
                     scaled_curve_bounds,
                     &intersections.x_intersections,
                 );
             }
             try scanX(
-                scaled_pixel_x_range.end,
+                scaled_curve_bounds.max.x,
                 @intFromFloat(scaled_pixel_x_range.end),
                 curve,
+                scaled_pixel_dimensions,
                 scaled_curve_bounds,
                 &intersections.x_intersections,
             );
@@ -109,26 +112,29 @@ pub const Pen = struct {
                 .end = @intFromFloat(scaled_pixel_y_range.end),
             };
             try scanY(
-                scaled_pixel_y_range.start,
+                scaled_curve_bounds.min.y,
                 @intFromFloat(scaled_pixel_y_range.start),
                 curve,
+                scaled_pixel_dimensions,
                 scaled_curve_bounds,
                 &intersections.y_intersections,
             );
-            for (0..pixel_y_range.size()) |y_offset| {
+            for (0..pixel_y_range.size() - 1) |y_offset| {
                 const pixel_y = pixel_y_range.start + @as(i32, @intCast(y_offset)) + 1;
-                try scanX(
+                try scanY(
                     @as(f32, @floatFromInt(pixel_y)) * scaled_pixel_dimensions.height,
                     pixel_y,
                     curve,
+                    scaled_pixel_dimensions,
                     scaled_curve_bounds,
                     &intersections.y_intersections,
                 );
             }
-            try scanX(
-                scaled_pixel_y_range.end,
+            try scanY(
+                scaled_curve_bounds.max.y,
                 @intFromFloat(scaled_pixel_y_range.end),
                 curve,
+                scaled_pixel_dimensions,
                 scaled_curve_bounds,
                 &intersections.y_intersections,
             );
@@ -143,6 +149,7 @@ pub const Pen = struct {
         scaled_x: f32,
         pixel_x: i32,
         curve: Curve,
+        scaled_pixel_dimensions: DimensionsF32,
         scaled_curve_bounds: RectF32,
         x_intersections: *FragmentIntersectionList,
     ) !void {
@@ -164,7 +171,7 @@ pub const Pen = struct {
             ao.* = FragmentIntersection{
                 .pixel = PointI32{
                     .x = pixel_x,
-                    .y = @intFromFloat(intersection.y),
+                    .y = @intFromFloat(intersection.y / scaled_pixel_dimensions.height),
                 },
                 .intersection = intersection,
             };
@@ -175,6 +182,7 @@ pub const Pen = struct {
         scaled_y: f32,
         pixel_y: i32,
         curve: Curve,
+        scaled_pixel_dimensions: DimensionsF32,
         scaled_curve_bounds: RectF32,
         y_intersections: *FragmentIntersectionList,
     ) !void {
@@ -195,7 +203,7 @@ pub const Pen = struct {
             const ao = try y_intersections.addOne();
             ao.* = FragmentIntersection{
                 .pixel = PointI32{
-                    .x = @intFromFloat(intersection.x),
+                    .x = @intFromFloat(intersection.x / scaled_pixel_dimensions.width),
                     .y = pixel_y,
                 },
                 .intersection = intersection,
@@ -242,4 +250,16 @@ test "scan for intersections" {
 
     var intersections = try Pen.createBoundaryFragments(std.testing.allocator, path, &texture_view);
     defer intersections.deinit();
+
+    std.debug.print("\n============== X-Intersections\n", .{});
+    for (intersections.x_intersections.items) |fragment_intersection| {
+        std.debug.print("Intersection: {}\n", .{fragment_intersection});
+    }
+    std.debug.print("==============\n", .{});
+
+    std.debug.print("\n============== Y-Intersections\n", .{});
+    for (intersections.y_intersections.items) |fragment_intersection| {
+        std.debug.print("Intersection: {}\n", .{fragment_intersection});
+    }
+    std.debug.print("==============\n", .{});
 }
