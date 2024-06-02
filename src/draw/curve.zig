@@ -6,6 +6,20 @@ const RectF32 = core.RectF32;
 pub const Curve = union(enum) {
     line: Line,
     quadratic_bezier: QuadraticBezier,
+
+    pub fn getBounds(self: Curve) RectF32 {
+        switch (self) {
+            .line => |*line| return line.getBounds(),
+            .quadratic_bezier => |*qb| return qb.getBounds(),
+        }
+    }
+
+    pub fn intersectLine(self: Curve, line: Line, result: *[3]PointF32) []PointF32 {
+        switch (self) {
+            .line => |*l| return l.intersectLine(line, result),
+            .quadratic_bezier => |*qb| return qb.intersectLine(line, result),
+        }
+    }
 };
 
 pub const Line = struct {
