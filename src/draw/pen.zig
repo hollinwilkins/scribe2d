@@ -11,8 +11,7 @@ const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
 const RectU32 = core.RectU32;
 
-const BoundaryFragment = struct {
-};
+const BoundaryFragment = struct {};
 
 pub const Pen = struct {
     pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
@@ -23,8 +22,9 @@ pub const Pen = struct {
         return;
     }
 
-    pub fn createBoundarySegments(allocator: Allocator, path: Path, view: *TextureViewRgba) {
-        for (path.segments()) |segment| {
-        }
+    pub fn createBoundarySegments(allocator: Allocator, path: Path, view: *TextureViewRgba) void {
+        _ = allocator;
+        _ = path;
+        _ = view;
     }
 };

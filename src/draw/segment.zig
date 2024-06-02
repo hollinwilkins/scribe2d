@@ -95,6 +95,8 @@ pub const QuadraticBezier = struct {
             result[0] = 0.5 * -b;
             return result[0..1];
         }
+
+        return result[0..0];
     }
 
     //     export function quadBezierLine(
@@ -157,7 +159,7 @@ pub const QuadraticBezier = struct {
         //     nx * c1x + ny * c1y,
         //     nx * c0x + ny * c0y + cl
         //   );
-        var roots_result = [2]f32;
+        var roots_result: [2]f32 = [_]f32{undefined} ** 2;
         const roots = getRoots(
             nx * c2x + ny * c2y,
             nx * c1x + ny * c1y,
@@ -165,7 +167,7 @@ pub const QuadraticBezier = struct {
             &roots_result,
         );
 
-        var ri = 0;
+        var ri: usize = 0;
         // Any roots in closed interval [0,1] are intersections on Bezier, but
         // might not be on the line segment.
         // Find intersections and calculate point coordinates
@@ -187,7 +189,7 @@ pub const QuadraticBezier = struct {
                 //       // candidate
                 //       var p6x = p4x + (p5x - p4x) * t;
                 //       var p6y = p4y + (p5y - p4y) * t;
-                const p6 = p4.lerp(p5);
+                const p6 = p4.lerp(p5, t);
 
                 //       // See if point is on line segment
                 //       // Had to make special cases for vertical and horizontal lines due
@@ -225,12 +227,35 @@ pub const QuadraticBezier = struct {
                 //     }
                 //   }
             }
-
-            return result[0..ri];
-            //   return result ? result.length / 2 : 0;
         }
+
+        return result[0..ri];
+        //   return result ? result.length / 2 : 0;
     }
 };
+
+test "intersect line with line" {
+    const line1 = Line.create(PointF32{
+        .x = 0.0,
+        .y = 0.0,
+    }, PointF32{
+        .x = 1.0,
+        .y = 1.0,
+    });
+    const line2 = Line.create(PointF32{
+        .x = 0.0,
+        .y = 1.0,
+    }, PointF32{ .x = 1.0, .y = 0.0 });
+
+    const intersection = line1.intersectLine(line2);
+    std.debug.print("\n================ Line x Line\n", .{});
+    if (intersection) |point| {
+        std.debug.print("Intersection at: {}\n", .{point});
+    } else {
+        std.debug.print("No intersection\n", .{});
+    }
+    std.debug.print("================\n", .{});
+}
 
 test "intersect quadratic bezier with line" {
     const bezier = QuadraticBezier.create(PointF32{
@@ -251,7 +276,12 @@ test "intersect quadratic bezier with line" {
         .y = 0.25,
     });
 
-    var intersections_result = [2]PointF32{};
+    var intersections_result: [2]PointF32 = [_]PointF32{undefined} ** 2;
     const intersections = bezier.intersectLine(line, &intersections_result);
-    _ = intersections;
+
+    std.debug.print("\n================ Bezier x Line\n", .{});
+    for (intersections) |point| {
+        std.debug.print("Intersect at point: {}\n", .{point});
+    }
+    std.debug.print("================\n", .{});
 }
