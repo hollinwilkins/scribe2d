@@ -50,6 +50,7 @@ pub fn Point(comptime T: type) type {
 pub const PointF32 = Point(f32);
 pub const PointI16 = Point(i16);
 pub const PointU32 = Point(u32);
+pub const PointI32 = Point(i32);
 
 pub fn Dimensions(comptime T: type) type {
     return struct {
