@@ -1,11 +1,14 @@
 const std = @import("std");
 const text = @import("../text/root.zig");
 const core = @import("../core/root.zig");
+const segment_module = @import("./segment.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 const RangeF32 = core.RangeF32;
+const QuadraticBezier = segment_module.QuadraticBezier;
+const Line = segment_module.Line;
 
 pub const SegmentShape = union(Kind) {
     pub const Kind = enum(u16) {
@@ -14,62 +17,6 @@ pub const SegmentShape = union(Kind) {
         cubic_bezier,
         curve,
         elliptical,
-    };
-
-    pub const Line = struct {
-        start: PointF32,
-        end: PointF32,
-
-        pub fn applyX(self: *const Line, x: f32) f32 {
-            const delta_y = (self.end.y - self.start.y);
-
-            if (delta_y == 0) {
-                return 0.0;
-            }
-
-            const delta_x = (self.end.x - self.start.x);
-
-            if (delta_x == 0.0) {
-                return std.math.inf(f32);
-            }
-
-            const m = delta_y / delta_x;
-            const b = self.start.y - (m / self.start.x);
-            const scaled_x = @min(1.0, x) * delta_x + self.start.x;
-            const scaled_y = m * scaled_x + b;
-            return (scaled_y - self.start.y) / delta_y;
-        }
-
-        pub fn applyY(self: *const Line, y: f32) f32 {
-            const delta_y = (self.end.y - self.start.y);
-
-            if (delta_y == 0) {
-                return std.math.inf(f32);
-            }
-
-            const delta_x = (self.end.x - self.start.x);
-
-            if (delta_x == 0.0) {
-                return 0.0;
-            }
-
-            const m = delta_y / delta_x;
-            const b = self.start.y - (m / self.start.x);
-            const scaled_y = @min(1.0, y) * delta_y + self.start.y;
-            const scaled_x = (scaled_y - b) / m;
-            return (scaled_x - self.start.x) / delta_x;
-        }
-    };
-
-    pub const QuadraticBezier = struct {
-        start: PointF32,
-        end: PointF32,
-        control: PointF32, // control point
-
-        pub fn applyX(self: *const QuadraticBezier, x: f32) f32 {
-            _ = self;
-            return x;
-        }
     };
 
     pub const CubicBezier = struct {

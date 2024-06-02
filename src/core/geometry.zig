@@ -94,6 +94,10 @@ pub fn Rect(comptime T: type) type {
             return self.getDimensions().fitsInside(other.getDimensions());
         }
 
+        pub fn containsPoint(self: @This(), point: Point(T)) bool {
+            return self.min.x <= point.x and self.max.x >= point.x and self.min.y <= point.y and self.max.y >= point.y;
+        }
+
         // NOTE: can we use SIMD/NEON to make some of these functions more faster
         pub fn extendBy(self: *@This(), x: T, y: T) void {
             self.min.x = @min(self.min.x, x);

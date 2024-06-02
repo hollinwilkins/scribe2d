@@ -24,6 +24,7 @@ pub const Pen = struct {
     }
 
     pub fn createBoundarySegments(allocator: Allocator, path: Path, view: *TextureViewRgba) {
-        
+        for (path.segments()) |segment| {
+        }
     }
 };
