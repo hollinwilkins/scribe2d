@@ -131,7 +131,7 @@ pub fn UnmanagedTexture(comptime T: type) type {
         }
 
         pub fn getPixelUnsafe(self: *@This(), point: PointU32) *T {
-            return &self.pixels[(self.dimensions.height - point.y) * self.dimensions.width + point.x];
+            return &self.pixels[point.y * self.dimensions.width + point.x];
         }
 
         pub fn getRow(self: *@This(), row: u32) ?[]T {
@@ -139,7 +139,7 @@ pub fn UnmanagedTexture(comptime T: type) type {
                 return null;
             }
 
-            const start = (self.dimensions.height - row) * self.dimensions.width;
+            const start = row * self.dimensions.width;
             const end = start + self.dimensions.width;
 
             return self.pixels[start..end];
