@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const PointF32 = core.PointF32;
 const RectF32 = core.RectF32;
+const DimensionsF32 = core.DimensionsF32;
 
 pub const Intersection = struct {
     t: f32,
@@ -16,6 +17,17 @@ pub const Curve = union(enum) {
         switch (self) {
             .line => |*line| return line.getBounds(),
             .quadratic_bezier => |*qb| return qb.getBounds(),
+        }
+    }
+
+    pub fn scale(self: Curve, dimensions: DimensionsF32) Curve {
+        switch (self) {
+            .line => |*l| return Curve{
+                .line = l.scale(dimensions),
+            },
+            .quadratic_bezier => |*qb| return Curve{
+                .quadratic_bezier = qb.scale(dimensions),
+            },
         }
     }
 
@@ -53,6 +65,19 @@ pub const Line = struct {
 
     pub fn isHorizontal(self: Line) bool {
         return self.start.y == self.end.y;
+    }
+
+    pub fn scale(self: Line, dimensions: DimensionsF32) Line {
+        return Line{
+            .start = self.start.mul(PointF32{
+                .x = dimensions.width,
+                .y = dimensions.height,
+            }),
+            .end = self.end.mul(PointF32{
+                .x = dimensions.width,
+                .y = dimensions.height,
+            }),
+        };
     }
 
     pub fn getBounds(self: Line) RectF32 {
@@ -99,13 +124,27 @@ pub const Line = struct {
             // The lines are parallel. This is simplified
             return null;
         } else {
-            return Intersection{
-                .t = c2,
-                .point = PointF32{
-                    .x = (b2 * c1 - b1 * c2) / determinant,
-                    .y = (a1 * c2 - a2 * c1) / determinant,
-                },
+            const point = PointF32{
+                .x = (b2 * c1 - b1 * c2) / determinant,
+                .y = (a1 * c2 - a2 * c1) / determinant,
             };
+
+            if (self.isHorizontal()) {
+                return Intersection{
+                    .t = (point.x - self.start.x) / self.getDeltaX(),
+                    .point = point,
+                };
+            } else if (self.isVertical()) {
+                return Intersection{
+                    .t = (point.y - self.start.y) / a1,
+                    .point = point,
+                };
+            } else {
+                return Intersection{
+                    .t = (point.y - self.start.y) / a1,
+                    .point = point,
+                };
+            }
             //     double x = (b2*c1 - b1*c2)/determinant;
             //     double y = (a1*c2 - a2*c1)/determinant;
             //     return new Point(x, y);
@@ -160,6 +199,23 @@ pub const QuadraticBezier = struct {
 
         return result[0..0];
         //   return results;
+    }
+
+    pub fn scale(self: QuadraticBezier, dimensions: DimensionsF32) QuadraticBezier {
+        return QuadraticBezier{
+            .start = self.start.mul(PointF32{
+                .x = dimensions.width,
+                .y = dimensions.height,
+            }),
+            .end = self.end.mul(PointF32{
+                .x = dimensions.width,
+                .y = dimensions.height,
+            }),
+            .control = self.control.mul(PointF32{
+                .x = dimensions.width,
+                .y = dimensions.height,
+            }),
+        };
     }
 
     //     export function quadBezierLine(

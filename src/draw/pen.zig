@@ -38,76 +38,79 @@ pub const Pen = struct {
 
         const pixel_view_dimensions = view.getDimensions();
         const scaled_pixel_dimensions = DimensionsF32{
-            .width = 1.0 / @as(f32, @floatFromInt(pixel_view_dimensions.width)),
-            .height = 1.0 / @as(f32, @floatFromInt(pixel_view_dimensions.height)),
+            .width = @floatFromInt(pixel_view_dimensions.width),
+            .height = @floatFromInt(pixel_view_dimensions.height),
         };
 
         for (path.getCurves()) |curve| {
-            const scaled_curve_bounds = curve.getBounds();
+            const scaled_curve = curve.scale(scaled_pixel_dimensions);
+            const scaled_curve_bounds = scaled_curve.getBounds();
             // get x intersections
-            const scaled_pixel_x_range = RangeF32{
-                .start = (scaled_curve_bounds.min.x / scaled_pixel_dimensions.width),
-                .end = (scaled_curve_bounds.max.x / scaled_pixel_dimensions.width),
-            };
-            const pixel_x_range = RangeI32{
-                .start = @intFromFloat(scaled_pixel_x_range.start),
-                .end = @intFromFloat(scaled_pixel_x_range.end),
-            };
+            //     const scaled_pixel_x_range = RangeF32{
+            //         .start = (scaled_curve_bounds.min.x / scaled_pixel_dimensions.width),
+            //         .end = (scaled_curve_bounds.max.x / scaled_pixel_dimensions.width),
+            //     };
+            //     const pixel_x_range = RangeI32{
+            //         .start = @intFromFloat(scaled_pixel_x_range.start),
+            //         .end = @intFromFloat(scaled_pixel_x_range.end),
+            //     };
 
             try scanX(
                 scaled_curve_bounds.min.x,
-                curve,
+                scaled_curve,
                 scaled_curve_bounds,
                 &intersections,
             );
-            for (0..pixel_x_range.size() - 1) |x_offset| {
-                const pixel_x = pixel_x_range.start + @as(i32, @intCast(x_offset)) + 1;
+            const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
+            const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
+            for (1..grid_x_size) |x_offset| {
+                const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                 try scanX(
-                    @as(f32, @floatFromInt(pixel_x)) * scaled_pixel_dimensions.width,
-                    curve,
+                    @as(f32, @floatFromInt(grid_x)),
+                    scaled_curve,
                     scaled_curve_bounds,
                     &intersections,
                 );
             }
             try scanX(
                 scaled_curve_bounds.max.x,
-                curve,
+                scaled_curve,
                 scaled_curve_bounds,
                 &intersections,
             );
 
-            // get y intersections
-            const scaled_pixel_y_range = RangeF32{
-                .start = (scaled_curve_bounds.min.y / scaled_pixel_dimensions.height),
-                .end = (scaled_curve_bounds.max.y / scaled_pixel_dimensions.height),
-            };
-            const pixel_y_range = RangeI32{
-                .start = @intFromFloat(scaled_pixel_y_range.start),
-                .end = @intFromFloat(scaled_pixel_y_range.end),
-            };
-            try scanY(
-                scaled_curve_bounds.min.y,
-                curve,
-                scaled_curve_bounds,
-                &intersections,
-            );
-            for (0..pixel_y_range.size() - 1) |y_offset| {
-                const pixel_y = pixel_y_range.start + @as(i32, @intCast(y_offset)) + 1;
-                try scanY(
-                    @as(f32, @floatFromInt(pixel_y)) * scaled_pixel_dimensions.height,
-                    curve,
-                    scaled_curve_bounds,
-                    &intersections,
-                );
-            }
-            try scanY(
-                scaled_curve_bounds.max.y,
-                curve,
-                scaled_curve_bounds,
-                &intersections,
-            );
+            //     // get y intersections
+            //     const scaled_pixel_y_range = RangeF32{
+            //         .start = (scaled_curve_bounds.min.y / scaled_pixel_dimensions.height),
+            //         .end = (scaled_curve_bounds.max.y / scaled_pixel_dimensions.height),
+            //     };
+            //     const pixel_y_range = RangeI32{
+            //         .start = @intFromFloat(scaled_pixel_y_range.start),
+            //         .end = @intFromFloat(scaled_pixel_y_range.end),
+            //     };
+            //     try scanY(
+            //         scaled_curve_bounds.min.y,
+            //         curve,
+            //         scaled_curve_bounds,
+            //         &intersections,
+            //     );
+            //     for (0..pixel_y_range.size() - 1) |y_offset| {
+            //         const pixel_y = pixel_y_range.start + @as(i32, @intCast(y_offset)) + 1;
+            //         try scanY(
+            //             @as(f32, @floatFromInt(pixel_y)) * scaled_pixel_dimensions.height,
+            //             curve,
+            //             scaled_curve_bounds,
+            //             &intersections,
+            //         );
+            //     }
+            //     try scanY(
+            //         scaled_curve_bounds.max.y,
+            //         curve,
+            //         scaled_curve_bounds,
+            //         &intersections,
+            //     );
 
-            // build pixel fragments
+            //     // build pixel fragments
         }
 
         return intersections;
