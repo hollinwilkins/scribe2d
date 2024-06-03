@@ -11,6 +11,8 @@ pub fn main() !void {
     const font_file = args.next() orelse @panic("need to provide a font file");
     const glyph_id_str = args.next() orelse @panic("need to provide a glyph_id");
     const glyph_id = try std.fmt.parseInt(u16, glyph_id_str, 10);
+    const size_str = args.next() orelse "16";
+    const size = try std.fmt.parseInt(u32, size_str, 10);
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -26,8 +28,8 @@ pub fn main() !void {
     defer path.deinit();
 
     const dimensions = core.DimensionsU32{
-        .width = 16,
-        .height = 16,
+        .width = size,
+        .height = size,
     };
 
     var texture = try draw.UnmanagedTextureRgba.create(allocator, dimensions);
