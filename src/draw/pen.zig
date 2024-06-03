@@ -40,6 +40,8 @@ pub const Pen = struct {
         var intersections = PathIntersectionList.init(allocator);
         errdefer intersections.deinit();
 
+        var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
+
         const pixel_view_dimensions = view.getDimensions();
         const scaled_pixel_dimensions = DimensionsF32{
             .width = @floatFromInt(pixel_view_dimensions.width),
@@ -50,6 +52,7 @@ pub const Pen = struct {
             const scaled_curve = curve.scale(scaled_pixel_dimensions);
             const scaled_curve_bounds = scaled_curve.getBounds();
 
+            // scan x lines within bounds
             try scanX(
                 path.getId(),
                 scaled_curve_bounds.min.x,
@@ -77,6 +80,16 @@ pub const Pen = struct {
                 &intersections,
             );
 
+            // insert monotonic cuts, which ensure there are segmented montonic curves
+            for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
+                const ao = try intersections.addOne();
+                ao.* = PathIntersection{
+                    .path_id = path.getId(),
+                    .intersection = intersection,
+                };
+            }
+
+            // scan y lines within bounds
             try scanY(
                 path.getId(),
                 scaled_curve_bounds.min.y,
@@ -204,12 +217,15 @@ test "scan for intersections" {
     defer path_outliner.deinit();
 
     try path_outliner.moveTo(PointF32{
-        .x = 0.0,
-        .y = 0.0,
+        .x = 0.25,
+        .y = 0.25,
     });
-    try path_outliner.lineTo(PointF32{
-        .x = 1.0,
-        .y = 1.0,
+    try path_outliner.quadTo(PointF32{
+        .x = 0.75,
+        .y = 0.25,
+    }, PointF32{
+        .x = 0.61,
+        .y = 0.61,
     });
 
     var path = try path_outliner.createPathAlloc(std.testing.allocator);

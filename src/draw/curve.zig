@@ -46,6 +46,23 @@ pub const Curve = union(enum) {
             },
         }
     }
+
+    pub fn monotonicCuts(self: Curve, result: *[2]Intersection) []const Intersection {
+        switch (self) {
+            // lines are monotonic...
+            .line => |_| {
+                return &.{};
+            },
+            .quadratic_bezier => |*qb| {
+                if (qb.getMonotonicCut()) |intersection| {
+                    result[0] = intersection;
+                    return result[0..1];
+                } else {
+                    return &.{};
+                }
+            },
+        }
+    }
 };
 
 pub const Line = struct {
@@ -162,6 +179,26 @@ pub const QuadraticBezier = struct {
             .start = start,
             .end = end,
             .control = control,
+        };
+    }
+
+    pub fn applyT(self: QuadraticBezier, t: f32) PointF32 {
+        return self.start.lerp(
+            self.control,
+            t,
+        ).lerp(
+            self.control.lerp(self.end, t),
+            t,
+        );
+    }
+
+    // cut point ensures two monotonic segments of the curve
+    pub fn getMonotonicCut(self: QuadraticBezier) ?Intersection {
+        // TODO: maybe improve by returning null if this quadratic bezier is monotonic
+        const t = 0.5;
+        return Intersection{
+            .t = t,
+            .point = self.applyT(t),
         };
     }
 
@@ -306,13 +343,7 @@ pub const QuadraticBezier = struct {
                 //       // candidate
                 //       var p6x = p4x + (p5x - p4x) * t;
                 //       var p6y = p4y + (p5y - p4y) * t;
-                const candidate = self.start.lerp(
-                    self.control,
-                    t,
-                ).lerp(
-                    self.control.lerp(self.end, t),
-                    t,
-                );
+                const candidate = self.applyT(t);
 
                 //       // See if point is on line segment
                 //       // Had to make special cases for vertical and horizontal lines due
