@@ -71,7 +71,7 @@ pub const Pen = struct {
                 .start = intersections.items.len,
                 .end = intersections.items.len,
             };
-            const scaled_curve = curve.scale(scaled_pixel_dimensions);
+            const scaled_curve = curve.invert().scale(scaled_pixel_dimensions);
             const scaled_curve_bounds = scaled_curve.getBounds();
 
             // scan x lines within bounds

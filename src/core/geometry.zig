@@ -38,6 +38,13 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn invert(self: @This()) @This() {
+            return @This(){
+                .x = 1.0 - self.x,
+                .y = 1.0 - self.y,
+            };
+        }
+
         pub fn lerp(self: @This(), other: @This(), t: T) @This() {
             return @This(){
                 .x = self.x + t * (other.x - self.x),

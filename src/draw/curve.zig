@@ -20,6 +20,17 @@ pub const Curve = union(enum) {
         }
     }
 
+    pub fn invert(self: Curve) Curve {
+        switch (self) {
+            .line => |*l| return Curve{
+                .line = l.invert(),
+            },
+            .quadratic_bezier => |*qb| return Curve{
+                .quadratic_bezier = qb.invert(),
+            },
+        }
+    }
+
     pub fn scale(self: Curve, dimensions: DimensionsF32) Curve {
         switch (self) {
             .line => |*l| return Curve{
@@ -94,6 +105,13 @@ pub const Line = struct {
                 .x = dimensions.width,
                 .y = dimensions.height,
             }),
+        };
+    }
+
+    pub fn invert(self: Line) Line {
+        return Line{
+            .start = self.start.invert(),
+            .end = self.end.invert(),
         };
     }
 
@@ -263,6 +281,14 @@ pub const QuadraticBezier = struct {
                 .x = dimensions.width,
                 .y = dimensions.height,
             }),
+        };
+    }
+
+    pub fn invert(self: QuadraticBezier) QuadraticBezier {
+        return QuadraticBezier{
+            .start = self.start.invert(),
+            .end = self.end.invert(),
+            .control = self.control.invert(),
         };
     }
 
