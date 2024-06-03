@@ -10,10 +10,21 @@ const RangeF32 = core.RangeF32;
 const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const QuadraticBezier = curve_module.QuadraticBezier;
+const SequenceU32 = core.SequenceU32;
 
 pub const Path = struct {
     pub const Unmanaged = struct {
+        var IdSequence = SequenceU32.initValue(0);
+
+        id: u32,
         curves: []const Curve,
+
+        pub fn create(curves: []const Curve) Unmanaged {
+            return Unmanaged{
+                .id = IdSequence.next(),
+                .curves = curves,
+            };
+        }
 
         pub fn deinit(self: Unmanaged, allocator: Allocator) void {
             allocator.free(self.curves);
@@ -25,6 +36,10 @@ pub const Path = struct {
 
     pub fn deinit(self: Path) void {
         self.unmanaged.deinit(self.allocator);
+    }
+
+    pub fn getId(self: Path) u32 {
+        return self.unmanaged.id;
     }
 
     pub fn getCurves(self: *const Path) []const Curve {
@@ -110,9 +125,7 @@ pub const PathOutliner = struct {
     pub fn createPathAlloc(self: *PathOutliner, allocator: Allocator) Allocator.Error!Path {
         return Path{
             .allocator = allocator,
-            .unmanaged = Path.Unmanaged{
-                .curves = try allocator.dupe(Curve, self.curves.items),
-            },
+            .unmanaged = Path.Unmanaged.create(try allocator.dupe(Curve, self.curves.items)),
         };
     }
 

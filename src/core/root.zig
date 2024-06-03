@@ -1,5 +1,6 @@
 const geometry = @import("./geometry.zig");
 const range = @import("./range.zig");
+const sequence = @import("./sequence.zig");
 
 pub const Point = geometry.Point;
 pub const PointF32 = geometry.PointF32;
@@ -20,3 +21,6 @@ pub const Range = range.Range;
 pub const RangeU32 = range.RangeU32;
 pub const RangeI32 = range.RangeI32;
 pub const RangeF32 = range.RangeF32;
+
+pub const Sequence = sequence.Sequence;
+pub const SequenceU32 = Sequence(u32);

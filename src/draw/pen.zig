@@ -20,8 +20,12 @@ const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
 
-const PIXEL_TOLERANCE: f32 = 1e-6;
-pub const IntersectionList = std.ArrayList(Intersection);
+pub const PathIntersection = struct {
+    path_id: u32,
+    intersection: Intersection,
+};
+
+pub const PathIntersectionList = std.ArrayList(PathIntersection);
 
 pub const Pen = struct {
     pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
@@ -32,8 +36,8 @@ pub const Pen = struct {
         return;
     }
 
-    pub fn createBoundaryFragments(allocator: Allocator, path: Path, view: *TextureViewRgba) !IntersectionList {
-        var intersections = IntersectionList.init(allocator);
+    pub fn createIntersections(allocator: Allocator, path: Path, view: *TextureViewRgba) !PathIntersectionList {
+        var intersections = PathIntersectionList.init(allocator);
         errdefer intersections.deinit();
 
         const pixel_view_dimensions = view.getDimensions();
@@ -47,6 +51,7 @@ pub const Pen = struct {
             const scaled_curve_bounds = scaled_curve.getBounds();
 
             try scanX(
+                path.getId(),
                 scaled_curve_bounds.min.x,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -57,6 +62,7 @@ pub const Pen = struct {
             for (1..grid_x_size) |x_offset| {
                 const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                 try scanX(
+                    path.getId(),
                     @as(f32, @floatFromInt(grid_x)),
                     scaled_curve,
                     scaled_curve_bounds,
@@ -64,6 +70,7 @@ pub const Pen = struct {
                 );
             }
             try scanX(
+                path.getId(),
                 scaled_curve_bounds.max.x,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -71,6 +78,7 @@ pub const Pen = struct {
             );
 
             try scanY(
+                path.getId(),
                 scaled_curve_bounds.min.y,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -81,6 +89,7 @@ pub const Pen = struct {
             for (1..grid_y_size) |y_offset| {
                 const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                 try scanY(
+                    path.getId(),
                     @as(f32, @floatFromInt(grid_y)),
                     scaled_curve,
                     scaled_curve_bounds,
@@ -88,6 +97,7 @@ pub const Pen = struct {
                 );
             }
             try scanY(
+                path.getId(),
                 scaled_curve_bounds.max.y,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -96,25 +106,26 @@ pub const Pen = struct {
 
             // sort by t
             std.mem.sort(
-                Intersection,
+                PathIntersection,
                 intersections.items,
                 @as(u32, 0),
-                intersectionLessThan,
+                pathIntersectionLessThan,
             );
         }
 
         return intersections;
     }
 
-    fn intersectionLessThan(_: u32, left: Intersection, right: Intersection) bool {
-        return left.t < right.t;
+    fn pathIntersectionLessThan(_: u32, left: PathIntersection, right: PathIntersection) bool {
+        return left.intersection.t < right.intersection.t;
     }
 
     fn scanX(
+        path_id: u32,
         grid_x: f32,
         curve: Curve,
         scaled_curve_bounds: RectF32,
-        intersections: *IntersectionList,
+        intersections: *PathIntersectionList,
     ) !void {
         var scaled_intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
         const line = Line.create(
@@ -131,15 +142,19 @@ pub const Pen = struct {
 
         for (scaled_intersections) |intersection| {
             const ao = try intersections.addOne();
-            ao.* = intersection;
+            ao.* = PathIntersection{
+                .path_id = path_id,
+                .intersection = intersection,
+            };
         }
     }
 
     fn scanY(
+        path_id: u32,
         grid_y: f32,
         curve: Curve,
         scaled_curve_bounds: RectF32,
-        intersections: *IntersectionList,
+        intersections: *PathIntersectionList,
     ) !void {
         var scaled_intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
         const line = Line.create(
@@ -156,7 +171,10 @@ pub const Pen = struct {
 
         for (scaled_intersections) |intersection| {
             const ao = try intersections.addOne();
-            ao.* = intersection;
+            ao.* = PathIntersection{
+                .path_id = path_id,
+                .intersection = intersection,
+            };
         }
     }
 };
@@ -197,7 +215,7 @@ test "scan for intersections" {
     var path = try path_outliner.createPathAlloc(std.testing.allocator);
     defer path.deinit();
 
-    var intersections = try Pen.createBoundaryFragments(std.testing.allocator, path, &texture_view);
+    var intersections = try Pen.createIntersections(std.testing.allocator, path, &texture_view);
     defer intersections.deinit();
 
     std.debug.print("\n============== Intersections\n", .{});
