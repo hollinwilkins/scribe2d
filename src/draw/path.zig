@@ -172,7 +172,7 @@ pub const PathOutliner = struct {
     /// Closes the current subpath, if there is one
     pub fn close(self: *PathOutliner) !void {
         if (self.start) |start| {
-            if (std.meta.eql(start, self.location)) {
+            if (!std.meta.eql(start, self.location)) {
                 try self.lineTo(start);
             }
 

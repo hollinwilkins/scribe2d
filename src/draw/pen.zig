@@ -85,7 +85,7 @@ pub const Pen = struct {
             );
             const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
             const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
-            for (1..grid_x_size) |x_offset| {
+            for (0..grid_x_size) |x_offset| {
                 const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                 try scanX(
                     path.getId(),
@@ -126,7 +126,7 @@ pub const Pen = struct {
             );
             const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
             const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
-            for (1..grid_y_size) |y_offset| {
+            for (0..grid_y_size) |y_offset| {
                 const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                 try scanY(
                     path.getId(),
@@ -230,11 +230,11 @@ pub const Pen = struct {
         const line = Line.create(
             PointF32{
                 .x = grid_x,
-                .y = scaled_curve_bounds.min.y,
+                .y = scaled_curve_bounds.min.y - 1.0,
             },
             PointF32{
                 .x = grid_x,
-                .y = scaled_curve_bounds.max.y,
+                .y = scaled_curve_bounds.max.y + 1.0,
             },
         );
         const scaled_intersections = curve.intersectLine(line, &scaled_intersections_result);
@@ -287,8 +287,8 @@ test "scan for intersections" {
     const PathOutliner = path_module.PathOutliner;
 
     const dimensions = DimensionsU32{
-        .width = 16,
-        .height = 16,
+        .width = 64,
+        .height = 64,
     };
 
     var texture = try UnmanagedTextureRgba.create(std.testing.allocator, dimensions);
@@ -318,6 +318,7 @@ test "scan for intersections" {
         .x = 0.50,
         .y = 0.50,
     });
+    try path_outliner.close();
 
     var path = try path_outliner.createPathAlloc(std.testing.allocator);
     defer path.deinit();
