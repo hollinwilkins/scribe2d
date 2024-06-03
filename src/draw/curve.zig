@@ -20,13 +20,13 @@ pub const Curve = union(enum) {
         }
     }
 
-    pub fn invert(self: Curve) Curve {
+    pub fn invertY(self: Curve) Curve {
         switch (self) {
             .line => |*l| return Curve{
-                .line = l.invert(),
+                .line = l.invertY(),
             },
             .quadratic_bezier => |*qb| return Curve{
-                .quadratic_bezier = qb.invert(),
+                .quadratic_bezier = qb.invertY(),
             },
         }
     }
@@ -112,6 +112,20 @@ pub const Line = struct {
         return Line{
             .start = self.start.invert(),
             .end = self.end.invert(),
+        };
+    }
+
+    pub fn invertX(self: Line) Line {
+        return Line{
+            .start = self.start.invertX(),
+            .end = self.end.invertX(),
+        };
+    }
+
+    pub fn invertY(self: Line) Line {
+        return Line{
+            .start = self.start.invertY(),
+            .end = self.end.invertY(),
         };
     }
 
@@ -289,6 +303,22 @@ pub const QuadraticBezier = struct {
             .start = self.start.invert(),
             .end = self.end.invert(),
             .control = self.control.invert(),
+        };
+    }
+
+    pub fn invertX(self: QuadraticBezier) QuadraticBezier {
+        return QuadraticBezier{
+            .start = self.start.invertX(),
+            .end = self.end.invertX(),
+            .control = self.control.invertX(),
+        };
+    }
+
+    pub fn invertY(self: QuadraticBezier) QuadraticBezier {
+        return QuadraticBezier{
+            .start = self.start.invertY(),
+            .end = self.end.invertY(),
+            .control = self.control.invertY(),
         };
     }
 

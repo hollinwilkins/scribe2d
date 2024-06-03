@@ -62,14 +62,29 @@ pub fn main() !void {
     const boundary_fragments = try draw.Pen.createBoundaryFragmentsAlloc(allocator, intersections.items);
     defer boundary_fragments.deinit();
 
+    std.debug.print("\n============== Boundary Fragments\n", .{});
+    for (boundary_fragments.items) |fragment| {
+        std.debug.print("Fragment: {}\n", .{fragment});
+    }
+    std.debug.print("==============\n", .{});
+
     std.debug.print("\n============== Boundary Texture\n", .{});
+    const x_start: i32 = -1;
+    const x_end: i32 = @intCast(dimensions.width + 1);
+    const x_range: usize = @intCast(x_end - x_start);
+    const y_start: i32 = -1;
+    const y_end: i32 = @intCast(dimensions.height + 1);
+    const y_range: usize = @intCast(y_end - y_start);
+    std.debug.print("Y START: {}, Y END: {}\n", .{ y_start, y_end });
     var bf_index: usize = 0;
-    for (0..dimensions.height) |y| {
+    for (0..y_range) |y_offset| {
+        const y = y_start + @as(i32, @intCast(y_offset));
         while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y < y) {
             bf_index += 1;
         }
 
-        for (0..dimensions.width) |x| {
+        for (0..x_range) |x_offset| {
+            const x = x_start + @as(i32, @intCast(x_offset));
             while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y == y and boundary_fragments.items[bf_index].pixel.x < x) {
                 bf_index += 1;
             }
