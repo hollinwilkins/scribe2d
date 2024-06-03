@@ -16,6 +16,7 @@ const RectF32 = core.RectF32;
 const RangeF32 = core.RangeF32;
 const RangeU32 = core.RangeU32;
 const RangeI32 = core.RangeI32;
+const RangeUsize = core.RangeUsize;
 const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
@@ -35,10 +36,13 @@ pub const PathIntersection = struct {
 pub const PathIntersectionList = std.ArrayList(PathIntersection);
 
 pub const BoundaryFragment = struct {
+    path_id: u32,
     curve_index: u32,
-    t0: f32,
-    t1: f32,
+    pixel: PointI32,
+    intersection1: Intersection,
+    intersection2: Intersection,
 };
+pub const BoundaryFragmentList = std.ArrayList(BoundaryFragment);
 
 pub const Pen = struct {
     pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
@@ -61,8 +65,9 @@ pub const Pen = struct {
             .height = @floatFromInt(pixel_view_dimensions.height),
         };
 
-        for (path.getCurves(), 0..) |curve, curve_index| {
-            var curve_intersection_range = RangeU32{
+        for (path.getCurves(), 0..) |curve, curve_index_usize| {
+            const curve_index: u32 = @intCast(curve_index_usize);
+            var curve_intersection_range = RangeUsize{
                 .start = intersections.items.len,
                 .end = intersections.items.len,
             };
@@ -105,6 +110,7 @@ pub const Pen = struct {
                 const ao = try intersections.addOne();
                 ao.* = PathIntersection{
                     .path_id = path.getId(),
+                    .curve_index = curve_index,
                     .intersection = intersection,
                 };
             }
@@ -140,10 +146,12 @@ pub const Pen = struct {
                 &intersections,
             );
 
+            curve_intersection_range.end = intersections.items.len;
+
             // sort by t
             std.mem.sort(
                 PathIntersection,
-                intersections.items,
+                intersections.items[curve_intersection_range.start..curve_intersection_range.end],
                 @as(u32, 0),
                 pathIntersectionLessThan,
             );
@@ -156,8 +164,54 @@ pub const Pen = struct {
         return left.intersection.t < right.intersection.t;
     }
 
-    // intersections must be sorted by t
-    // pub fn createBoundaryFragmentsSorted(intersections: []const PathIntersection) {}
+    // intersections must be sorted by curve_index, t
+    pub fn createBoundaryFragmentsAlloc(allocator: Allocator, intersections: []const PathIntersection) !BoundaryFragmentList {
+        var boundary_fragments = try BoundaryFragmentList.initCapacity(allocator, intersections.len - 1);
+
+        for (0..intersections.len) |index| {
+            if (index + 1 >= intersections.len) {
+                break;
+            }
+
+            const intersection1 = intersections[index];
+            const intersection2 = intersections[index + 1];
+
+            const pixel = intersection1.getPixel();
+
+            const ao = boundary_fragments.addOneAssumeCapacity();
+            ao.* = BoundaryFragment{
+                .path_id = intersection1.path_id,
+                .curve_index = intersection1.curve_index,
+                .pixel = pixel,
+                .intersection1 = intersection1.intersection,
+                .intersection2 = intersection2.intersection,
+            };
+        }
+
+        // sort by path_id, y, x
+        std.mem.sort(
+            BoundaryFragment,
+            boundary_fragments.items,
+            @as(u32, 0),
+            boundaryFragmentLessThan,
+        );
+
+        return boundary_fragments;
+    }
+
+    fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
+        if (left.path_id < right.path_id) {
+            return true;
+        } else if (left.path_id == right.path_id) {
+            if (left.pixel.y < right.pixel.y) {
+                return true;
+            } else if (left.pixel.y == right.pixel.y) {
+                return left.pixel.x < right.pixel.x;
+            }
+        }
+
+        return false;
+    }
 
     fn scanX(
         path_id: u32,
@@ -261,12 +315,21 @@ test "scan for intersections" {
     var path = try path_outliner.createPathAlloc(std.testing.allocator);
     defer path.deinit();
 
-    var intersections = try Pen.createIntersections(std.testing.allocator, path, &texture_view);
+    const intersections = try Pen.createIntersections(std.testing.allocator, path, &texture_view);
     defer intersections.deinit();
 
     std.debug.print("\n============== Intersections\n", .{});
     for (intersections.items) |intersection| {
         std.debug.print("Intersection: {}\n", .{intersection});
+    }
+    std.debug.print("==============\n", .{});
+
+    const boundary_fragments = try Pen.createBoundaryFragmentsAlloc(std.testing.allocator, intersections.items);
+    defer boundary_fragments.deinit();
+
+    std.debug.print("\n============== Boundary Fragments\n", .{});
+    for (boundary_fragments.items) |fragment| {
+        std.debug.print("Fragment: {}\n", .{fragment});
     }
     std.debug.print("==============\n", .{});
 }
