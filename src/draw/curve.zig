@@ -208,10 +208,17 @@ pub const QuadraticBezier = struct {
 
     // code from: https://github.com/w8r/bezier-intersect
     pub fn getRoots(c0: f32, c1: f32, c2: f32, result: *[2]f32) []const f32 {
+        if (c0 == 0) {
+            result[0] = -c2 / c1;
+            return result[0..1];
+        }
+
         const a = c0;
         //   var a = C2;
         const b = c1 / a;
+        // const b = c1 / a;
         //   var b = C1 / a;
+        // const c = c2 / a;
         const c = c2 / a;
         //   var c = C0 / a;
         const d = b * b - 4 * c;

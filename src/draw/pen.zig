@@ -85,7 +85,7 @@ pub const Pen = struct {
             );
             const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
             const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
-            for (0..grid_x_size) |x_offset| {
+            for (1..grid_x_size) |x_offset| {
                 const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                 try scanX(
                     path.getId(),
@@ -126,7 +126,7 @@ pub const Pen = struct {
             );
             const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
             const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
-            for (0..grid_y_size) |y_offset| {
+            for (1..grid_y_size) |y_offset| {
                 const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                 try scanY(
                     path.getId(),
@@ -175,8 +175,13 @@ pub const Pen = struct {
 
             const intersection1 = intersections[index];
             const intersection2 = intersections[index + 1];
+            if (std.meta.eql(intersection1.intersection.point, intersection2.intersection.point)) {
+                continue;
+            } else {
+                std.debug.print("Not equal... {} !+ {}", .{ intersection1.intersection.point, intersection2.intersection.point });
+            }
 
-            const pixel = intersection1.getPixel();
+            const pixel = intersection1.getPixel().min(intersection2.getPixel());
 
             const ao = boundary_fragments.addOneAssumeCapacity();
             ao.* = BoundaryFragment{
