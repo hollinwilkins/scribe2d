@@ -64,6 +64,8 @@ pub fn main() !void {
     const boundary_fragments = try draw.Raster.createBoundaryFragmentsAlloc(allocator, intersections.items);
     defer boundary_fragments.deinit();
 
+    draw.Raster.unwindBoundaryFragments(boundary_fragments.items);
+
     std.debug.print("\n============== Boundary Fragments\n", .{});
     for (boundary_fragments.items) |fragment| {
         std.debug.print("Fragment: {}\n", .{fragment});

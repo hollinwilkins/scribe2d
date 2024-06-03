@@ -41,8 +41,18 @@ pub const BoundaryFragment = struct {
     pixel: PointI32,
     intersection1: Intersection,
     intersection2: Intersection,
+    winding: Winding = Winding{},
+
+    pub fn getLine(self: BoundaryFragment) Line {
+        return Line.create(self.intersection1.point, self.intersection2.point);
+    }
 };
 pub const BoundaryFragmentList = std.ArrayList(BoundaryFragment);
+
+pub const Winding = struct {
+    start_value: i32 = 0,
+    end_value: i32 = 0,
+};
 
 pub const Raster = struct {
     pub fn createIntersections(allocator: Allocator, path: Path, view: *TextureViewRgba) !PathIntersectionList {
@@ -206,6 +216,58 @@ pub const Raster = struct {
         }
 
         return false;
+    }
+
+    pub fn unwindBoundaryFragments(boundary_fragments: []BoundaryFragment) void {
+        var index: usize = 0;
+
+        while (index < boundary_fragments.len) {
+            var boundary_fragment = &boundary_fragments[index];
+            var previous_boundary_fragment: ?*BoundaryFragment = null;
+            const y = boundary_fragment.pixel.y;
+
+            while (index < boundary_fragments.len and boundary_fragment.pixel.y == y) {
+                if (previous_boundary_fragment) |previous| {
+                    // set both winding values to the previous end winding value
+                    // we haven't intersected the ray yet, so it is just
+                    // continuous with the previous winding
+                    boundary_fragment.winding = Winding{
+                        .start_value = previous.winding.end_value,
+                        .end_value = previous.winding.end_value,
+                    };
+                } else {
+                    // this is the first boundary fragment on this scan line
+                    boundary_fragment.winding = Winding{};
+                }
+
+                const ray_y: f32 = @as(f32, @floatFromInt(boundary_fragment.pixel.y)) + 0.5;
+                const ray_line = Line.create(
+                    PointF32{
+                        .x = @floatFromInt(boundary_fragment.pixel.x),
+                        .y = ray_y,
+                    },
+                    PointF32{
+                        .x = @as(f32, @floatFromInt(boundary_fragment.pixel.x)) + 1.0,
+                        .y = ray_y,
+                    },
+                );
+                const boundary_fragment_line = boundary_fragment.getLine();
+
+                if (ray_line.intersectLine(boundary_fragment_line) != null) {
+                    if (boundary_fragment_line.start.y >= ray_y) {
+                        // curve passing top to bottom
+                        boundary_fragment.winding.end_value -= 1;
+                    } else {
+                        // curve passing bottom to top
+                        boundary_fragment.winding.end_value += 1;
+                    }
+                }
+
+                boundary_fragment = &boundary_fragments[index];
+                index += 1;
+                previous_boundary_fragment = boundary_fragment;
+            }
+        }
     }
 
     fn scanX(
