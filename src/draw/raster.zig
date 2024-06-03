@@ -35,17 +35,22 @@ pub const PathIntersection = struct {
 };
 pub const PathIntersectionList = std.ArrayList(PathIntersection);
 
-pub const BoundaryFragment = struct {
+pub const FragmentIntersection = struct {
     path_id: u32,
     curve_index: u32,
     pixel: PointI32,
     intersection1: Intersection,
     intersection2: Intersection,
-    winding: Winding = Winding{},
 
-    pub fn getLine(self: BoundaryFragment) Line {
+    pub fn getLine(self: FragmentIntersection) Line {
         return Line.create(self.intersection1.point, self.intersection2.point);
     }
+};
+pub const FragmentIntersectionList = std.ArrayList(FragmentIntersection);
+
+pub const BoundaryFragment = struct {
+    pixel: PointI32,
+    winding: Winding = Winding{},
 };
 pub const BoundaryFragmentList = std.ArrayList(BoundaryFragment);
 
@@ -167,8 +172,8 @@ pub const Raster = struct {
     }
 
     // intersections must be sorted by curve_index, t
-    pub fn createBoundaryFragmentsAlloc(allocator: Allocator, intersections: []const PathIntersection) !BoundaryFragmentList {
-        var boundary_fragments = try BoundaryFragmentList.initCapacity(allocator, intersections.len - 1);
+    pub fn createFragmentIntersectionsAlloc(allocator: Allocator, intersections: []const PathIntersection) !FragmentIntersectionList {
+        var fragment_intersections = try FragmentIntersectionList.initCapacity(allocator, intersections.len - 1);
 
         for (0..intersections.len) |index| {
             if (index + 1 >= intersections.len) {
@@ -183,8 +188,8 @@ pub const Raster = struct {
 
             const pixel = intersection1.getPixel().min(intersection2.getPixel());
 
-            const ao = boundary_fragments.addOneAssumeCapacity();
-            ao.* = BoundaryFragment{
+            const ao = fragment_intersections.addOneAssumeCapacity();
+            ao.* = FragmentIntersection{
                 .path_id = intersection1.path_id,
                 .curve_index = intersection1.curve_index,
                 .pixel = pixel,
@@ -195,16 +200,16 @@ pub const Raster = struct {
 
         // sort by path_id, y, x
         std.mem.sort(
-            BoundaryFragment,
-            boundary_fragments.items,
+            FragmentIntersection,
+            fragment_intersections.items,
             @as(u32, 0),
-            boundaryFragmentLessThan,
+            fragmentIntersectionLessThan,
         );
 
-        return boundary_fragments;
+        return fragment_intersections;
     }
 
-    fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
+    fn fragmentIntersectionLessThan(_: u32, left: FragmentIntersection, right: FragmentIntersection) bool {
         if (left.path_id < right.path_id) {
             return true;
         } else if (left.path_id == right.path_id) {
@@ -218,56 +223,72 @@ pub const Raster = struct {
         return false;
     }
 
-    pub fn unwindBoundaryFragments(boundary_fragments: []BoundaryFragment) void {
+    pub fn unwindFragmentIntersectionsAlloc(allocator: Allocator, fragment_intersections: []FragmentIntersection) !BoundaryFragmentList {
+        var boundary_fragments = BoundaryFragmentList.init(allocator);
         var index: usize = 0;
 
-        while (index < boundary_fragments.len) {
-            var boundary_fragment = &boundary_fragments[index];
-            var previous_boundary_fragment: ?*BoundaryFragment = null;
-            const y = boundary_fragment.pixel.y;
+        while (index < fragment_intersections.len) {
+            var fragment_intersection = &fragment_intersections[index];
+            var previous_boundary_fragment: ?BoundaryFragment = null;
+            const y = fragment_intersection.pixel.y;
 
-            while (index < boundary_fragments.len and boundary_fragment.pixel.y == y) {
-                if (previous_boundary_fragment) |previous| {
-                    // set both winding values to the previous end winding value
-                    // we haven't intersected the ray yet, so it is just
-                    // continuous with the previous winding
-                    boundary_fragment.winding = Winding{
-                        .start_value = previous.winding.end_value,
-                        .end_value = previous.winding.end_value,
-                    };
-                } else {
-                    // this is the first boundary fragment on this scan line
-                    boundary_fragment.winding = Winding{};
-                }
+            while (index < fragment_intersections.len and fragment_intersection.pixel.y == y) {
+                var boundary_fragment: *BoundaryFragment = try boundary_fragments.addOne();
+                boundary_fragment.* = BoundaryFragment{
+                    .pixel = fragment_intersection.pixel,
+                };
+                const x = fragment_intersection.pixel.x;
 
-                const ray_y: f32 = @as(f32, @floatFromInt(boundary_fragment.pixel.y)) + 0.5;
-                const ray_line = Line.create(
-                    PointF32{
-                        .x = @floatFromInt(boundary_fragment.pixel.x),
-                        .y = ray_y,
-                    },
-                    PointF32{
-                        .x = @as(f32, @floatFromInt(boundary_fragment.pixel.x)) + 1.0,
-                        .y = ray_y,
-                    },
-                );
-                const boundary_fragment_line = boundary_fragment.getLine();
+                std.debug.print("Start new boundary fragment @ {}x{}\n", .{ x, y });
 
-                if (ray_line.intersectLine(boundary_fragment_line) != null) {
-                    if (boundary_fragment_line.start.y >= ray_y) {
-                        // curve passing top to bottom
-                        boundary_fragment.winding.end_value -= 1;
+                while (index < fragment_intersections.len and fragment_intersection.pixel.x == x) {
+                    if (previous_boundary_fragment) |previous| {
+                        // set both winding values to the previous end winding value
+                        // we haven't intersected the ray yet, so it is just
+                        // continuous with the previous winding
+                        boundary_fragment.winding = Winding{
+                            .start_value = previous.winding.end_value,
+                            .end_value = previous.winding.end_value,
+                        };
                     } else {
-                        // curve passing bottom to top
-                        boundary_fragment.winding.end_value += 1;
+                        // this is the first boundary fragment on this scan line
+                        boundary_fragment.winding = Winding{};
                     }
-                }
 
-                boundary_fragment = &boundary_fragments[index];
-                index += 1;
-                previous_boundary_fragment = boundary_fragment;
+                    const ray_y: f32 = @as(f32, @floatFromInt(fragment_intersection.pixel.y)) + 0.5;
+                    const ray_line = Line.create(
+                        PointF32{
+                            .x = @floatFromInt(fragment_intersection.pixel.x),
+                            .y = ray_y,
+                        },
+                        PointF32{
+                            .x = @as(f32, @floatFromInt(fragment_intersection.pixel.x)) + 1.0,
+                            .y = ray_y,
+                        },
+                    );
+                    const fragment_intersection_line = fragment_intersection.getLine();
+
+                    if (ray_line.intersectLine(fragment_intersection_line) != null) {
+                        if (fragment_intersection_line.start.y >= ray_y) {
+                            // curve passing top to bottom
+                            boundary_fragment.winding.end_value -= 1;
+                        } else {
+                            // curve passing bottom to top
+                            boundary_fragment.winding.end_value += 1;
+                        }
+                    }
+
+                    index += 1;
+
+                    if (index < fragment_intersections.len) {
+                        fragment_intersection = &fragment_intersections[index];
+                    }
+                    previous_boundary_fragment = boundary_fragment.*;
+                }
             }
         }
+
+        return boundary_fragments;
     }
 
     fn scanX(
@@ -388,11 +409,11 @@ test "scan for intersections" {
     }
     std.debug.print("==============\n", .{});
 
-    const boundary_fragments = try Raster.createBoundaryFragmentsAlloc(std.testing.allocator, intersections.items);
-    defer boundary_fragments.deinit();
+    const fragment_intersections = try Raster.createFragmentIntersectionsAlloc(std.testing.allocator, intersections.items);
+    defer fragment_intersections.deinit();
 
     std.debug.print("\n============== Boundary Fragments\n", .{});
-    for (boundary_fragments.items) |fragment| {
+    for (fragment_intersections.items) |fragment| {
         std.debug.print("Fragment: {}\n", .{fragment});
     }
     std.debug.print("==============\n", .{});
@@ -400,17 +421,17 @@ test "scan for intersections" {
     std.debug.print("\n============== Boundary Fragments Map\n", .{});
     var bf_index: usize = 0;
     for (0..dimensions.height) |y| {
-        while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y < y) {
+        while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y < y) {
             bf_index += 1;
         }
 
         for (0..dimensions.width) |x| {
-            while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y == y and boundary_fragments.items[bf_index].pixel.x < x) {
+            while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y == y and fragment_intersections.items[bf_index].pixel.x < x) {
                 bf_index += 1;
             }
 
-            if (bf_index < boundary_fragments.items.len) {
-                const pixel = boundary_fragments.items[bf_index].pixel;
+            if (bf_index < fragment_intersections.items.len) {
+                const pixel = fragment_intersections.items[bf_index].pixel;
                 if (pixel.y == y and pixel.x == x) {
                     std.debug.print("X", .{});
                 } else {

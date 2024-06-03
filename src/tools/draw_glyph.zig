@@ -61,14 +61,21 @@ pub fn main() !void {
     }
     std.debug.print("==============\n", .{});
 
-    const boundary_fragments = try draw.Raster.createBoundaryFragmentsAlloc(allocator, intersections.items);
+    const fragment_intersections = try draw.Raster.createFragmentIntersectionsAlloc(allocator, intersections.items);
+    defer fragment_intersections.deinit();
+
+    var boundary_fragments = try draw.Raster.unwindFragmentIntersectionsAlloc(allocator, fragment_intersections.items);
     defer boundary_fragments.deinit();
 
-    draw.Raster.unwindBoundaryFragments(boundary_fragments.items);
+    std.debug.print("\n============== Fragment Intersections\n", .{});
+    for (fragment_intersections.items) |fragment_intersection| {
+        std.debug.print("Intersection: {}\n", .{fragment_intersection});
+    }
+    std.debug.print("==============\n", .{});
 
     std.debug.print("\n============== Boundary Fragments\n", .{});
     for (boundary_fragments.items) |fragment| {
-        std.debug.print("Fragment: {}\n", .{fragment});
+        std.debug.print("Boundary Fragment: {}\n", .{fragment});
     }
     std.debug.print("==============\n", .{});
 
@@ -83,18 +90,18 @@ pub fn main() !void {
     var bf_index: usize = 0;
     for (0..y_range) |y_offset| {
         const y = y_start + @as(i32, @intCast(y_offset));
-        while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y < y) {
+        while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y < y) {
             bf_index += 1;
         }
 
         for (0..x_range) |x_offset| {
             const x = x_start + @as(i32, @intCast(x_offset));
-            while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y == y and boundary_fragments.items[bf_index].pixel.x < x) {
+            while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y == y and fragment_intersections.items[bf_index].pixel.x < x) {
                 bf_index += 1;
             }
 
-            if (bf_index < boundary_fragments.items.len) {
-                const pixel = boundary_fragments.items[bf_index].pixel;
+            if (bf_index < fragment_intersections.items.len) {
+                const pixel = fragment_intersections.items[bf_index].pixel;
                 if (pixel.y == y and pixel.x == x) {
                     std.debug.print("X", .{});
                 } else {
