@@ -22,10 +22,23 @@ const Intersection = curve_module.Intersection;
 
 pub const PathIntersection = struct {
     path_id: u32,
+    curve_index: u32,
     intersection: Intersection,
-};
 
+    pub fn getPixel(self: PathIntersection) PointI32 {
+        return PointI32{
+            .x = @intFromFloat(self.intersection.point.x),
+            .y = @intFromFloat(self.intersection.point.y),
+        };
+    }
+};
 pub const PathIntersectionList = std.ArrayList(PathIntersection);
+
+pub const BoundaryFragment = struct {
+    curve_index: u32,
+    t0: f32,
+    t1: f32,
+};
 
 pub const Pen = struct {
     pub fn drawToTextureViewRgba(self: *Pen, allocator: Allocator, path: Path, view: *TextureViewRgba) !void {
@@ -48,13 +61,18 @@ pub const Pen = struct {
             .height = @floatFromInt(pixel_view_dimensions.height),
         };
 
-        for (path.getCurves()) |curve| {
+        for (path.getCurves(), 0..) |curve, curve_index| {
+            var curve_intersection_range = RangeU32{
+                .start = intersections.items.len,
+                .end = intersections.items.len,
+            };
             const scaled_curve = curve.scale(scaled_pixel_dimensions);
             const scaled_curve_bounds = scaled_curve.getBounds();
 
             // scan x lines within bounds
             try scanX(
                 path.getId(),
+                curve_index,
                 scaled_curve_bounds.min.x,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -66,6 +84,7 @@ pub const Pen = struct {
                 const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                 try scanX(
                     path.getId(),
+                    curve_index,
                     @as(f32, @floatFromInt(grid_x)),
                     scaled_curve,
                     scaled_curve_bounds,
@@ -74,6 +93,7 @@ pub const Pen = struct {
             }
             try scanX(
                 path.getId(),
+                curve_index,
                 scaled_curve_bounds.max.x,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -92,6 +112,7 @@ pub const Pen = struct {
             // scan y lines within bounds
             try scanY(
                 path.getId(),
+                curve_index,
                 scaled_curve_bounds.min.y,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -103,6 +124,7 @@ pub const Pen = struct {
                 const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                 try scanY(
                     path.getId(),
+                    curve_index,
                     @as(f32, @floatFromInt(grid_y)),
                     scaled_curve,
                     scaled_curve_bounds,
@@ -111,6 +133,7 @@ pub const Pen = struct {
             }
             try scanY(
                 path.getId(),
+                curve_index,
                 scaled_curve_bounds.max.y,
                 scaled_curve,
                 scaled_curve_bounds,
@@ -133,8 +156,12 @@ pub const Pen = struct {
         return left.intersection.t < right.intersection.t;
     }
 
+    // intersections must be sorted by t
+    // pub fn createBoundaryFragmentsSorted(intersections: []const PathIntersection) {}
+
     fn scanX(
         path_id: u32,
+        curve_index: u32,
         grid_x: f32,
         curve: Curve,
         scaled_curve_bounds: RectF32,
@@ -157,6 +184,7 @@ pub const Pen = struct {
             const ao = try intersections.addOne();
             ao.* = PathIntersection{
                 .path_id = path_id,
+                .curve_index = curve_index,
                 .intersection = intersection,
             };
         }
@@ -164,6 +192,7 @@ pub const Pen = struct {
 
     fn scanY(
         path_id: u32,
+        curve_index: u32,
         grid_y: f32,
         curve: Curve,
         scaled_curve_bounds: RectF32,
@@ -186,6 +215,7 @@ pub const Pen = struct {
             const ao = try intersections.addOne();
             ao.* = PathIntersection{
                 .path_id = path_id,
+                .curve_index = curve_index,
                 .intersection = intersection,
             };
         }
