@@ -21,10 +21,10 @@ pub fn main() !void {
     var face = try text.Face.initFile(allocator, font_file);
     defer face.deinit();
 
-    var path_outliner = try draw.PathOutliner.init(allocator);
-    defer path_outliner.deinit();
-    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, path_outliner.textOutliner());
-    const path = try path_outliner.createPathAlloc(allocator);
+    var pen = try draw.Pen.init(allocator);
+    defer pen.deinit();
+    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
+    const path = try pen.createPathAlloc(allocator);
     defer path.deinit();
 
     const dimensions = core.DimensionsU32{
@@ -47,7 +47,7 @@ pub fn main() !void {
 
     path.debug();
 
-    const intersections = try draw.Pen.createIntersections(allocator, path, &texture_view);
+    const intersections = try draw.Raster.createIntersections(allocator, path, &texture_view);
     defer intersections.deinit();
 
     std.debug.print("\n============== Intersections\n", .{});
@@ -61,7 +61,7 @@ pub fn main() !void {
     }
     std.debug.print("==============\n", .{});
 
-    const boundary_fragments = try draw.Pen.createBoundaryFragmentsAlloc(allocator, intersections.items);
+    const boundary_fragments = try draw.Raster.createBoundaryFragmentsAlloc(allocator, intersections.items);
     defer boundary_fragments.deinit();
 
     std.debug.print("\n============== Boundary Fragments\n", .{});

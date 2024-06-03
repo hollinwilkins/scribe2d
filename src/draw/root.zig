@@ -3,15 +3,16 @@ pub const Error = error{
 };
 
 const path = @import("./path.zig");
-const pen = @import("./pen.zig");
+const raster = @import("./raster.zig");
 const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
+const pen = @import("./pen.zig");
 
-pub const PathOutliner = path.PathOutliner;
+pub const Pen = pen.Pen;
 pub const Path = path.Path;
 pub const Segment = path.Segment;
 
-pub const Pen = pen.Pen;
+pub const Raster = raster.Raster;
 
 pub const UnmanagedTextureRgba = texture.UnmanagedTextureRgba;
 pub const UnmanagedTextureMonotone = texture.UnmanagedTextureMonotone;
