@@ -356,7 +356,10 @@ pub const QuadraticBezier = struct {
                         //           else        return 1;
                         result[ri] = Intersection{
                             .t = t,
-                            .point = candidate,
+                            .point = PointF32{
+                                .x = line.start.x,
+                                .y = candidate.y,
+                            },
                         };
                         ri += 1;
                     }
@@ -369,7 +372,10 @@ pub const QuadraticBezier = struct {
                         //           else        return 1;
                         result[ri] = Intersection{
                             .t = t,
-                            .point = candidate,
+                            .point = PointF32{
+                                .x = candidate.x,
+                                .y = line.start.y,
+                            },
                         };
                         ri += 1;
                     }
