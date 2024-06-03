@@ -25,11 +25,12 @@ pub fn main() !void {
     const path = try path_outliner.createPathAlloc(allocator);
     defer path.deinit();
 
-    var pen = draw.Pen{};
-    var texture = try draw.UnmanagedTextureRgba.create(allocator, core.DimensionsU32{
-        .width = 64,
-        .height = 64,
-    });
+    const dimensions = core.DimensionsU32{
+        .width = 16,
+        .height = 16,
+    };
+
+    var texture = try draw.UnmanagedTextureRgba.create(allocator, dimensions);
     defer texture.deinit(allocator);
     var texture_view = texture.createView(core.RectU32{
         .min = core.PointU32{
@@ -37,11 +38,55 @@ pub fn main() !void {
             .y = 0,
         },
         .max = core.PointU32{
-            .x = 64,
-            .y = 64,
+            .x = dimensions.width,
+            .y = dimensions.height,
         },
     }).?;
-    try pen.drawToTextureViewRgba(allocator, path, &texture_view);
 
     path.debug();
+
+    const intersections = try draw.Pen.createIntersections(allocator, path, &texture_view);
+    defer intersections.deinit();
+
+    std.debug.print("\n============== Intersections\n", .{});
+    for (intersections.items) |intersection| {
+        std.debug.print("Intersection: curve({}) t({}), ({} @ {})\n", .{
+            intersection.curve_index,
+            intersection.intersection.t,
+            intersection.intersection.point.x,
+            intersection.intersection.point.y,
+        });
+    }
+    std.debug.print("==============\n", .{});
+
+    const boundary_fragments = try draw.Pen.createBoundaryFragmentsAlloc(allocator, intersections.items);
+    defer boundary_fragments.deinit();
+
+    std.debug.print("\n============== Boundary Texture\n", .{});
+    var bf_index: usize = 0;
+    for (0..dimensions.height) |y| {
+        while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y < y) {
+            bf_index += 1;
+        }
+
+        for (0..dimensions.width) |x| {
+            while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y == y and boundary_fragments.items[bf_index].pixel.x < x) {
+                bf_index += 1;
+            }
+
+            if (bf_index < boundary_fragments.items.len) {
+                const pixel = boundary_fragments.items[bf_index].pixel;
+                if (pixel.y == y and pixel.x == x) {
+                    std.debug.print("X", .{});
+                } else {
+                    std.debug.print(";", .{});
+                }
+            } else {
+                std.debug.print(";", .{});
+            }
+        }
+
+        std.debug.print("\n", .{});
+    }
+    std.debug.print("==============\n", .{});
 }

@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const TextOutliner = @This();
+
 ptr: *anyopaque,
 vtable: *const VTable,
 
@@ -40,7 +42,7 @@ pub const Debug = struct {
         .close = Debug.close,
     };
 
-    pub const Instance = @This(){
+    pub const Instance = TextOutliner{
         .ptr = undefined,
         .vtable = &vtable,
     };

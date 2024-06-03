@@ -85,7 +85,7 @@ pub const Pen = struct {
             );
             const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
             const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
-            for (0..grid_x_size) |x_offset| {
+            for (0..grid_x_size + 1) |x_offset| {
                 const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                 try scanX(
                     path.getId(),
@@ -126,7 +126,7 @@ pub const Pen = struct {
             );
             const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
             const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
-            for (0..grid_y_size) |y_offset| {
+            for (0..grid_y_size + 1) |y_offset| {
                 const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                 try scanY(
                     path.getId(),
@@ -177,8 +177,6 @@ pub const Pen = struct {
             const intersection2 = intersections[index + 1];
             if (std.meta.eql(intersection1.intersection.point, intersection2.intersection.point)) {
                 continue;
-            } else {
-                std.debug.print("Not equal... {} !+ {}", .{ intersection1.intersection.point, intersection2.intersection.point });
             }
 
             const pixel = intersection1.getPixel().min(intersection2.getPixel());
@@ -260,11 +258,11 @@ pub const Pen = struct {
         var scaled_intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
         const line = Line.create(
             PointF32{
-                .x = scaled_curve_bounds.min.x,
+                .x = scaled_curve_bounds.min.x - 1.0,
                 .y = grid_y,
             },
             PointF32{
-                .x = scaled_curve_bounds.max.x,
+                .x = scaled_curve_bounds.max.x + 1.0,
                 .y = grid_y,
             },
         );

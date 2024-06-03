@@ -141,27 +141,31 @@ pub const Line = struct {
             // The lines are parallel. This is simplified
             return null;
         } else {
-            const point = PointF32{
-                .x = (b2 * c1 - b1 * c2) / determinant,
-                .y = (a1 * c2 - a2 * c1) / determinant,
+            var t: f32 = undefined;
+
+            const x = if (line.isVertical()) line.start.x else (b2 * c1 - b1 * c2) / determinant;
+            const y = if (line.isHorizontal()) line.start.y else (a1 * c2 - a2 * c1) / determinant;
+            const point: PointF32 = PointF32{
+                .x = x,
+                .y = y,
             };
 
             if (self.isHorizontal()) {
-                return Intersection{
-                    .t = (point.x - self.start.x) / self.getDeltaX(),
-                    .point = point,
-                };
+                t = (point.x - self.start.x) / self.getDeltaX();
             } else if (self.isVertical()) {
-                return Intersection{
-                    .t = (point.y - self.start.y) / a1,
-                    .point = point,
-                };
+                t = (point.y - self.start.y) / a1;
             } else {
+                t = (point.y - self.start.y) / a1;
+            }
+
+            if (t >= 0.0 and t <= 1.0) {
                 return Intersection{
-                    .t = (point.y - self.start.y) / a1,
+                    .t = t,
                     .point = point,
                 };
             }
+
+            return null;
             //     double x = (b2*c1 - b1*c2)/determinant;
             //     double y = (a1*c2 - a2*c1)/determinant;
             //     return new Point(x, y);
