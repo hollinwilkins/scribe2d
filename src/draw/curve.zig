@@ -280,8 +280,8 @@ pub const QuadraticBezier = struct {
             self.control.mul(PointF32{
                 .x = -2.0,
                 .y = -2.0,
-            }),
-        ).add(self.end);
+            }).add(self.end),
+        );
 
         //   var c1={
         //     x: p1.x*-2 + p2.x*2,

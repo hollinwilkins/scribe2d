@@ -85,7 +85,7 @@ pub const Pen = struct {
             );
             const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
             const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
-            for (1..grid_x_size) |x_offset| {
+            for (0..grid_x_size) |x_offset| {
                 const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                 try scanX(
                     path.getId(),
@@ -126,7 +126,7 @@ pub const Pen = struct {
             );
             const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
             const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
-            for (1..grid_y_size) |y_offset| {
+            for (0..grid_y_size) |y_offset| {
                 const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                 try scanY(
                     path.getId(),
@@ -281,10 +281,12 @@ test "scan for intersections" {
     const DimensionsU32 = core.DimensionsU32;
     const PathOutliner = path_module.PathOutliner;
 
-    var texture = try UnmanagedTextureRgba.create(std.testing.allocator, DimensionsU32{
-        .width = 64,
-        .height = 64,
-    });
+    const dimensions = DimensionsU32{
+        .width = 16,
+        .height = 16,
+    };
+
+    var texture = try UnmanagedTextureRgba.create(std.testing.allocator, dimensions);
     defer texture.deinit(std.testing.allocator);
     var texture_view = texture.createView(RectU32.create(
         PointU32{
@@ -292,8 +294,8 @@ test "scan for intersections" {
             .y = 0,
         },
         PointU32{
-            .x = 64,
-            .y = 64,
+            .x = @intCast(dimensions.width),
+            .y = @intCast(dimensions.height),
         },
     )).?;
 
@@ -308,8 +310,8 @@ test "scan for intersections" {
         .x = 0.75,
         .y = 0.25,
     }, PointF32{
-        .x = 0.61,
-        .y = 0.61,
+        .x = 0.50,
+        .y = 0.50,
     });
 
     var path = try path_outliner.createPathAlloc(std.testing.allocator);
@@ -320,7 +322,11 @@ test "scan for intersections" {
 
     std.debug.print("\n============== Intersections\n", .{});
     for (intersections.items) |intersection| {
-        std.debug.print("Intersection: {}\n", .{intersection});
+        std.debug.print("Intersection: t({}), ({} @ {})\n", .{
+            intersection.intersection.t,
+            intersection.intersection.point.x,
+            intersection.intersection.point.y,
+        });
     }
     std.debug.print("==============\n", .{});
 
@@ -330,6 +336,34 @@ test "scan for intersections" {
     std.debug.print("\n============== Boundary Fragments\n", .{});
     for (boundary_fragments.items) |fragment| {
         std.debug.print("Fragment: {}\n", .{fragment});
+    }
+    std.debug.print("==============\n", .{});
+
+    std.debug.print("\n============== Boundary Fragments Map\n", .{});
+    var bf_index: usize = 0;
+    for (0..dimensions.height) |y| {
+        while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y < y) {
+            bf_index += 1;
+        }
+
+        for (0..dimensions.width) |x| {
+            while (bf_index < boundary_fragments.items.len and boundary_fragments.items[bf_index].pixel.y == y and boundary_fragments.items[bf_index].pixel.x < x) {
+                bf_index += 1;
+            }
+
+            if (bf_index < boundary_fragments.items.len) {
+                const pixel = boundary_fragments.items[bf_index].pixel;
+                if (pixel.y == y and pixel.x == x) {
+                    std.debug.print("X", .{});
+                } else {
+                    std.debug.print(";", .{});
+                }
+            } else {
+                std.debug.print(";", .{});
+            }
+        }
+
+        std.debug.print("\n", .{});
     }
     std.debug.print("==============\n", .{});
 }
