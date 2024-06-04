@@ -9,40 +9,86 @@ pub const Intersection = struct {
     point: PointF32,
 };
 
-pub const Curve = union(enum) {
+pub const Curve = struct {
+    end_curve: bool,
+    curve_fn: CurveFn,
+
+    pub fn applyT(self: Curve, t: f32) PointF32 {
+        return self.curve_fn.applyT(t);
+    }
+
+    pub fn isEndCurve(self: Curve) bool {
+        return self.end_curve;
+    }
+
+    pub fn getBounds(self: Curve) RectF32 {
+        return self.curve_fn.getBounds();
+    }
+
+    pub fn invertY(self: Curve) Curve {
+        return Curve{
+            .end_curve = self.end_curve,
+            .curve_fn = self.curve_fn.invertY(),
+        };
+    }
+
+    pub fn scale(self: Curve, dimensions: DimensionsF32) Curve {
+        return Curve{
+            .end_curve = self.end_curve,
+            .curve_fn = self.curve_fn.scale(dimensions),
+        };
+    }
+
+    pub fn intersectLine(self: Curve, line: Line, result: *[3]Intersection) []const Intersection {
+        return self.curve_fn.intersectLine(line, result);
+    }
+
+    pub fn monotonicCuts(self: Curve, result: *[2]Intersection) []const Intersection {
+        return self.curve_fn.monotonicCuts(result);
+    }
+};
+
+pub const CurveFn = union(enum) {
     line: Line,
     quadratic_bezier: QuadraticBezier,
 
-    pub fn getBounds(self: Curve) RectF32 {
+    pub fn applyT(self: CurveFn, t: f32) PointF32 {
+        switch (self) {
+            .line => |*l| return l.applyT(t),
+            .quadratic_bezier => |*qb| return qb.applyT(t),
+        }
+    }
+
+    pub fn getBounds(self: CurveFn) RectF32 {
         switch (self) {
             .line => |*line| return line.getBounds(),
             .quadratic_bezier => |*qb| return qb.getBounds(),
         }
     }
 
-    pub fn invertY(self: Curve) Curve {
+    pub fn invertY(self: CurveFn) CurveFn {
         switch (self) {
-            .line => |*l| return Curve{
+            .line => |*l| return CurveFn{
                 .line = l.invertY(),
             },
-            .quadratic_bezier => |*qb| return Curve{
+            .quadratic_bezier => |*qb| return CurveFn{
                 .quadratic_bezier = qb.invertY(),
             },
         }
     }
 
-    pub fn scale(self: Curve, dimensions: DimensionsF32) Curve {
+    pub fn scale(self: CurveFn, dimensions: DimensionsF32) CurveFn {
         switch (self) {
-            .line => |*l| return Curve{
+            .line => |*l| return CurveFn{
                 .line = l.scale(dimensions),
             },
-            .quadratic_bezier => |*qb| return Curve{
+            .quadratic_bezier => |*qb| return CurveFn{
                 .quadratic_bezier = qb.scale(dimensions),
             },
         }
     }
 
-    pub fn intersectLine(self: Curve, line: Line, result: *[3]Intersection) []const Intersection {
+    pub fn intersectLine(self: CurveFn, line: Line, result: *[3]Intersection) []const Intersection {
         switch (self) {
             .line => |*l| {
                 if (l.intersectLine(line)) |intersection| {
@@ -58,7 +104,7 @@ pub const Curve = union(enum) {
         }
     }
 
-    pub fn monotonicCuts(self: Curve, result: *[2]Intersection) []const Intersection {
+    pub fn monotonicCuts(self: CurveFn, result: *[2]Intersection) []const Intersection {
         switch (self) {
             // lines are monotonic...
             .line => |_| {
@@ -93,6 +139,17 @@ pub const Line = struct {
 
     pub fn isHorizontal(self: Line) bool {
         return self.start.y == self.end.y;
+    }
+
+    pub fn applyT(self: Line, t: f32) PointF32 {
+        return self.start.add(
+            (self.end.sub(self.start).mul(
+                PointF32{
+                    .x = t,
+                    .y = t,
+                },
+            )),
+        );
     }
 
     pub fn scale(self: Line, dimensions: DimensionsF32) Line {

@@ -9,6 +9,7 @@ const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 const RangeF32 = core.RangeF32;
 const Curve = curve_module.Curve;
+const CurveFn = curve_module.CurveFn;
 const Line = curve_module.Line;
 const QuadraticBezier = curve_module.QuadraticBezier;
 const SequenceU32 = core.SequenceU32;
@@ -92,6 +93,9 @@ pub const Pen = struct {
     pub fn moveTo(self: *@This(), point: PointF32) !void {
         self.start = null;
 
+        if (self.curves.items.len > 0) {
+            self.curves.items[self.curves.items.len - 1].end_curve = true;
+        }
         // set current location to point
         self.location = point;
     }
@@ -100,9 +104,12 @@ pub const Pen = struct {
         // attempt to add a line curve from current location to point
         const ao = try self.curves.addOne();
         ao.* = Curve{
-            .line = Line{
-                .start = self.location,
-                .end = point,
+            .end_curve = false,
+            .curve_fn = CurveFn{
+                .line = Line{
+                    .start = self.location,
+                    .end = point,
+                },
             },
         };
 
@@ -116,10 +123,13 @@ pub const Pen = struct {
         // attempt to add a quadratic curve from current location to point
         const ao = try self.curves.addOne();
         ao.* = Curve{
-            .quadratic_bezier = QuadraticBezier{
-                .start = self.location,
-                .end = point,
-                .control = control,
+            .end_curve = false,
+            .curve_fn = CurveFn{
+                .quadratic_bezier = QuadraticBezier{
+                    .start = self.location,
+                    .end = point,
+                    .control = control,
+                },
             },
         };
 
@@ -134,6 +144,7 @@ pub const Pen = struct {
         if (self.start) |start| {
             if (!std.meta.eql(start, self.location)) {
                 try self.lineTo(start);
+                self.curves.items[self.curves.items.len - 1].end_curve = true;
             }
 
             self.location = start;

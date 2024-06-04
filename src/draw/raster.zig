@@ -24,6 +24,7 @@ const Intersection = curve_module.Intersection;
 pub const PathIntersection = struct {
     path_id: u32,
     curve_index: u32,
+    is_end: bool,
     intersection: Intersection,
 
     pub fn getPixel(self: PathIntersection) PointI32 {
@@ -82,14 +83,15 @@ pub const Raster = struct {
             const scaled_curve_bounds = scaled_curve.getBounds();
 
             // scan x lines within bounds
-            try scanX(
-                path.getId(),
-                curve_index,
-                scaled_curve_bounds.min.x,
-                scaled_curve,
-                scaled_curve_bounds,
-                &intersections,
-            );
+            (try intersections.addOne()).* = PathIntersection{
+                .path_id = path.getId(),
+                .curve_index = curve_index,
+                .intersection = Intersection{
+                    .t = 0.0,
+                    .point = scaled_curve.applyT(0.0),
+                },
+                .is_end = false,
+            };
             const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
             const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
             for (0..grid_x_size + 1) |x_offset| {
@@ -103,34 +105,8 @@ pub const Raster = struct {
                     &intersections,
                 );
             }
-            try scanX(
-                path.getId(),
-                curve_index,
-                scaled_curve_bounds.max.x,
-                scaled_curve,
-                scaled_curve_bounds,
-                &intersections,
-            );
-
-            // insert monotonic cuts, which ensure there are segmented montonic curves
-            for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
-                const ao = try intersections.addOne();
-                ao.* = PathIntersection{
-                    .path_id = path.getId(),
-                    .curve_index = curve_index,
-                    .intersection = intersection,
-                };
-            }
 
             // scan y lines within bounds
-            try scanY(
-                path.getId(),
-                curve_index,
-                scaled_curve_bounds.min.y,
-                scaled_curve,
-                scaled_curve_bounds,
-                &intersections,
-            );
             const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
             const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
             for (0..grid_y_size + 1) |y_offset| {
@@ -144,14 +120,28 @@ pub const Raster = struct {
                     &intersections,
                 );
             }
-            try scanY(
-                path.getId(),
-                curve_index,
-                scaled_curve_bounds.max.y,
-                scaled_curve,
-                scaled_curve_bounds,
-                &intersections,
-            );
+
+            // insert monotonic cuts, which ensure there are segmented montonic curves
+            for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
+                const ao = try intersections.addOne();
+                ao.* = PathIntersection{
+                    .path_id = path.getId(),
+                    .curve_index = curve_index,
+                    .intersection = intersection,
+                    .is_end = false,
+                };
+            }
+
+            // last virtual intersection
+            (try intersections.addOne()).* = PathIntersection{
+                .path_id = path.getId(),
+                .curve_index = curve_index,
+                .intersection = Intersection{
+                    .t = 1.0,
+                    .point = scaled_curve.applyT(1.0),
+                },
+                .is_end = scaled_curve.isEndCurve(),
+            };
 
             curve_intersection_range.end = intersections.items.len;
 
@@ -183,6 +173,10 @@ pub const Raster = struct {
             const intersection1 = intersections[index];
             const intersection2 = intersections[index + 1];
             if (std.meta.eql(intersection1.intersection.point, intersection2.intersection.point)) {
+                continue;
+            }
+
+            if (intersection1.is_end) {
                 continue;
             }
 
@@ -318,6 +312,7 @@ pub const Raster = struct {
                 .path_id = path_id,
                 .curve_index = curve_index,
                 .intersection = intersection,
+                .is_end = false,
             };
         }
     }
@@ -349,6 +344,7 @@ pub const Raster = struct {
                 .path_id = path_id,
                 .curve_index = curve_index,
                 .intersection = intersection,
+                .is_end = false,
             };
         }
     }
