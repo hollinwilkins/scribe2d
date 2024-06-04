@@ -22,6 +22,13 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn negate(self: @This()) @This() {
+            return @This(){
+                .x = -self.x,
+                .y = -self.y,
+            };
+        }
+
         pub fn dot(self: @This(), other: @This()) T {
             return self.x * other.x + self.y * other.y;
         }

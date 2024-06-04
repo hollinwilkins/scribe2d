@@ -11,7 +11,7 @@ const UnmanagedTexture = texture_module.UnmanagedTexture;
 pub fn createHalfPlanes(
     comptime T: type,
     allocator: Allocator,
-    points: []PointF32,
+    points: []const PointF32,
     dimensions: DimensionsU32,
 ) !UnmanagedTexture(T) {
     var texture = try UnmanagedTexture(T).create(allocator, dimensions);
@@ -20,7 +20,7 @@ pub fn createHalfPlanes(
         .y = 0.5,
     };
 
-    for (0..texture.len) |index| {
+    for (0..texture.pixels.len) |index| {
         // x,y in middle of texel
         const x: u32 = @intCast(index % dimensions.width);
         const y: u32 = @intCast(index / dimensions.width);
@@ -37,13 +37,13 @@ pub fn createHalfPlanes(
         texture.getPixel(PointU32{
             .x = x,
             .y = y,
-        }).* = calculateHalfPlaneBitmask(T, n, c, points);
+        }).?.* = calculateHalfPlaneBitmask(T, n, c, points);
     }
 
     return texture;
 }
 
-pub fn calculateHalfPlaneBitmask(comptime T: type, n: PointF32, c: f32, points: []PointF32) T {
+pub fn calculateHalfPlaneBitmask(comptime T: type, n: PointF32, c: f32, points: []const PointF32) T {
     var mask: T = 0;
     for (points, 0..) |point, i| {
         const v = n.dot(point.sub(PointF32{
@@ -51,7 +51,7 @@ pub fn calculateHalfPlaneBitmask(comptime T: type, n: PointF32, c: f32, points: 
             .y = 0.5,
         }));
         if (v > c) {
-            mask = mask & (1 << i);
+            mask = mask & (@as(u16, 1) << @as(u4, @intCast(i)));
         }
     }
 
@@ -63,11 +63,11 @@ pub fn createVerticalLookup(comptime T: type, allocator: Allocator, n: u32, poin
 
     for (0..n) |index| {
         var mask: T = 0;
-        const y = @as(f32, @floatFromInt(index)) / @as(f32, @floatCast(n));
+        const y = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(n));
 
         for (points, 0..) |point, point_index| {
             if (y < point.y) {
-                mask = mask & (1 << point_index);
+                mask = mask & (@as(T, 1) << @intCast(point_index));
             }
         }
 
@@ -77,23 +77,23 @@ pub fn createVerticalLookup(comptime T: type, allocator: Allocator, n: u32, poin
     return lookup;
 }
 
-const UV_SAMPLE_COUNT_1: [1]PointF32 = [1]PointF32{
+pub const UV_SAMPLE_COUNT_1: [1]PointF32 = [1]PointF32{
     PointF32.create(0.5, 0.5),
 };
 
-const UV_SAMPLE_COUNT_2: [2]PointF32 = [2]PointF32{
+pub const UV_SAMPLE_COUNT_2: [2]PointF32 = [2]PointF32{
     PointF32.create(0.75, 0.75),
     PointF32.create(0.25, 0.25),
 };
 
-const UV_SAMPLE_COUNT_4: [4]PointF32 = [4]PointF32{
+pub const UV_SAMPLE_COUNT_4: [4]PointF32 = [4]PointF32{
     PointF32.create(0.375, 0.125),
     PointF32.create(0.875, 0.375),
     PointF32.create(0.125, 0.625),
     PointF32.create(0.625, 0.875),
 };
 
-const UV_SAMPLE_COUNT_8: [8]PointF32 = [8]PointF32{
+pub const UV_SAMPLE_COUNT_8: [8]PointF32 = [8]PointF32{
     PointF32.create(0.5625, 0.3125),
     PointF32.create(0.4375, 0.6875),
     PointF32.create(0.8125, 0.5625),
@@ -104,7 +104,7 @@ const UV_SAMPLE_COUNT_8: [8]PointF32 = [8]PointF32{
     PointF32.create(0.9375, 0.0625),
 };
 
-const UV_SAMPLE_COUNT_16: [16]PointF32 = [16]PointF32{
+pub const UV_SAMPLE_COUNT_16: [16]PointF32 = [16]PointF32{
     PointF32.create(0.5625, 0.5625),
     PointF32.create(0.4375, 0.3125),
     PointF32.create(0.3125, 0.625),
