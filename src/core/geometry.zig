@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub fn Point(comptime T: type) type {
     return struct {
         x: T = 0,
@@ -8,6 +10,20 @@ pub fn Point(comptime T: type) type {
                 .x = x,
                 .y = y,
             };
+        }
+
+        pub fn normal(self: @This()) @This() {
+            std.debug.assert(!(self.x == 0 and self.y == 0));
+            const diagonal = std.math.sqrt(self.x * self.x + self.y * self.y);
+
+            return @This(){
+                .x = self.x / diagonal,
+                .y = self.y / diagonal,
+            };
+        }
+
+        pub fn dot(self: @This(), other: @This()) T {
+            return self.x * other.x + self.y * other.y;
         }
 
         pub fn add(self: @This(), other: @This()) @This() {
@@ -111,6 +127,7 @@ pub fn Dimensions(comptime T: type) type {
 pub const DimensionsF32 = Dimensions(f32);
 pub const DimensionsUsize = Dimensions(usize);
 pub const DimensionsU32 = Dimensions(u32);
+pub const DimensionsU16 = Dimensions(u16);
 
 pub fn Rect(comptime T: type) type {
     return struct {

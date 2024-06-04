@@ -1,20 +1,84 @@
+const std = @import("std");
 const core = @import("../core/root.zig");
+const texture_module = @import("./texture.zig");
+const mem = std.mem;
+const Allocator = mem.Allocator;
 const PointF32 = core.PointF32;
+const PointU32 = core.PointU32;
+const DimensionsU32 = core.DimensionsU32;
+const UnmanagedTexture = texture_module.UnmanagedTexture;
 
 pub fn createHalfPlanes(
-    n_samples: comptime_int,
-    t: type,
-    points: *const [n_samples]PointF32,
-    masks: *const [n_samples + 1]t,
-) void {}
+    comptime T: type,
+    allocator: Allocator,
+    points: []PointF32,
+    dimensions: DimensionsU32,
+) !UnmanagedTexture(T) {
+    var texture = try UnmanagedTexture(T).create(allocator, dimensions);
+    const origin = PointF32{
+        .x = 0.5,
+        .y = 0.5,
+    };
+
+    for (0..texture.len) |index| {
+        // x,y in middle of texel
+        const x: u32 = @intCast(index % dimensions.width);
+        const y: u32 = @intCast(index / dimensions.width);
+        const texel_x = (@as(f32, @floatFromInt(x)) + 0.5) / @as(f32, @floatFromInt(dimensions.width));
+        const texel_y = (@as(f32, @floatFromInt(y)) + 0.5) / @as(f32, @floatFromInt(dimensions.height));
+        const texel = PointF32{
+            .x = texel_x,
+            .y = texel_y,
+        };
+        const n = texel.sub(origin).normal();
+        const c: f32 = 1.0 - 2.0 * (texel.sub(origin).dot(n));
+
+        // calculate bitmask
+        texture.getPixel(PointU32{
+            .x = x,
+            .y = y,
+        }).* = calculateHalfPlaneBitmask(T, n, c, points);
+    }
+
+    return texture;
+}
+
+pub fn calculateHalfPlaneBitmask(comptime T: type, n: PointF32, c: f32, points: []PointF32) T {
+    var mask: T = 0;
+    for (points, 0..) |point, i| {
+        const v = n.dot(point.sub(PointF32{
+            .x = 0.5,
+            .y = 0.5,
+        }));
+        if (v > c) {
+            mask = mask & (1 << i);
+        }
+    }
+
+    return mask;
+}
+
+pub fn createVerticalLookup(comptime T: type, allocator: Allocator, n: u32, points: []const PointF32) ![]T {
+    var lookup = try allocator.alloc(T, n);
+
+    for (0..n) |index| {
+        var mask: T = 0;
+        const y = @as(f32, @floatFromInt(index)) / @as(f32, @floatCast(n));
+
+        for (points, 0..) |point, point_index| {
+            if (y < point.y) {
+                mask = mask & (1 << point_index);
+            }
+        }
+
+        lookup[index] = mask;
+    }
+
+    return lookup;
+}
 
 const UV_SAMPLE_COUNT_1: [1]PointF32 = [1]PointF32{
     PointF32.create(0.5, 0.5),
-};
-
-const UV_SAMPLE_COUNT_1_VERTICAL_LOOKUP: [2]u1 = [2]u1{
-    0b0,
-    0b1,
 };
 
 const UV_SAMPLE_COUNT_2: [2]PointF32 = [2]PointF32{
@@ -22,25 +86,11 @@ const UV_SAMPLE_COUNT_2: [2]PointF32 = [2]PointF32{
     PointF32.create(0.25, 0.25),
 };
 
-const UV_SAMPLE_COUNT_2_VERTICAL_LOOKUP: [3]u2 = [3]u2{
-    0b00,
-    0b01,
-    0b11,
-};
-
 const UV_SAMPLE_COUNT_4: [4]PointF32 = [4]PointF32{
     PointF32.create(0.375, 0.125),
     PointF32.create(0.875, 0.375),
     PointF32.create(0.125, 0.625),
     PointF32.create(0.625, 0.875),
-};
-
-const UV_SAMPLE_COUNT_4_VERTICAL_LOOKUP: [5]u4 = [5]u4{
-    0b0000,
-    0b0001,
-    0b0011,
-    0b0111,
-    0b1111,
 };
 
 const UV_SAMPLE_COUNT_8: [8]PointF32 = [8]PointF32{
@@ -52,18 +102,6 @@ const UV_SAMPLE_COUNT_8: [8]PointF32 = [8]PointF32{
     PointF32.create(0.0625, 0.4375),
     PointF32.create(0.6875, 0.9375),
     PointF32.create(0.9375, 0.0625),
-};
-
-const UV_SAMPLE_COUNT_8_VERTICAL_LOOKUP: [9]u8 = [9]u8{
-    0b00000000,
-    0b00000001,
-    0b00000011,
-    0b00000111,
-    0b00001111,
-    0b00011111,
-    0b00111111,
-    0b01111111,
-    0b11111111,
 };
 
 const UV_SAMPLE_COUNT_16: [16]PointF32 = [16]PointF32{
@@ -83,24 +121,4 @@ const UV_SAMPLE_COUNT_16: [16]PointF32 = [16]PointF32{
     PointF32.create(0.9375, 0.25),
     PointF32.create(0.875, 0.9375),
     PointF32.create(0.0625, 0.0),
-};
-
-const UV_SAMPLE_COUNT_16_VERTICAL_LOOKUP: [17]u16 = [17]u16{
-    0b0000000000000000,
-    0b0000000000000001,
-    0b0000000000000011,
-    0b0000000000000111,
-    0b0000000000001111,
-    0b0000000000011111,
-    0b0000000000111111,
-    0b0000000001111111,
-    0b0000000011111111,
-    0b0000000111111111,
-    0b0000001111111111,
-    0b0000011111111111,
-    0b0000111111111111,
-    0b0001111111111111,
-    0b0011111111111111,
-    0b0111111111111111,
-    0b1111111111111111,
 };

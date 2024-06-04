@@ -15,6 +15,7 @@ pub const RectU32 = geometry.RectU32;
 
 pub const Dimensions = geometry.Dimensions;
 pub const DimensionsF32 = geometry.DimensionsF32;
+pub const DimensionsU16 = geometry.DimensionsU16;
 pub const DimensionsU32 = geometry.DimensionsU32;
 
 pub const Range = range.Range;
