@@ -3,6 +3,13 @@ pub fn Point(comptime T: type) type {
         x: T = 0,
         y: T = 0,
 
+        pub fn create(x: T, y: T) @This() {
+            return @This(){
+                .x = x,
+                .y = y,
+            };
+        }
+
         pub fn add(self: @This(), other: @This()) @This() {
             return @This(){
                 .x = self.x + other.x,
