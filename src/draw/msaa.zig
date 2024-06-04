@@ -1,41 +1,12 @@
 const core = @import("../core/root.zig");
 const PointF32 = core.PointF32;
 
-pub fn SampleTable(n: comptime_int) ?type {
-    return struct {};
-}
-
-pub const SampleTable = struct {
-    // smallest unsigned-int that can store the bitmask
+pub fn createHalfPlanes(
+    n_samples: comptime_int,
     t: type,
-    uvs: []PointF32,
-
-    pub fn create(sample_count: comptime_int) ?SampleTable {
-        return switch (sample_count) {
-            1 => SampleTable{
-                .t = u1,
-                .uvs = UV_SAMPLE_COUNT_1,
-            },
-            2 => SampleTable{
-                .t = u2,
-                .uvs = UV_SAMPLE_COUNT_2,
-            },
-            4 => SampleTable{
-                .t = u4,
-                .uvs = UV_SAMPLE_COUNT_4,
-            },
-            8 => SampleTable{
-                .t = u8,
-                .uvs = UV_SAMPLE_COUNT_8,
-            },
-            16 => SampleTable{
-                .t = u16,
-                .uvs = UV_SAMPLE_COUNT_16,
-            },
-            else => null,
-        };
-    }
-};
+    points: *const [n_samples]PointF32,
+    masks: *const [n_samples + 1]t,
+) void {}
 
 const UV_SAMPLE_COUNT_1: [1]PointF32 = [1]PointF32{
     PointF32.create(0.5, 0.5),
@@ -115,6 +86,7 @@ const UV_SAMPLE_COUNT_16: [16]PointF32 = [16]PointF32{
 };
 
 const UV_SAMPLE_COUNT_16_VERTICAL_LOOKUP: [17]u16 = [17]u16{
+    0b0000000000000000,
     0b0000000000000001,
     0b0000000000000011,
     0b0000000000000111,

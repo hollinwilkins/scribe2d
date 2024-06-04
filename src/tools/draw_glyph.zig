@@ -94,6 +94,8 @@ pub fn main() !void {
             bf_index += 1;
         }
 
+        std.debug.print("{:0>4}: ", .{y});
+
         for (0..x_range) |x_offset| {
             const x = x_start + @as(i32, @intCast(x_offset));
             while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y == y and fragment_intersections.items[bf_index].pixel.x < x) {
