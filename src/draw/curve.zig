@@ -221,18 +221,41 @@ pub const Line = struct {
         }
 
         const point = self.applyT(t);
-        const fixed_point = PointF32{
-            .x = point.x,
-            .y = other.start.y,
-        };
-
         if (point.x < other.start.x or point.x > other.end.x) {
             return null;
         }
 
         return Intersection{
             .t = t,
-            .point = fixed_point,
+            .point = PointF32{
+                .x = point.x,
+                .y = other.start.y,
+            },
+        };
+    }
+
+    pub fn intersectVerticalLine(self: Line, other: Line) ?Intersection {
+        const delta_x = self.getDeltaX();
+        if (delta_x == 0.0) {
+            return null;
+        }
+
+        const t = -(self.start.x - other.start.x) / delta_x;
+        if (t < 0.0 or t > 1.0) {
+            return null;
+        }
+
+        const point = self.applyT(t);
+        if (point.y < other.start.y or point.y > other.end.y) {
+            return null;
+        }
+
+        return Intersection{
+            .t = t,
+            .point = PointF32{
+                .x = other.start.x,
+                .y = point.y,
+            },
         };
     }
 
@@ -669,6 +692,125 @@ test "horizontal line intersections" {
     try test_util.expectApproxEqlIntersectionTX(Intersection{ .t = 5.6685e-1, .point = PointF32{
         .x = 420.69,
         .y = 1.337,
+    } }, intersection7, test_util.DEFAULT_TOLERANCE, 0.0);
+    try std.testing.expectEqual(null, intersection8);
+    try std.testing.expectEqual(null, intersection9);
+}
+
+test "vertical line intersections" {
+    const test_util = @import("./test_util.zig");
+
+    const line1 = Line.create(PointF32{
+        .x = 0.0,
+        .y = 0.0,
+    }, PointF32{
+        .x = 10.0,
+        .y = 10.0,
+    });
+    const line2 = Line.create(PointF32{
+        .x = -22.5924872,
+        .y = -3.452342,
+    }, PointF32{
+        .x = 13.242313739,
+        .y = 22.124312,
+    });
+    const line3 = Line.create(PointF32{
+        .x = -66.7420,
+        .y = -3.145,
+    }, PointF32{
+        .x = -66.7420,
+        .y = 10.0,
+    });
+    const line4 = Line.create(PointF32{
+        .x = -10.0,
+        .y = 420.69,
+    }, PointF32{
+        .x = 10.0,
+        .y = 420.69,
+    });
+
+    const intersection1 = line1.intersectVerticalLine(Line.create(PointF32{
+        .x = 2.0,
+        .y = 0.0,
+    }, PointF32{
+        .x = 2.0,
+        .y = 10.0,
+    })).?;
+    const intersection2 = line1.intersectVerticalLine(Line.create(PointF32{
+        .x = 2.0,
+        .y = 10.0,
+    }, PointF32{
+        .x = 2.0,
+        .y = 20.0,
+    }));
+    const intersection3 = line1.intersectVerticalLine(Line.create(PointF32{
+        .x = 0.0,
+        .y = 0.0,
+    }, PointF32{
+        .x = 0.0,
+        .y = 20.0,
+    })).?;
+    const intersection4 = line2.intersectVerticalLine(Line.create(PointF32{
+        .x = 2.78324,
+        .y = -20.0,
+    }, PointF32{
+        .x = 2.78324,
+        .y = 20.0,
+    })).?;
+    const intersection5 = line3.intersectVerticalLine(line3);
+    const intersection6 = line3.intersectVerticalLine(Line.create(PointF32{
+        .x = 33.4,
+        .y = -99.0,
+    }, PointF32{
+        .x = 33.4,
+        .y = 99.0,
+    }));
+    const intersection7 = line4.intersectVerticalLine(Line.create(PointF32{
+        .x = 1.337,
+        .y = 400.0,
+    }, PointF32{
+        .x = 1.337,
+        .y = 460.0,
+    })).?;
+    const intersection8 = line4.intersectVerticalLine(Line.create(PointF32{
+        .x = -1000.0,
+        .y = 400.0,
+    }, PointF32{
+        .x = -1000.0,
+        .y = 460.0,
+    }));
+    const intersection9 = line4.intersectVerticalLine(Line.create(PointF32{
+        .x = -1000.0,
+        .y = 400.0,
+    }, PointF32{
+        .x = -1000.0,
+        .y = 460.0,
+    }));
+
+    try test_util.expectApproxEqlIntersectionTX(Intersection{
+        .t = 0.2,
+        .point = PointF32{
+            .x = 2.0,
+            .y = 2.0,
+        },
+    }, intersection1, test_util.DEFAULT_TOLERANCE, test_util.DEFAULT_TOLERANCE);
+    try std.testing.expectEqual(null, intersection2);
+    try test_util.expectApproxEqlIntersectionTX(Intersection{
+        .t = 0.0,
+        .point = PointF32{
+            .x = 0.0,
+            .y = 0.0,
+        },
+    }, intersection3, test_util.DEFAULT_TOLERANCE, test_util.DEFAULT_TOLERANCE);
+    try test_util.expectApproxEqlIntersectionTX(Intersection{ .t = 7.0813084e-1, .point = PointF32{
+        .x = 2.78324,
+        .y = 1.4659274e1,
+    } }, intersection4, test_util.DEFAULT_TOLERANCE, test_util.DEFAULT_TOLERANCE);
+    try std.testing.expectEqual(intersection5, null);
+    try std.testing.expectEqual(intersection6, null);
+    try test_util.expectApproxEqlIntersectionTX(Intersection{ .t = 5.6685e-1, .point = PointF32{
+        .x = 1.337,
+        .y = 420.69,
     } }, intersection7, test_util.DEFAULT_TOLERANCE, 0.0);
     try std.testing.expectEqual(null, intersection8);
     try std.testing.expectEqual(null, intersection9);
