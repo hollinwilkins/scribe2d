@@ -426,6 +426,39 @@ pub const QuadraticBezier = struct {
         return result[0..intersections];
     }
 
+    pub fn intersectVerticalLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {
+        std.debug.assert(line.isVertical());
+        const a = self.start.x - (2.0 * self.control.x) + self.end.x;
+        const b = 2.0 * (self.control.x - self.start.x);
+        const c = self.start.x - line.start.x;
+        var roots_result: [2]f32 = [_]f32{undefined} ** 2;
+        const roots = getRoots2(a, b, c, &roots_result);
+
+        var intersections: usize = 0;
+        for (roots) |root| {
+            if (root < 0.0 or root > 1.0) {
+                continue;
+            }
+
+            const point = self.applyT(root);
+            if (point.y < line.start.y or point.y > line.end.y) {
+                continue;
+            }
+
+            result[intersections] = Intersection{
+                .t = root,
+                .point = PointF32{
+                    .x = line.start.x,
+                    .y = point.y,
+                }
+            };
+            intersections += 1;
+        }
+
+        return result[0..intersections];
+    }
+
+
     pub fn getRoots2(a: f32, b: f32, c: f32, result: *[2]f32) []const f32 {
         if (a == 0) {
             result[0] = -c / b;
@@ -882,6 +915,16 @@ test "horizontal line x quadratic bezier intersections" {
         .x = 1.0,
         .y = 0.0,
     });
+    const bezier2 = QuadraticBezier.create(PointF32{
+        .x = 3.1415926535,
+        .y = 5.241417893,
+    }, PointF32{
+        .x = 1.3242938,
+        .y = -5.471239,
+    }, PointF32{
+        .x = -13.2223,
+        .y = -8.7432498,
+    });
 
     var intersections_result: [2]Intersection = [_]Intersection{undefined} ** 2;
 
@@ -919,9 +962,98 @@ test "horizontal line x quadratic bezier intersections" {
         .x = 0.0,
         .y = 0.0,
     } }, intersections4[0], test_util.DEFAULT_TOLERANCE, 0.0);
-
     try test_util.expectApproxEqlIntersectionTX(Intersection{ .t = 1.0, .point = PointF32{
         .x = 1.0,
         .y = 0.0,
     } }, intersections4[1], test_util.DEFAULT_TOLERANCE, 0.0);
+
+    const intersections5 = bezier2.intersectHorizontalLine(Line.create(PointF32{
+        .x = -15.0,
+        .y = -3.89213,
+    }, PointF32{
+        .x = 40.0,
+        .y = -3.89213,
+    }), &intersections_result);
+    try test_util.expectApproxEqlIntersectionTX(Intersection{ .t = 5.2031684e-1, .point = PointF32{
+        .x = -2.1957464e0,
+        .y = -3.89213,
+    } }, intersections5[0], test_util.DEFAULT_TOLERANCE, 0.0);
 }
+
+test "vertical line x quadratic bezier intersections" {
+    const test_util = @import("./test_util.zig");
+    const bezier1 = QuadraticBezier.create(PointF32{
+        .x = 0.0,
+        .y = 0.0,
+    }, PointF32{
+        .x = 0.5,
+        .y = 0.5,
+    }, PointF32{
+        .x = 0.0,
+        .y = 1.0,
+    });
+    const bezier2 = QuadraticBezier.create(PointF32{
+        .x = 5.241417893,
+        .y = 3.1415926535,
+    }, PointF32{
+        .x = -5.471239,
+        .y = 1.3242938,
+    }, PointF32{
+        .x = -8.7432498,
+        .y = -13.2223,
+    });
+
+    var intersections_result: [2]Intersection = [_]Intersection{undefined} ** 2;
+
+    const intersections1 = bezier1.intersectVerticalLine(Line.create(PointF32{
+        .x = 0.25,
+        .y = -1.0,
+    }, PointF32{
+        .x = 0.25,
+        .y = 2.0,
+    }), &intersections_result);
+
+    try test_util.expectApproxEqlIntersectionTY(Intersection{ .t = 0.5, .point = PointF32{
+        .x = 0.25,
+        .y = 0.5,
+    } }, intersections1[0], test_util.DEFAULT_TOLERANCE, 0.0);
+
+    const intersections2 = bezier1.intersectVerticalLine(Line.create(PointF32{
+        .x = 0.25,
+        .y = -1.0,
+    }, PointF32{
+        .x = 0.25,
+        .y = -0.5,
+    }), &intersections_result);
+    try std.testing.expectEqual(0, intersections2.len);
+
+    const intersections4 = bezier1.intersectVerticalLine(Line.create(PointF32{
+        .x = 0.0,
+        .y = -1.0,
+    }, PointF32{
+        .x = 0.0,
+        .y = 2.0,
+    }), &intersections_result);
+
+    try test_util.expectApproxEqlIntersectionTY(Intersection{ .t = 0.0, .point = PointF32{
+        .x = 0.0,
+        .y = 0.0,
+    } }, intersections4[0], test_util.DEFAULT_TOLERANCE, 0.0);
+    try test_util.expectApproxEqlIntersectionTY(Intersection{ .t = 1.0, .point = PointF32{
+        .x = 0.0,
+        .y = 1.0,
+    } }, intersections4[1], test_util.DEFAULT_TOLERANCE, 0.0);
+
+    const intersections5 = bezier2.intersectVerticalLine(Line.create(PointF32{
+        .x = -3.89213,
+        .y = -15.0,
+    }, PointF32{
+        .x = -3.89213,
+        .y = 40.0,
+    }), &intersections_result);
+    try test_util.expectApproxEqlIntersectionTY(Intersection{ .t = 5.2031684e-1, .point = PointF32{
+        .x = -3.89213,
+        .y = -2.1957464e0,
+    } }, intersections5[0], test_util.DEFAULT_TOLERANCE, 0.0);
+}
+
