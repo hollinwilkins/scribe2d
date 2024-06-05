@@ -39,6 +39,14 @@ pub const Curve = struct {
         };
     }
 
+    pub fn intersectHorizontalLine(self: Curve, line: Line, result: *[3]Intersection) []const Intersection {
+        return self.curve_fn.intersectHorizontalLine(line, result);
+    }
+
+    pub fn intersectVerticalLine(self: Curve, line: Line, result: *[3]Intersection) []const Intersection {
+        return self.curve_fn.intersectVerticalLine(line, result);
+    }
+
     pub fn intersectLine(self: Curve, line: Line, result: *[3]Intersection) []const Intersection {
         return self.curve_fn.intersectLine(line, result);
     }
@@ -84,6 +92,38 @@ pub const CurveFn = union(enum) {
             },
             .quadratic_bezier => |*qb| return CurveFn{
                 .quadratic_bezier = qb.scale(dimensions),
+            },
+        }
+    }
+
+    pub fn intersectHorizontalLine(self: CurveFn, line: Line, result: *[3]Intersection) []const Intersection {
+        switch (self) {
+            .line => |*l| {
+                if (l.intersectHorizontalLine(line)) |intersection| {
+                    result[0] = intersection;
+                    return result[0..1];
+                } else {
+                    return &.{};
+                }
+            },
+            .quadratic_bezier => |*qb| {
+                return qb.intersectHorizontalLine(line, @ptrCast(result));
+            },
+        }
+    }
+
+    pub fn intersectVerticalLine(self: CurveFn, line: Line, result: *[3]Intersection) []const Intersection {
+        switch (self) {
+            .line => |*l| {
+                if (l.intersectVerticalLine(line)) |intersection| {
+                    result[0] = intersection;
+                    return result[0..1];
+                } else {
+                    return &.{};
+                }
+            },
+            .quadratic_bezier => |*qb| {
+                return qb.intersectVerticalLine(line, @ptrCast(result));
             },
         }
     }
