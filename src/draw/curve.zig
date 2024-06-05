@@ -205,6 +205,37 @@ pub const Line = struct {
         };
     }
 
+    pub fn getSlope(self: Line) f32 {
+        return self.getDeltaY() / self.getDeltaX();
+    }
+
+    pub fn intersectHorizontalLine(self: Line, other: Line) ?Intersection {
+        const delta_y = self.getDeltaY();
+        if (delta_y == 0.0) {
+            return null;
+        }
+
+        const t = -(self.start.y - other.start.y) / delta_y;
+        if (t < 0.0 or t > 1.0) {
+            return null;
+        }
+
+        const point = self.applyT(t);
+        const fixed_point = PointF32{
+            .x = point.x,
+            .y = other.start.y,
+        };
+
+        if (point.x < other.start.x or point.x > other.end.x) {
+            return null;
+        }
+
+        return Intersection{
+            .t = t,
+            .point = fixed_point,
+        };
+    }
+
     // Java code from: https://www.geeksforgeeks.org/program-for-point-of-intersection-of-two-lines/
     pub fn intersectLine(self: Line, line: Line) ?Intersection {
         // Line AB represented as a1x + b1y = c1
@@ -299,45 +330,6 @@ pub const QuadraticBezier = struct {
         return RectF32.create(self.start, self.end).extendBy(self.control);
     }
 
-    // code from: https://github.com/w8r/bezier-intersect
-    pub fn getRoots(c0: f32, c1: f32, c2: f32, result: *[2]f32) []const f32 {
-        if (c0 == 0) {
-            result[0] = -c2 / c1;
-            return result[0..1];
-        }
-
-        const a = c0;
-        //   var a = C2;
-        const b = c1 / a;
-        // const b = c1 / a;
-        //   var b = C1 / a;
-        // const c = c2 / a;
-        const c = c2 / a;
-        //   var c = C0 / a;
-        const d = b * b - 4 * c;
-        //   var d = b * b - 4 * c;
-
-        if (d > 0) {
-            //   if (d > 0) {
-            const e = std.math.sqrt(d);
-            //     var e = Math.sqrt(d);
-            result[0] = 0.5 * (-b + e);
-            //     results.push(0.5 * (-b + e));
-            result[1] = 0.5 * (-b - e);
-            //     results.push(0.5 * (-b - e));
-            return result;
-        } else if (d == 0) {
-            //   } else if (d === 0) {
-            result[0] = 0.5 * -b;
-            //     results.push( 0.5 * -b);
-            return result[0..1];
-        }
-        //   }
-
-        return result[0..0];
-        //   return results;
-    }
-
     pub fn scale(self: QuadraticBezier, dimensions: DimensionsF32) QuadraticBezier {
         return QuadraticBezier{
             .start = self.start.mul(PointF32{
@@ -377,6 +369,45 @@ pub const QuadraticBezier = struct {
             .end = self.end.invertY(),
             .control = self.control.invertY(),
         };
+    }
+
+    // code from: https://github.com/w8r/bezier-intersect
+    pub fn getRoots(c0: f32, c1: f32, c2: f32, result: *[2]f32) []const f32 {
+        if (c0 == 0) {
+            result[0] = -c2 / c1;
+            return result[0..1];
+        }
+
+        const a = c0;
+        //   var a = C2;
+        const b = c1 / a;
+        // const b = c1 / a;
+        //   var b = C1 / a;
+        // const c = c2 / a;
+        const c = c2 / a;
+        //   var c = C0 / a;
+        const d = b * b - 4 * c;
+        //   var d = b * b - 4 * c;
+
+        if (d > 0) {
+            //   if (d > 0) {
+            const e = std.math.sqrt(d);
+            //     var e = Math.sqrt(d);
+            result[0] = 0.5 * (-b + e);
+            //     results.push(0.5 * (-b + e));
+            result[1] = 0.5 * (-b - e);
+            //     results.push(0.5 * (-b - e));
+            return result;
+        } else if (d == 0) {
+            //   } else if (d === 0) {
+            result[0] = 0.5 * -b;
+            //     results.push( 0.5 * -b);
+            return result[0..1];
+        }
+        //   }
+
+        return result[0..0];
+        //   return results;
     }
 
     //     export function quadBezierLine(
@@ -439,8 +470,8 @@ pub const QuadraticBezier = struct {
         //   var c=(normal.x*c0.x + normal.y*c0.y + coefficient)/a;
         const c2 = normal.x * p0.x + normal.y * p0.y + coefficient;
 
-        //   // Transform cubic coefficients to line's coordinate system
-        //   // and find roots of cubic
+        // Transform cubic coefficients to line's coordinate system
+        // and find roots of cubic
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
         const roots = getRoots(
             c0,
@@ -527,54 +558,118 @@ pub const QuadraticBezier = struct {
     }
 };
 
-test "intersect line with line" {
+test "horizontal line intersections" {
+    const test_util = @import("./test_util.zig");
+
     const line1 = Line.create(PointF32{
         .x = 0.0,
         .y = 0.0,
     }, PointF32{
-        .x = 1.0,
-        .y = 1.0,
+        .x = 10.0,
+        .y = 10.0,
     });
     const line2 = Line.create(PointF32{
+        .x = -3.452342,
+        .y = -22.5924872,
+    }, PointF32{
+        .x = 22.124312,
+        .y = 13.242313739,
+    });
+    const line3 = Line.create(PointF32{
+        .x = -3.145,
+        .y = -66.7420,
+    }, PointF32{
+        .x = 10.0,
+        .y = -66.7420,
+    });
+    const line4 = Line.create(PointF32{
+        .x = 420.69,
+        .y = -10.0,
+    }, PointF32{ .x = 420.69, .y = 10.0 });
+
+    const intersection1 = line1.intersectHorizontalLine(Line.create(PointF32{
         .x = 0.0,
-        .y = 1.0,
-    }, PointF32{ .x = 1.0, .y = 0.0 });
-
-    const intersection = line1.intersectLine(line2);
-    std.debug.print("\n================ Line x Line\n", .{});
-    if (intersection) |point| {
-        std.debug.print("Intersection at: {}\n", .{point});
-    } else {
-        std.debug.print("No intersection\n", .{});
-    }
-    std.debug.print("================\n", .{});
-}
-
-test "intersect quadratic bezier with line" {
-    const bezier = QuadraticBezier.create(PointF32{
+        .y = 2.0,
+    }, PointF32{
+        .x = 10.0,
+        .y = 2.0,
+    })).?;
+    const intersection2 = line1.intersectHorizontalLine(Line.create(PointF32{
+        .x = 10.0,
+        .y = 2.0,
+    }, PointF32{
+        .x = 20.0,
+        .y = 2.0,
+    }));
+    const intersection3 = line1.intersectHorizontalLine(Line.create(PointF32{
         .x = 0.0,
         .y = 0.0,
     }, PointF32{
-        .x = 0.5,
-        .y = 1.0,
-    }, PointF32{
-        .x = 1.0,
+        .x = 20.0,
         .y = 0.0,
-    });
-    const line = Line.create(PointF32{
-        .x = 0.0,
-        .y = 0.25,
+    })).?;
+    const intersection4 = line2.intersectHorizontalLine(Line.create(PointF32{
+        .x = -20.0,
+        .y = 2.78324,
     }, PointF32{
-        .x = 1.0,
-        .y = 0.25,
-    });
+        .x = 20.0,
+        .y = 2.78324,
+    })).?;
+    const intersection5 = line3.intersectHorizontalLine(line3);
+    const intersection6 = line3.intersectHorizontalLine(Line.create(PointF32{
+        .x = -99.0,
+        .y = 33.4,
+    }, PointF32{
+        .x = 99.0,
+        .y = 33.4,
+    }));
+    const intersection7 = line4.intersectHorizontalLine(Line.create(PointF32{
+        .x = 400.0,
+        .y = 1.337,
+    }, PointF32{
+        .x = 460.0,
+        .y = 1.337,
+    })).?;
+    const intersection8 = line4.intersectHorizontalLine(Line.create(PointF32{
+        .x = 400.0,
+        .y = -1000.0,
+    }, PointF32{
+        .x = 460.0,
+        .y = -1000.0,
+    }));
+    const intersection9 = line4.intersectHorizontalLine(Line.create(PointF32{
+        .x = 400.0,
+        .y = -1000.0,
+    }, PointF32{
+        .x = 460.0,
+        .y = -1000.0,
+    }));
 
-    var intersections_result: [2]Intersection = [_]Intersection{undefined} ** 2;
-    const intersections = bezier.intersectLine(line, &intersections_result);
-
-    std.debug.print("\n================ Bezier x Line\n", .{});
-    for (intersections) |point| {
-        std.debug.print("Intersect at point: {}\n", .{point});
-    }
-    std.debug.print("================\n", .{});
+    try test_util.expectApproxEqlIntersectionTX(Intersection{
+        .t = 0.2,
+        .point = PointF32{
+            .x = 2.0,
+            .y = 2.0,
+        },
+    }, intersection1, test_util.DEFAULT_TOLERANCE, test_util.DEFAULT_TOLERANCE);
+    try std.testing.expectEqual(null, intersection2);
+    try test_util.expectApproxEqlIntersectionTX(Intersection{
+        .t = 0.0,
+        .point = PointF32{
+            .x = 0.0,
+            .y = 0.0,
+        },
+    }, intersection3, test_util.DEFAULT_TOLERANCE, test_util.DEFAULT_TOLERANCE);
+    try test_util.expectApproxEqlIntersectionTX(Intersection{ .t = 7.0813084e-1, .point = PointF32{
+        .x = 1.4659274e1,
+        .y = 2.78324,
+    } }, intersection4, test_util.DEFAULT_TOLERANCE, test_util.DEFAULT_TOLERANCE);
+    try std.testing.expectEqual(intersection5, null);
+    try std.testing.expectEqual(intersection6, null);
+    try test_util.expectApproxEqlIntersectionTX(Intersection{ .t = 5.6685e-1, .point = PointF32{
+        .x = 420.69,
+        .y = 1.337,
+    } }, intersection7, test_util.DEFAULT_TOLERANCE, 0.0);
+    try std.testing.expectEqual(null, intersection8);
+    try std.testing.expectEqual(null, intersection9);
 }
