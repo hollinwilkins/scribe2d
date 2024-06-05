@@ -8,6 +8,84 @@ const PointU32 = core.PointU32;
 const DimensionsU32 = core.DimensionsU32;
 const UnmanagedTexture = texture_module.UnmanagedTexture;
 
+pub fn HalfPlanes(comptime T: type) type {
+    const BitmaskTexture = UnmanagedTexture(T);
+
+    return struct {
+        allocator: Allocator,
+        half_planes: BitmaskTexture,
+        vertical_masks: []u16,
+
+        pub fn create(allocator: Allocator, points: []const PointF32) !@This() {
+            const size = @sizeOf(T) * 8 * 2;
+
+            return @This(){
+                .allocator = allocator,
+                .half_planes = try createHalfPlanes(T, allocator, points, DimensionsU32{
+                    .width = size,
+                    .height = size,
+                }),
+                .vertical_masks = try createVerticalLookup(T, allocator, size, points),
+            };
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.half_planes.deinit(self.allocator);
+            self.allocator.free(self.vertical_masks);
+        }
+
+        pub fn getHalfPlaneMask(self: *@This(), point1: PointF32, point2: PointF32) u16 {
+            var p0 = point1;
+            var p1 = point2;
+
+            if (p0.y < p1.y) {
+                std.mem.swap(PointF32, &p0, &p1);
+            }
+
+            const d = p1.sub(p0);
+            var n = d.normal();
+            var c = n.dot(p0);
+            c -= 0.5 * (n.x + n.y);
+            var c_sign: f32 = 1.0;
+            if (c < 0) {
+                n = n.negate();
+                c = -c;
+                c_sign = -c_sign;
+            }
+
+            const n_rev_scale: f32 = @max(0.0, 1.0 - c * c_sign * @as(f32, @floatFromInt(self.half_planes.dimensions.width))) * c_sign;
+            const n_rev = n.mul(PointF32{
+                .x = n_rev_scale,
+                .y = n_rev_scale,
+            });
+            const uv = n_rev.mul(PointF32{
+                .x = 0.5,
+                .y = 0.5,
+            }).add(PointF32{
+                .x = 0.5,
+                .y = 0.5,
+            });
+
+            return self.half_planes.getPixel(PointU32{
+                .x = @intFromFloat(uv.x),
+                .y = @intFromFloat(uv.y),
+            }).?.*;
+        }
+
+        pub fn getVerticalMask(self: *@This(), y: f32) u16 {
+            const mod_y = std.math.modf(y);
+            const index_f32: f32 = @round(mod_y.fpart * @as(f32, @floatFromInt(self.vertical_masks.len)));
+            const index = @min(
+                self.vertical_masks.len - 1,
+                @max(0, @as(u32, @intFromFloat(index_f32))),
+            );
+            return self.vertical_masks[index];
+        }
+    };
+}
+
+pub const HalfPlanesU16 = HalfPlanes(u16);
+
 pub fn createHalfPlanes(
     comptime T: type,
     allocator: Allocator,
@@ -66,8 +144,9 @@ pub fn createVerticalLookup(comptime T: type, allocator: Allocator, n: u32, poin
         const y = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(n));
 
         for (points, 0..) |point, point_index| {
-            if (y < point.y) {
-                mask = mask & (@as(T, 1) << @intCast(point_index));
+            if (y <= point.y) {
+                const mask_mod = (@as(T, 1) << @intCast(point_index));
+                mask = mask | mask_mod;
             }
         }
 
@@ -122,3 +201,13 @@ pub const UV_SAMPLE_COUNT_16: [16]PointF32 = [16]PointF32{
     PointF32.create(0.875, 0.9375),
     PointF32.create(0.0625, 0.0),
 };
+
+test "16 bit msaa" {
+    var half_planes = try HalfPlanesU16.create(std.testing.allocator, &UV_SAMPLE_COUNT_16);
+    defer half_planes.deinit();
+
+    try std.testing.expectEqual(0b1111111111111111, half_planes.getVerticalMask(0.0));
+    try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(1.9999999));
+    try std.testing.expectEqual(0b0101100101100101, half_planes.getVerticalMask(52.5));
+    try std.testing.expectEqual(0b0101100101101101, half_planes.getVerticalMask(0.4));
+}
