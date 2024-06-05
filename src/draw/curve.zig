@@ -529,58 +529,29 @@ pub const QuadraticBezier = struct {
         }
 
         const a = c0;
-        //   var a = C2;
         const b = c1 / a;
-        // const b = c1 / a;
-        //   var b = C1 / a;
-        // const c = c2 / a;
         const c = c2 / a;
-        //   var c = C0 / a;
         const d = b * b - 4 * c;
-        //   var d = b * b - 4 * c;
 
         if (d > 0) {
-            //   if (d > 0) {
             const e = std.math.sqrt(d);
-            //     var e = Math.sqrt(d);
             result[0] = 0.5 * (-b + e);
-            //     results.push(0.5 * (-b + e));
             result[1] = 0.5 * (-b - e);
-            //     results.push(0.5 * (-b - e));
             return result;
         } else if (d == 0) {
-            //   } else if (d === 0) {
             result[0] = 0.5 * -b;
-            //     results.push( 0.5 * -b);
             return result[0..1];
         }
-        //   }
 
         return result[0..0];
-        //   return results;
     }
 
-    //     export function quadBezierLine(
-    //   p1x, p1y, p2x, p2y, p3x, p3y,
-    //   a1x, a1y, a2x, a2y, result) {
-
-    // p1 = a, p2 = c, p3 = b
     // code from: https://github.com/w8r/bezier-intersect
     // code from: https://stackoverflow.com/questions/27664298/calculating-intersection-point-of-quadratic-bezier-curve
     pub fn intersectLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {
         const bounds = line.getBounds();
-        // inverse line normal
-        //   var normal={
-        //     x: a1.y-a2.y,
-        //     y: a2.x-a1.x,
-        //   }
         const normal = line.getNormal();
 
-        //   // Q-coefficients
-        //   var c2={
-        //     x: p1.x + p2.x*-2 + p3.x,
-        //     y: p1.y + p2.y*-2 + p3.y
-        //   }
         const p2 = self.start.add(
             self.control.mul(PointF32{
                 .x = -2.0,
@@ -588,10 +559,6 @@ pub const QuadraticBezier = struct {
             }).add(self.end),
         );
 
-        //   var c1={
-        //     x: p1.x*-2 + p2.x*2,
-        //     y: p1.y*-2 + p2.y*2,
-        //   }
         const p1 = self.start.mul(
             PointF32{
                 .x = -2.0,
@@ -604,24 +571,13 @@ pub const QuadraticBezier = struct {
             },
         ));
 
-        //   var c0={
-        //     x: p1.x,
-        //     y: p1.y
-        //   }
         const p0 = self.start;
 
-        //   // Transform to line
-        //   var coefficient=a1.x*a2.y-a2.x*a1.y;
         const coefficient = line.start.x * line.end.y - line.end.x * line.start.y;
-        //   var a=normal.x*c2.x + normal.y*c2.y;
         const c0 = normal.x * p2.x + normal.y * p2.y;
-        //   var b=(normal.x*c1.x + normal.y*c1.y)/a;
         const c1 = normal.x * p1.x + normal.y * p1.y;
-        //   var c=(normal.x*c0.x + normal.y*c0.y + coefficient)/a;
         const c2 = normal.x * p0.x + normal.y * p0.y + coefficient;
 
-        // Transform cubic coefficients to line's coordinate system
-        // and find roots of cubic
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
         const roots = getRoots(
             c0,
@@ -631,34 +587,13 @@ pub const QuadraticBezier = struct {
         );
 
         var ri: usize = 0;
-        // Any roots in closed interval [0,1] are intersections on Bezier, but
-        // might not be on the line segment.
-        // Find intersections and calculate point coordinates
-        //   for (var i = 0; i < roots.length; i++) {
         for (roots) |t| {
-            //     var t = roots[i];
-            //     if ( 0 <= t && t <= 1 ) { // We're within the Bezier curve
             if (0 <= t and t <= 1) { // we're within the Bezier curve
-                //       // Find point on Bezier
-                //       // lerp: x1 + (x2 - x1) * t
-                //       var p4x = p1x + (p2x - p1x) * t;
-                //       var p4y = p1y + (p2y - p1y) * t;
-                //       var p5x = p2x + (p3x - p2x) * t;
-                //       var p5y = p2y + (p3y - p2y) * t;
-                //       // candidate
-                //       var p6x = p4x + (p5x - p4x) * t;
-                //       var p6y = p4y + (p5y - p4y) * t;
                 const candidate = self.applyT(t);
 
-                //       // See if point is on line segment
-                //       // Had to make special cases for vertical and horizontal lines due
-                //       // to slight errors in calculation of p6
-                //       if (a1x === a2x) {
                 if (line.isVertical()) {
                     //         if (miny <= p6y && p6y <= maxy) {
                     if (bounds.min.y <= candidate.y and candidate.y <= bounds.max.y) {
-                        //           if (result) result.push(p6x, p6y);
-                        //           else        return 1;
                         result[ri] = Intersection{
                             .t = t,
                             .point = PointF32{
@@ -668,13 +603,8 @@ pub const QuadraticBezier = struct {
                         };
                         ri += 1;
                     }
-                    //         }
-                    //       } else if (a1y === a2y) {
                 } else if (line.isHorizontal()) {
-                    //         if (minx <= p6x && p6x <= maxx) {
                     if (bounds.min.x <= candidate.x and candidate.x <= bounds.max.x) {
-                        //           if (result) result.push(p6x, p6y);
-                        //           else        return 1;
                         result[ri] = Intersection{
                             .t = t,
                             .point = PointF32{
@@ -692,19 +622,10 @@ pub const QuadraticBezier = struct {
                     };
                     ri += 1;
                 }
-                //       // gte: (x1 >= x2 && y1 >= y2)
-                //       // lte: (x1 <= x2 && y1 <= y2)
-                //       } else if (p6x >= minx && p6y >= miny && p6x <= maxx && p6y <= maxy) {
-                //         if (result) result.push(p6x, p6y);
-                //         else        return 1;
-                //       }
-                //     }
-                //   }
             }
         }
 
         return result[0..ri];
-        //   return result ? result.length / 2 : 0;
     }
 };
 
