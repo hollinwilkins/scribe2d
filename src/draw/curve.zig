@@ -144,9 +144,10 @@ pub const CurveFn = union(enum) {
         }
     }
 
+    // not actually making fns monotonic, just making sure they don't curve
+    // back on themselves when cut at these intersections
     pub fn monotonicCuts(self: CurveFn, result: *[2]Intersection) []const Intersection {
         switch (self) {
-            // lines are monotonic...
             .line => |_| {
                 return &.{};
             },
@@ -379,9 +380,8 @@ pub const QuadraticBezier = struct {
         );
     }
 
-    // cut point ensures two monotonic segments of the curve
+    // cut point ensures two segments of the curve that don't curve back on itself
     pub fn getMonotonicCut(self: QuadraticBezier) ?Intersection {
-        // TODO: maybe improve by returning null if this quadratic bezier is monotonic
         const t = 0.5;
         return Intersection{
             .t = t,
@@ -1017,4 +1017,3 @@ test "vertical line x quadratic bezier intersections" {
         .y = -2.1957464e0,
     } }, intersections5[0], test_util.DEFAULT_TOLERANCE, 0.0);
 }
-
