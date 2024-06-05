@@ -47,10 +47,6 @@ pub const Curve = struct {
         return self.curve_fn.intersectVerticalLine(line, result);
     }
 
-    pub fn intersectLine(self: Curve, line: Line, result: *[3]Intersection) []const Intersection {
-        return self.curve_fn.intersectLine(line, result);
-    }
-
     pub fn monotonicCuts(self: Curve, result: *[2]Intersection) []const Intersection {
         return self.curve_fn.monotonicCuts(result);
     }
@@ -124,22 +120,6 @@ pub const CurveFn = union(enum) {
             },
             .quadratic_bezier => |*qb| {
                 return qb.intersectVerticalLine(line, @ptrCast(result));
-            },
-        }
-    }
-
-    pub fn intersectLine(self: CurveFn, line: Line, result: *[3]Intersection) []const Intersection {
-        switch (self) {
-            .line => |*l| {
-                if (l.intersectLine(line)) |intersection| {
-                    result[0] = intersection;
-                    return result[0..1];
-                } else {
-                    return &.{};
-                }
-            },
-            .quadratic_bezier => |*qb| {
-                return qb.intersectLine(line, @ptrCast(result));
             },
         }
     }
@@ -299,62 +279,6 @@ pub const Line = struct {
             },
         };
     }
-
-    // Java code from: https://www.geeksforgeeks.org/program-for-point-of-intersection-of-two-lines/
-    pub fn intersectLine(self: Line, line: Line) ?Intersection {
-        // Line AB represented as a1x + b1y = c1
-        const a1 = self.getDeltaY();
-        // double a1 = B.y - A.y;
-        const b1 = -self.getDeltaX();
-        // double b1 = A.x - B.x;
-        const c1 = a1 * (self.start.x) + b1 * (self.start.y);
-        // double c1 = a1*(A.x) + b1*(A.y);
-
-        // Line CD represented as a2x + b2y = c2
-        const a2 = line.getDeltaY();
-        // double a2 = D.y - C.y;
-        const b2 = -line.getDeltaX();
-        // double b2 = C.x - D.x;
-        const c2 = a2 * (line.start.x) + b2 * (line.start.y);
-        // double c2 = a2*(C.x)+ b2*(C.y);
-
-        // double determinant = a1*b2 - a2*b1;
-        const determinant = a1 * b2 - a2 * b1;
-
-        if (determinant == 0) {
-            // The lines are parallel. This is simplified
-            return null;
-        } else {
-            var t: f32 = undefined;
-
-            const x = if (line.isVertical()) line.start.x else (b2 * c1 - b1 * c2) / determinant;
-            const y = if (line.isHorizontal()) line.start.y else (a1 * c2 - a2 * c1) / determinant;
-            const point: PointF32 = PointF32{
-                .x = x,
-                .y = y,
-            };
-
-            if (self.isHorizontal()) {
-                t = (point.x - self.start.x) / self.getDeltaX();
-            } else if (self.isVertical()) {
-                t = (point.y - self.start.y) / a1;
-            } else {
-                t = (point.y - self.start.y) / a1;
-            }
-
-            if (t >= 0.0 and t <= 1.0) {
-                return Intersection{
-                    .t = t,
-                    .point = point,
-                };
-            }
-
-            return null;
-            //     double x = (b2*c1 - b1*c2)/determinant;
-            //     double y = (a1*c2 - a2*c1)/determinant;
-            //     return new Point(x, y);
-        }
-    }
 };
 
 pub const QuadraticBezier = struct {
@@ -440,7 +364,7 @@ pub const QuadraticBezier = struct {
         const b = 2.0 * (self.control.y - self.start.y);
         const c = self.start.y - line.start.y;
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
-        const roots = getRoots2(a, b, c, &roots_result);
+        const roots = getRoots(a, b, c, &roots_result);
 
         var intersections: usize = 0;
         for (roots) |root| {
@@ -472,7 +396,7 @@ pub const QuadraticBezier = struct {
         const b = 2.0 * (self.control.x - self.start.x);
         const c = self.start.x - line.start.x;
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
-        const roots = getRoots2(a, b, c, &roots_result);
+        const roots = getRoots(a, b, c, &roots_result);
 
         var intersections: usize = 0;
         for (roots) |root| {
@@ -499,7 +423,7 @@ pub const QuadraticBezier = struct {
     }
 
 
-    pub fn getRoots2(a: f32, b: f32, c: f32, result: *[2]f32) []const f32 {
+    pub fn getRoots(a: f32, b: f32, c: f32, result: *[2]f32) []const f32 {
         if (a == 0) {
             result[0] = -c / b;
             return result[0..1];
@@ -519,113 +443,6 @@ pub const QuadraticBezier = struct {
         }
 
         return &.{};
-    }
-
-    // code from: https://github.com/w8r/bezier-intersect
-    pub fn getRoots(c0: f32, c1: f32, c2: f32, result: *[2]f32) []const f32 {
-        if (c0 == 0) {
-            result[0] = -c2 / c1;
-            return result[0..1];
-        }
-
-        const a = c0;
-        const b = c1 / a;
-        const c = c2 / a;
-        const d = b * b - 4 * c;
-
-        if (d > 0) {
-            const e = std.math.sqrt(d);
-            result[0] = 0.5 * (-b + e);
-            result[1] = 0.5 * (-b - e);
-            return result;
-        } else if (d == 0) {
-            result[0] = 0.5 * -b;
-            return result[0..1];
-        }
-
-        return result[0..0];
-    }
-
-    // code from: https://github.com/w8r/bezier-intersect
-    // code from: https://stackoverflow.com/questions/27664298/calculating-intersection-point-of-quadratic-bezier-curve
-    pub fn intersectLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {
-        const bounds = line.getBounds();
-        const normal = line.getNormal();
-
-        const p2 = self.start.add(
-            self.control.mul(PointF32{
-                .x = -2.0,
-                .y = -2.0,
-            }).add(self.end),
-        );
-
-        const p1 = self.start.mul(
-            PointF32{
-                .x = -2.0,
-                .y = -2.0,
-            },
-        ).add(self.control.mul(
-            PointF32{
-                .x = 2.0,
-                .y = 2.0,
-            },
-        ));
-
-        const p0 = self.start;
-
-        const coefficient = line.start.x * line.end.y - line.end.x * line.start.y;
-        const c0 = normal.x * p2.x + normal.y * p2.y;
-        const c1 = normal.x * p1.x + normal.y * p1.y;
-        const c2 = normal.x * p0.x + normal.y * p0.y + coefficient;
-
-        var roots_result: [2]f32 = [_]f32{undefined} ** 2;
-        const roots = getRoots(
-            c0,
-            c1,
-            c2,
-            &roots_result,
-        );
-
-        var ri: usize = 0;
-        for (roots) |t| {
-            if (0 <= t and t <= 1) { // we're within the Bezier curve
-                const candidate = self.applyT(t);
-
-                if (line.isVertical()) {
-                    //         if (miny <= p6y && p6y <= maxy) {
-                    if (bounds.min.y <= candidate.y and candidate.y <= bounds.max.y) {
-                        result[ri] = Intersection{
-                            .t = t,
-                            .point = PointF32{
-                                .x = line.start.x,
-                                .y = candidate.y,
-                            },
-                        };
-                        ri += 1;
-                    }
-                } else if (line.isHorizontal()) {
-                    if (bounds.min.x <= candidate.x and candidate.x <= bounds.max.x) {
-                        result[ri] = Intersection{
-                            .t = t,
-                            .point = PointF32{
-                                .x = candidate.x,
-                                .y = line.start.y,
-                            },
-                        };
-                        ri += 1;
-                    }
-                    //         }
-                } else if (bounds.containsPoint(candidate)) {
-                    result[ri] = Intersection{
-                        .t = t,
-                        .point = candidate,
-                    };
-                    ri += 1;
-                }
-            }
-        }
-
-        return result[0..ri];
     }
 };
 

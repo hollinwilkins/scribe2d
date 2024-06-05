@@ -290,7 +290,7 @@ pub const Raster = struct {
                     );
                     const fragment_intersection_line = fragment_intersection.getLine();
 
-                    if (ray_line.intersectLine(fragment_intersection_line) != null) {
+                    if (ray_line.intersectHorizontalLine(fragment_intersection_line) != null) {
                         if (fragment_intersection_line.start.y >= ray_y) {
                             // curve passing top to bottom
                             boundary_fragment.winding.end_value -= 1;
@@ -453,7 +453,7 @@ pub const Raster = struct {
                 .y = scaled_curve_bounds.max.y + 1.0,
             },
         );
-        const scaled_intersections = curve.intersectLine(line, &scaled_intersections_result);
+        const scaled_intersections = curve.intersectVerticalLine(line, &scaled_intersections_result);
 
         for (scaled_intersections) |intersection| {
             const ao = try intersections.addOne();
@@ -485,7 +485,7 @@ pub const Raster = struct {
                 .y = grid_y,
             },
         );
-        const scaled_intersections = curve.intersectLine(line, &scaled_intersections_result);
+        const scaled_intersections = curve.intersectHorizontalLine(line, &scaled_intersections_result);
 
         for (scaled_intersections) |intersection| {
             const ao = try intersections.addOne();
