@@ -384,7 +384,7 @@ pub const Raster = struct {
         // 	float2 D = P1 - P0;
         const d = p1.sub(p0);
         // 	float2 N = normalize(make_float2(D.y, -D.x));
-        var n = d.normal();
+        var n = d.normalize();
         // 	float C = dot(N, P0);
         var c = n.dot(p0);
         // translate origin to (0.5,0.5)

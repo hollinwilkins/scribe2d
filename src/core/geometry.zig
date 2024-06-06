@@ -12,7 +12,15 @@ pub fn Point(comptime T: type) type {
             };
         }
 
-        pub fn normal(self: @This()) @This() {
+        pub fn normalize(self: @This()) ?@This() {
+            if (self.x == 0 and self.y == 0) {
+                return null;
+            }
+
+            return self.normalizeUnsafe();
+        }
+
+        pub fn normalizeUnsafe(self: @This()) @This() {
             std.debug.assert(!(self.x == 0 and self.y == 0));
             const diagonal = std.math.sqrt(self.x * self.x + self.y * self.y);
 
