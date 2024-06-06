@@ -324,10 +324,12 @@ pub const Raster = struct {
     }
 
     pub fn calculateBitmaskFragmentIntersection(self: *Raster, winding: Winding, fragment_intersection: FragmentIntersection) u16 {
+        _ = self;
+        _ = winding;
         // vertical
         // horizontal
 
-        var mask: u16 = 0;
+        const mask: u16 = 0;
         var left_intersection: ?*const PointF32 = null;
         if (fragment_intersection.intersection1.point.x == @as(f32, @floatFromInt(fragment_intersection.pixel.x))) {
             left_intersection = &fragment_intersection.intersection1.point;
@@ -335,104 +337,33 @@ pub const Raster = struct {
             left_intersection = &fragment_intersection.intersection2.point;
         }
 
-        if (left_intersection) |left| {
-            const horizontal_mask = self.getHorizontalMask(left.y);
+        // if (left_intersection) |left| {
+        //     const horizontal_mask = self.getHorizontalMask(left.y);
 
-            if (winding.start_value > 0) {
-                mask = horizontal_mask;
-            } else if (winding.start_value < 0) {
-                mask = ~horizontal_mask;
-            }
-        }
+        //     if (winding.start_value > 0) {
+        //         mask = horizontal_mask;
+        //     } else if (winding.start_value < 0) {
+        //         mask = ~horizontal_mask;
+        //     }
+        // }
 
         // calculate n + c, get the half plane
         // get half plane for intersection1.y and intersection2.y
         // & them all together
 
-        const intersection1_mask = self.getHorizontalMask(fragment_intersection.intersection1.point.y);
-        const intersection2_mask = self.getHorizontalMask(fragment_intersection.intersection2.point.y);
-        const line_mask = self.getHalfPlaneMask(fragment_intersection.intersection1.point, fragment_intersection.intersection2.point);
-        const horizontal_ray_mask = intersection1_mask & intersection2_mask & line_mask;
+        // const intersection1_mask = self.getHorizontalMask(fragment_intersection.intersection1.point.y);
+        // const intersection2_mask = self.getHorizontalMask(fragment_intersection.intersection2.point.y);
+        // const line_mask = self.getHalfPlaneMask(fragment_intersection.intersection1.point, fragment_intersection.intersection2.point);
+        // const horizontal_ray_mask = intersection1_mask & intersection2_mask & line_mask;
 
-        if (winding.start_value > 0) {
-            mask = mask & horizontal_ray_mask;
-        } else if (winding.start_value < 0) {
-            mask = mask & ~horizontal_ray_mask;
-        }
+        // if (winding.start_value > 0) {
+        //     mask = mask & horizontal_ray_mask;
+        // } else if (winding.start_value < 0) {
+        //     mask = mask & ~horizontal_ray_mask;
+        // }
 
         return mask;
     }
-
-    pub fn getHorizontalMask(self: Raster, y: f32) u16 {
-        const mod_y = std.math.modf(y);
-        const index = @min(
-            self.horizontal_half_planes.len - 1,
-            @max(0, @as(u32, @intFromFloat(@round(mod_y.fpart * @as(f32, @floatFromInt(self.horizontal_half_planes.len)) - 1.0)))),
-        );
-        return self.horizontal_half_planes[index];
-    }
-
-    pub fn getHalfPlaneMask(self: *Raster, point1: PointF32, point2: PointF32) u16 {
-        var p0 = point1;
-        var p1 = point2;
-
-        // 	if (P1.y < P0.y) { Rasterizer::swap(P0, P1); }
-        if (p0.y < p1.y) {
-            std.mem.swap(PointF32, &p0, &p1);
-        }
-
-        // 	float2 D = P1 - P0;
-        const d = p1.sub(p0);
-        // 	float2 N = normalize(make_float2(D.y, -D.x));
-        var n = d.normalize();
-        // 	float C = dot(N, P0);
-        var c = n.dot(p0);
-        // translate origin to (0.5,0.5)
-        // 	C -= 0.5f*(N.x + N.y);
-        c -= 0.5 * (n.x + n.y);
-        // 	float C_sign = __int_as_float((__float_as_int(C) & 0x80000000) + 0x3f800000);
-        var c_sign: f32 = 1.0;
-        // 	/*if (C<0.f) {
-        // 	N = -N;
-        // 	C = -C;
-        // 	}*/
-        if (c < 0) {
-            n = n.negate();
-            c = -c;
-            c_sign = -c_sign;
-        }
-
-        // reverse the distance
-        // 	float2 N_rev = max(1.f - C*C_sign*PACKING_SCALE, 0.f)*C_sign*N;
-        const n_rev_scale: f32 = @max(0.0, 1.0 - c * c_sign * @as(f32, @floatFromInt(self.half_planes.dimensions.width))) * c_sign;
-        const n_rev = n.mul(PointF32{
-            .x = n_rev_scale,
-            .y = n_rev_scale,
-        });
-        // 	float2 uv = N_rev*0.5f + make_float2(0.5f, 0.5f);
-        const uv = n_rev.mul(PointF32{
-            .x = 0.5,
-            .y = 0.5,
-        }).add(PointF32{
-            .x = 0.5,
-            .y = 0.5,
-        });
-        // 	if (N_SAMPLES == 8) {
-        // 		return tex2D(tex_pixel_table8, uv.x, uv.y);
-        // 	}
-
-        return self.half_planes.getPixel(PointU32{
-            .x = @intFromFloat(uv.x),
-            .y = @intFromFloat(uv.y),
-        }).?.*;
-        // 	else {
-        // 		return tex2D(tex_pixel_table32, uv.x, uv.y);
-        // 	}
-        // }
-    }
-
-    // pub fn rasterizeBoundaryFragments(self: Raster, boundary_fragments: []const BoundaryFragment, texture_view: TextureViewRgba,) void {
-    // }
 
     fn scanX(
         path_id: u32,
@@ -499,94 +430,56 @@ pub const Raster = struct {
     }
 };
 
-test "scan for intersections" {
+test "raster intersections" {
+    const pen_module = @import("./pen.zig");
     const UnmanagedTextureRgba = texture_module.UnmanagedTextureRgba;
-    const PathOutliner = path_module.PathOutliner;
 
-    const dimensions = DimensionsU32{
-        .width = 64,
-        .height = 64,
+    var pen = try pen_module.Pen.init(std.testing.allocator);
+    defer pen.deinit();
+
+    try pen.moveTo(PointF32{
+        .x = 0.2,
+        .y = 0.2,
+    });
+    try pen.lineTo(PointF32{
+        .x = 0.2,
+        .y = 0.8,
+    });
+    try pen.quadTo(PointF32{
+        .x = 0.2,
+        .y = 0.2,
+    }, PointF32{
+        .x = 0.6,
+        .y = 0.5,
+    });
+
+    var path = try pen.createPathAlloc(std.testing.allocator);
+    defer path.deinit();
+
+    const size: u32 = 5;
+    const dimensions = core.DimensionsU32{
+        .width = size,
+        .height = size,
     };
 
     var texture = try UnmanagedTextureRgba.create(std.testing.allocator, dimensions);
     defer texture.deinit(std.testing.allocator);
-    var texture_view = texture.createView(RectU32.create(
-        PointU32{
+    var texture_view = texture.createView(core.RectU32{
+        .min = core.PointU32{
             .x = 0,
             .y = 0,
         },
-        PointU32{
-            .x = @intCast(dimensions.width),
-            .y = @intCast(dimensions.height),
+        .max = core.PointU32{
+            .x = dimensions.width,
+            .y = dimensions.height,
         },
-    )).?;
-
-    var path_outliner = try PathOutliner.init(std.testing.allocator);
-    defer path_outliner.deinit();
-
-    try path_outliner.moveTo(PointF32{
-        .x = 0.25,
-        .y = 0.25,
-    });
-    try path_outliner.quadTo(PointF32{
-        .x = 0.75,
-        .y = 0.25,
-    }, PointF32{
-        .x = 0.50,
-        .y = 0.50,
-    });
-    try path_outliner.close();
-
-    var path = try path_outliner.createPathAlloc(std.testing.allocator);
-    defer path.deinit();
+    }).?;
 
     const intersections = try Raster.createIntersections(std.testing.allocator, path, &texture_view);
     defer intersections.deinit();
 
-    std.debug.print("\n============== Intersections\n", .{});
+    std.debug.print("Intersections:\n", .{});
     for (intersections.items) |intersection| {
-        std.debug.print("Intersection: t({}), ({} @ {})\n", .{
-            intersection.intersection.t,
-            intersection.intersection.point.x,
-            intersection.intersection.point.y,
-        });
+        std.debug.print("{}\n", .{intersection});
     }
-    std.debug.print("==============\n", .{});
-
-    const fragment_intersections = try Raster.createFragmentIntersectionsAlloc(std.testing.allocator, intersections.items);
-    defer fragment_intersections.deinit();
-
-    std.debug.print("\n============== Boundary Fragments\n", .{});
-    for (fragment_intersections.items) |fragment| {
-        std.debug.print("Fragment: {}\n", .{fragment});
-    }
-    std.debug.print("==============\n", .{});
-
-    std.debug.print("\n============== Boundary Fragments Map\n", .{});
-    var bf_index: usize = 0;
-    for (0..dimensions.height) |y| {
-        while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y < y) {
-            bf_index += 1;
-        }
-
-        for (0..dimensions.width) |x| {
-            while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y == y and fragment_intersections.items[bf_index].pixel.x < x) {
-                bf_index += 1;
-            }
-
-            if (bf_index < fragment_intersections.items.len) {
-                const pixel = fragment_intersections.items[bf_index].pixel;
-                if (pixel.y == y and pixel.x == x) {
-                    std.debug.print("X", .{});
-                } else {
-                    std.debug.print(";", .{});
-                }
-            } else {
-                std.debug.print(";", .{});
-            }
-        }
-
-        std.debug.print("\n", .{});
-    }
-    std.debug.print("==============\n", .{});
 }
