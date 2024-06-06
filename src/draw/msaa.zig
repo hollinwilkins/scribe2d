@@ -81,6 +81,17 @@ pub fn HalfPlanes(comptime T: type) type {
             );
             return self.vertical_masks[index];
         }
+
+        pub fn getTrapezoidMask(self: *@This(), line: Line) u16 {
+            const top_y = @min(line.start.y, line.end.y);
+            const bottom_y = @max(line.start.y, line.end.y);
+
+            const top_mask = self.getVerticalMask(top_y);
+            const bottom_mask = ~self.getVerticalMask(bottom_y);
+            const line_mask = self.getHalfPlaneMask(line.start, line.end);
+
+            return top_mask & bottom_mask & line_mask;
+        }
     };
 }
 
@@ -253,4 +264,31 @@ test "16 bit msaa" {
         .y = 1.0,
     });
     try std.testing.expectEqual(0b0100000000000000, hp_bottom_right);
+
+    const trap1 = half_planes.getTrapezoidMask(Line.create(PointF32{
+        .x = 0.1,
+        .y = 0.9,
+    }, PointF32{
+        .x = 0.9,
+        .y = 0.2,
+    }));
+    try std.testing.expectEqual(0b0010000101101001, trap1);
+
+    const trap2 = half_planes.getTrapezoidMask(Line.create(PointF32{
+        .x = 0.5,
+        .y = 0.6,
+    }, PointF32{
+        .x = 0.9,
+        .y = 0.2,
+    }));
+    try std.testing.expectEqual(0b0010000000001001, trap2);
+
+    const trap3 = half_planes.getTrapezoidMask(Line.create(PointF32{
+        .x = 0.5,
+        .y = 0.4,
+    }, PointF32{
+        .x = 0.9,
+        .y = 0.2,
+    }));
+    try std.testing.expectEqual(0b0010000000000000, trap3);
 }

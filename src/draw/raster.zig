@@ -478,8 +478,8 @@ test "raster intersections" {
     const intersections = try Raster.createIntersections(std.testing.allocator, path, &texture_view);
     defer intersections.deinit();
 
-    std.debug.print("Intersections:\n", .{});
-    for (intersections.items) |intersection| {
-        std.debug.print("{}\n", .{intersection});
-    }
+    // std.debug.print("Intersections:\n", .{});
+    // for (intersections.items) |intersection| {
+    //     std.debug.print("{}\n", .{intersection});
+    // }
 }
