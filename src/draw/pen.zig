@@ -131,7 +131,6 @@ pub const Pen = struct {
     pub fn lineTo(self: *@This(), point: PointF32) !void {
         if (self.start == null) {
             self.start = self.location;
-            _ = try self.nextShape();
         }
 
         // attempt to add a line curve from current location to point
@@ -153,7 +152,6 @@ pub const Pen = struct {
     pub fn quadTo(self: *@This(), point: PointF32, control: PointF32) !void {
         if (self.start == null) {
             self.start = self.location;
-            _ = try self.nextShape();
         }
 
         // attempt to add a quadratic curve from current location to point
