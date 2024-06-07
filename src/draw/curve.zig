@@ -2,11 +2,16 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const PointF32 = core.PointF32;
 const RectF32 = core.RectF32;
+const RangeU32 = core.RangeU32;
 const DimensionsF32 = core.DimensionsF32;
 
 pub const Intersection = struct {
     t: f32,
     point: PointF32,
+};
+
+pub const Shape = struct {
+    curve_offsets: RangeU32,
 };
 
 pub const Curve = struct {

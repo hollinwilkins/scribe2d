@@ -8,6 +8,8 @@ const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 const RangeF32 = core.RangeF32;
+const RangeU32 = core.RangeU32;
+const Shape = curve_module.Shape;
 const Curve = curve_module.Curve;
 const CurveFn = curve_module.CurveFn;
 const Line = curve_module.Line;
@@ -16,6 +18,7 @@ const SequenceU32 = core.SequenceU32;
 const Path = path_module.Path;
 
 pub const Pen = struct {
+    const ShapesList = std.ArrayList(Shape);
     const CurvesList = std.ArrayList(Curve);
 
     const TextOutlinerFunctions = struct {
@@ -60,6 +63,7 @@ pub const Pen = struct {
         .close = TextOutlinerFunctions.close,
     };
 
+    shapes: ShapesList,
     curves: CurvesList,
     bounds: RectF32 = RectF32{},
     start: ?PointF32 = null,
@@ -68,11 +72,13 @@ pub const Pen = struct {
 
     pub fn init(allocator: Allocator) Allocator.Error!@This() {
         return @This(){
+            .shapes = ShapesList.init(allocator),
             .curves = CurvesList.init(allocator),
         };
     }
 
     pub fn deinit(self: *@This()) void {
+        self.shapes.deinit();
         self.curves.deinit();
     }
 
@@ -84,10 +90,32 @@ pub const Pen = struct {
     }
 
     pub fn createPathAlloc(self: *@This(), allocator: Allocator) Allocator.Error!Path {
+        try self.close();
         return Path{
             .allocator = allocator,
-            .unmanaged = Path.Unmanaged.create(try allocator.dupe(Curve, self.curves.items)),
+            .unmanaged = Path.Unmanaged.create(
+                try allocator.dupe(Shape, self.shapes.items),
+                try allocator.dupe(Curve, self.curves.items),
+            ),
         };
+    }
+
+    pub fn currentShape(self: *@This()) !*Shape {
+        if (self.shapes.items.len == 0) {
+            return self.nextShape();
+        }
+
+        return &self.shapes.items[self.shapes.items.len - 1];
+    }
+
+    pub fn nextShape(self: *@This()) !*Shape {
+        const ao = try self.shapes.addOne();
+        ao.* = Shape{ .curve_offsets = RangeU32{
+            .start = @intCast(self.shapes.items.len),
+            .end = @intCast(self.shapes.items.len),
+        } };
+
+        return ao;
     }
 
     pub fn moveTo(self: *@This(), point: PointF32) !void {
@@ -101,6 +129,11 @@ pub const Pen = struct {
     }
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
+        if (self.start == null) {
+            self.start = self.location;
+            _ = try self.nextShape();
+        }
+
         // attempt to add a line curve from current location to point
         const ao = try self.curves.addOne();
         ao.* = Curve{
@@ -112,14 +145,15 @@ pub const Pen = struct {
                 },
             },
         };
-
-        if (self.start == null) {
-            self.start = self.location;
-        }
         self.location = point;
     }
 
     pub fn quadTo(self: *@This(), point: PointF32, control: PointF32) !void {
+        if (self.start == null) {
+            self.start = self.location;
+            _ = try self.nextShape();
+        }
+
         // attempt to add a quadratic curve from current location to point
         const ao = try self.curves.addOne();
         ao.* = Curve{
@@ -133,9 +167,6 @@ pub const Pen = struct {
             },
         };
 
-        if (self.start == null) {
-            self.start = self.location;
-        }
         self.location = point;
     }
 
@@ -144,11 +175,14 @@ pub const Pen = struct {
         if (self.start) |start| {
             if (!std.meta.eql(start, self.location)) {
                 try self.lineTo(start);
-                self.curves.items[self.curves.items.len - 1].end_curve = true;
             }
 
             self.location = start;
             self.start = null;
+        }
+
+        if (self.curves.items.len > 0) {
+            self.curves.items[self.curves.items.len - 1].end_curve = true;
         }
     }
 };
