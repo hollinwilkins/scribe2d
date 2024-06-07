@@ -253,10 +253,6 @@ pub const Raster = struct {
             return true;
         } else if (left.shape_index > right.shape_index) {
             return false;
-        } else if (left.curve_index < right.curve_index) {
-            return true;
-        } else if (left.curve_index > right.curve_index) {
-            return false;
         } else if (left.pixel.y < right.pixel.y) {
             return true;
         } else if (left.pixel.y > right.pixel.y) {

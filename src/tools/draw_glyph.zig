@@ -82,36 +82,37 @@ pub fn main() !void {
     }
     std.debug.print("==============\n", .{});
 
-    std.debug.print("\n============== Boundary Texture\n", .{});
-    const x_start: i32 = -1;
-    const x_end: i32 = @intCast(dimensions.width + 1);
-    const x_range: usize = @intCast(x_end - x_start);
-    const y_start: i32 = -1;
-    const y_end: i32 = @intCast(dimensions.height + 1);
-    const y_range: usize = @intCast(y_end - y_start);
-    std.debug.print("Y START: {}, Y END: {}\n", .{ y_start, y_end });
-    var bf_index: usize = 0;
-    for (0..y_range) |y_offset| {
-        const y = y_start + @as(i32, @intCast(y_offset));
-        while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y < y) {
-            bf_index += 1;
+    std.debug.print("\n============== Boundary Texture\n\n", .{});
+    var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
+        .width = dimensions.width + 2,
+        .height = dimensions.height + 2,
+    });
+    defer boundary_texture.deinit(allocator);
+    boundary_texture.clear(draw.Monotone{ .a = 0.0 });
+    var boundary_texture_view = boundary_texture.createView(core.RectU32.create(core.PointU32{
+        .x = 1,
+        .y = 1,
+    }, core.PointU32{
+        .x = dimensions.width + 1,
+        .y = dimensions.height + 1,
+    })).?;
+
+    for (boundary_fragments.items) |fragment| {
+        if (fragment.pixel.x >= 0 and fragment.pixel.y >= 0) {
+            boundary_texture_view.getPixelUnsafe(core.PointU32{
+                .x = @intCast(fragment.pixel.x),
+                .y = @intCast(fragment.pixel.y),
+            }).* = draw.Monotone{
+                .a = 1.0,
+            };
         }
+    }
 
+    for (0..boundary_texture.dimensions.height) |y| {
         std.debug.print("{:0>4}: ", .{y});
-
-        for (0..x_range) |x_offset| {
-            const x = x_start + @as(i32, @intCast(x_offset));
-            while (bf_index < fragment_intersections.items.len and fragment_intersections.items[bf_index].pixel.y == y and fragment_intersections.items[bf_index].pixel.x < x) {
-                bf_index += 1;
-            }
-
-            if (bf_index < fragment_intersections.items.len) {
-                const pixel = fragment_intersections.items[bf_index].pixel;
-                if (pixel.y == y and pixel.x == x) {
-                    std.debug.print("X", .{});
-                } else {
-                    std.debug.print(";", .{});
-                }
+        for (boundary_texture.getRow(@intCast(y)).?) |pixel| {
+            if (pixel.a > 0.0) {
+                std.debug.print("#", .{});
             } else {
                 std.debug.print(";", .{});
             }
@@ -119,5 +120,6 @@ pub fn main() !void {
 
         std.debug.print("\n", .{});
     }
+
     std.debug.print("==============\n", .{});
 }
