@@ -55,7 +55,8 @@ pub fn main() !void {
 
     std.debug.print("\n============== Intersections\n", .{});
     for (intersections.items) |intersection| {
-        std.debug.print("Intersection: curve({}) t({}), ({} @ {})\n", .{
+        std.debug.print("Intersection: shape({}) curve({}) t({}), ({} @ {})\n", .{
+            intersection.shape_index,
             intersection.curve_index,
             intersection.intersection.t,
             intersection.intersection.point.x,
@@ -76,11 +77,11 @@ pub fn main() !void {
     }
     std.debug.print("==============\n", .{});
 
-    std.debug.print("\n============== Boundary Fragments\n", .{});
-    for (boundary_fragments.items) |fragment| {
-        std.debug.print("Boundary Fragment: {}\n", .{fragment});
-    }
-    std.debug.print("==============\n", .{});
+    // std.debug.print("\n============== Boundary Fragments\n", .{});
+    // for (boundary_fragments.items) |fragment| {
+    //     std.debug.print("Boundary Fragment: {}\n", .{fragment});
+    // }
+    // std.debug.print("==============\n", .{});
 
     std.debug.print("\n============== Boundary Texture\n\n", .{});
     var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
@@ -97,20 +98,21 @@ pub fn main() !void {
         .y = dimensions.height + 1,
     })).?;
 
-    for (boundary_fragments.items) |fragment| {
-        if (fragment.pixel.x >= 0 and fragment.pixel.y >= 0) {
+    for (intersections.items) |fragment| {
+        const pixel = fragment.getPixel();
+        if (pixel.x >= 0 and pixel.y >= 0) {
             boundary_texture_view.getPixelUnsafe(core.PointU32{
-                .x = @intCast(fragment.pixel.x),
-                .y = @intCast(fragment.pixel.y),
+                .x = @intCast(pixel.x),
+                .y = @intCast(pixel.y),
             }).* = draw.Monotone{
                 .a = 1.0,
             };
         }
     }
 
-    for (0..boundary_texture.dimensions.height) |y| {
+    for (0..boundary_texture_view.view.getHeight()) |y| {
         std.debug.print("{:0>4}: ", .{y});
-        for (boundary_texture.getRow(@intCast(y)).?) |pixel| {
+        for (boundary_texture_view.getRow(@intCast(y)).?) |pixel| {
             if (pixel.a > 0.0) {
                 std.debug.print("#", .{});
             } else {

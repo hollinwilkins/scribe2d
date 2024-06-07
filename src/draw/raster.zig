@@ -101,14 +101,13 @@ pub const Raster = struct {
 
         for (path.getShapes(), 0..) |shape, shape_index_usize| {
             const shape_index: u32 = @intCast(shape_index_usize);
+            var shape_intersection_range = RangeUsize{
+                .start = intersections.items.len,
+                .end = intersections.items.len,
+            };
 
             for (path.getCurvesRange(shape.curve_offsets), 0..) |curve, curve_index_usize| {
                 const curve_index: u32 = @intCast(curve_index_usize);
-
-                var curve_intersection_range = RangeUsize{
-                    .start = intersections.items.len,
-                    .end = intersections.items.len,
-                };
                 const scaled_curve = curve.invertY().scale(scaled_pixel_dimensions);
                 const scaled_curve_bounds = scaled_curve.getBounds();
 
@@ -172,17 +171,17 @@ pub const Raster = struct {
                     },
                     .is_end = scaled_curve.isEndCurve(),
                 };
-
-                curve_intersection_range.end = intersections.items.len;
-
-                // sort by t
-                std.mem.sort(
-                    PathIntersection,
-                    intersections.items[curve_intersection_range.start..curve_intersection_range.end],
-                    @as(u32, 0),
-                    pathIntersectionLessThan,
-                );
             }
+
+            shape_intersection_range.end = intersections.items.len;
+
+            // sort by t
+            std.mem.sort(
+                PathIntersection,
+                intersections.items[shape_intersection_range.start..shape_intersection_range.end],
+                @as(u32, 0),
+                pathIntersectionLessThan,
+            );
         }
 
         return intersections;
@@ -199,6 +198,8 @@ pub const Raster = struct {
             return false;
         } else if (left.intersection.t < right.intersection.t) {
             return true;
+        } else if (left.intersection.t > right.intersection.t) {
+            return false;
         } else if (right.is_end) {
             return true;
         } else {
