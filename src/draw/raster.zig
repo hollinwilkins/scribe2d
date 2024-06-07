@@ -127,7 +127,7 @@ pub const Raster = struct {
                     const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                     try scanX(
                         shape_index,
-                        path.getId(),
+                        curve_index,
                         @as(f32, @floatFromInt(grid_x)),
                         scaled_curve,
                         scaled_curve_bounds,
@@ -222,7 +222,7 @@ pub const Raster = struct {
                 continue;
             }
 
-            if (intersection1.is_end) {
+            if (intersection1.is_end or intersection1.shape_index != intersection2.shape_index) {
                 continue;
             }
 

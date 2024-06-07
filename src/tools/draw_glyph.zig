@@ -98,8 +98,9 @@ pub fn main() !void {
         .y = dimensions.height + 1,
     })).?;
 
-    for (intersections.items) |fragment| {
-        const pixel = fragment.getPixel();
+    for (boundary_fragments.items) |fragment| {
+        // const pixel = fragment.getPixel();
+        const pixel = fragment.pixel;
         if (pixel.x >= 0 and pixel.y >= 0) {
             boundary_texture_view.getPixelUnsafe(core.PointU32{
                 .x = @intCast(pixel.x),
