@@ -145,6 +145,8 @@ pub const Pen = struct {
                 },
             },
         };
+
+        (try self.currentShape()).curve_offsets.end += 1;
         self.location = point;
     }
 
@@ -167,6 +169,7 @@ pub const Pen = struct {
             },
         };
 
+        (try self.currentShape()).curve_offsets.end += 1;
         self.location = point;
     }
 

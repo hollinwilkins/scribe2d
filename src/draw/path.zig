@@ -47,7 +47,7 @@ pub const Path = struct {
         return self.unmanaged.id;
     }
 
-    pub fn getShapes(self: *const Path) []const Path {
+    pub fn getShapes(self: *const Path) []const Shape {
         return self.unmanaged.shapes;
     }
 

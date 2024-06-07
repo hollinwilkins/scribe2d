@@ -25,7 +25,7 @@ const Intersection = curve_module.Intersection;
 const UnmanagedTexture = texture_module.UnmanagedTexture;
 
 pub const PathIntersection = struct {
-    path_id: u32,
+    shape_index: u32,
     curve_index: u32,
     is_end: bool,
     intersection: Intersection,
@@ -40,7 +40,7 @@ pub const PathIntersection = struct {
 pub const PathIntersectionList = std.ArrayList(PathIntersection);
 
 pub const FragmentIntersection = struct {
-    path_id: u32,
+    shape_index: u32,
     curve_index: u32,
     pixel: PointI32,
     intersection1: Intersection,
@@ -99,85 +99,90 @@ pub const Raster = struct {
             .height = @floatFromInt(pixel_view_dimensions.height),
         };
 
-        for (path.getCurves(), 0..) |curve, curve_index_usize| {
-            const curve_index: u32 = @intCast(curve_index_usize);
-            var curve_intersection_range = RangeUsize{
-                .start = intersections.items.len,
-                .end = intersections.items.len,
-            };
-            const scaled_curve = curve.invertY().scale(scaled_pixel_dimensions);
-            const scaled_curve_bounds = scaled_curve.getBounds();
+        for (path.getShapes(), 0..) |shape, shape_index_usize| {
+            const shape_index: u32 = @intCast(shape_index_usize);
 
-            // scan x lines within bounds
-            (try intersections.addOne()).* = PathIntersection{
-                .path_id = path.getId(),
-                .curve_index = curve_index,
-                .intersection = Intersection{
-                    .t = 0.0,
-                    .point = scaled_curve.applyT(0.0),
-                },
-                .is_end = false,
-            };
-            const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
-            const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
-            for (0..grid_x_size + 1) |x_offset| {
-                const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
-                try scanX(
-                    path.getId(),
-                    curve_index,
-                    @as(f32, @floatFromInt(grid_x)),
-                    scaled_curve,
-                    scaled_curve_bounds,
-                    &intersections,
-                );
-            }
+            for (path.getCurvesRange(shape.curve_offsets), 0..) |curve, curve_index_usize| {
+                const curve_index: u32 = @intCast(curve_index_usize);
 
-            // scan y lines within bounds
-            const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
-            const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
-            for (0..grid_y_size + 1) |y_offset| {
-                const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
-                try scanY(
-                    path.getId(),
-                    curve_index,
-                    @as(f32, @floatFromInt(grid_y)),
-                    scaled_curve,
-                    scaled_curve_bounds,
-                    &intersections,
-                );
-            }
+                var curve_intersection_range = RangeUsize{
+                    .start = intersections.items.len,
+                    .end = intersections.items.len,
+                };
+                const scaled_curve = curve.invertY().scale(scaled_pixel_dimensions);
+                const scaled_curve_bounds = scaled_curve.getBounds();
 
-            // insert monotonic cuts, which ensure there are segmented montonic curves
-            for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
-                const ao = try intersections.addOne();
-                ao.* = PathIntersection{
-                    .path_id = path.getId(),
+                // scan x lines within bounds
+                (try intersections.addOne()).* = PathIntersection{
+                    .shape_index = shape_index,
                     .curve_index = curve_index,
-                    .intersection = intersection,
+                    .intersection = Intersection{
+                        .t = 0.0,
+                        .point = scaled_curve.applyT(0.0),
+                    },
                     .is_end = false,
                 };
+                const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
+                const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
+                for (0..grid_x_size + 1) |x_offset| {
+                    const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
+                    try scanX(
+                        shape_index,
+                        path.getId(),
+                        @as(f32, @floatFromInt(grid_x)),
+                        scaled_curve,
+                        scaled_curve_bounds,
+                        &intersections,
+                    );
+                }
+
+                // scan y lines within bounds
+                const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
+                const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
+                for (0..grid_y_size + 1) |y_offset| {
+                    const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
+                    try scanY(
+                        shape_index,
+                        curve_index,
+                        @as(f32, @floatFromInt(grid_y)),
+                        scaled_curve,
+                        scaled_curve_bounds,
+                        &intersections,
+                    );
+                }
+
+                // insert monotonic cuts, which ensure there are segmented montonic curves
+                for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
+                    const ao = try intersections.addOne();
+                    ao.* = PathIntersection{
+                        .shape_index = shape_index,
+                        .curve_index = curve_index,
+                        .intersection = intersection,
+                        .is_end = false,
+                    };
+                }
+
+                // last virtual intersection
+                (try intersections.addOne()).* = PathIntersection{
+                    .shape_index = shape_index,
+                    .curve_index = curve_index,
+                    .intersection = Intersection{
+                        .t = 1.0,
+                        .point = scaled_curve.applyT(1.0),
+                    },
+                    .is_end = scaled_curve.isEndCurve(),
+                };
+
+                curve_intersection_range.end = intersections.items.len;
+
+                // sort by t
+                std.mem.sort(
+                    PathIntersection,
+                    intersections.items[curve_intersection_range.start..curve_intersection_range.end],
+                    @as(u32, 0),
+                    pathIntersectionLessThan,
+                );
             }
-
-            // last virtual intersection
-            (try intersections.addOne()).* = PathIntersection{
-                .path_id = path.getId(),
-                .curve_index = curve_index,
-                .intersection = Intersection{
-                    .t = 1.0,
-                    .point = scaled_curve.applyT(1.0),
-                },
-                .is_end = scaled_curve.isEndCurve(),
-            };
-
-            curve_intersection_range.end = intersections.items.len;
-
-            // sort by t
-            std.mem.sort(
-                PathIntersection,
-                intersections.items[curve_intersection_range.start..curve_intersection_range.end],
-                @as(u32, 0),
-                pathIntersectionLessThan,
-            );
         }
 
         return intersections;
@@ -210,7 +215,7 @@ pub const Raster = struct {
 
             const ao = fragment_intersections.addOneAssumeCapacity();
             ao.* = FragmentIntersection{
-                .path_id = intersection1.path_id,
+                .shape_index = intersection1.shape_index,
                 .curve_index = intersection1.curve_index,
                 .pixel = pixel,
                 .intersection1 = intersection1.intersection,
@@ -230,9 +235,9 @@ pub const Raster = struct {
     }
 
     fn fragmentIntersectionLessThan(_: u32, left: FragmentIntersection, right: FragmentIntersection) bool {
-        if (left.path_id < right.path_id) {
+        if (left.shape_index < right.shape_index) {
             return true;
-        } else if (left.path_id == right.path_id) {
+        } else if (left.shape_index == right.shape_index) {
             if (left.pixel.y < right.pixel.y) {
                 return true;
             } else if (left.pixel.y == right.pixel.y) {
@@ -366,7 +371,7 @@ pub const Raster = struct {
     }
 
     fn scanX(
-        path_id: u32,
+        shape_index: u32,
         curve_index: u32,
         grid_x: f32,
         curve: Curve,
@@ -389,7 +394,7 @@ pub const Raster = struct {
         for (scaled_intersections) |intersection| {
             const ao = try intersections.addOne();
             ao.* = PathIntersection{
-                .path_id = path_id,
+                .shape_index = shape_index,
                 .curve_index = curve_index,
                 .intersection = intersection,
                 .is_end = false,
@@ -398,7 +403,7 @@ pub const Raster = struct {
     }
 
     fn scanY(
-        path_id: u32,
+        shape_index: u32,
         curve_index: u32,
         grid_y: f32,
         curve: Curve,
@@ -421,7 +426,7 @@ pub const Raster = struct {
         for (scaled_intersections) |intersection| {
             const ao = try intersections.addOne();
             ao.* = PathIntersection{
-                .path_id = path_id,
+                .shape_index = shape_index,
                 .curve_index = curve_index,
                 .intersection = intersection,
                 .is_end = false,
