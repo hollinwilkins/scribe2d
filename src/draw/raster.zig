@@ -189,7 +189,21 @@ pub const Raster = struct {
     }
 
     fn pathIntersectionLessThan(_: u32, left: PathIntersection, right: PathIntersection) bool {
-        return left.intersection.t < right.intersection.t;
+        if (left.shape_index < right.shape_index) {
+            return true;
+        } else if (left.shape_index > right.shape_index) {
+            return false;
+        } else if (left.curve_index < right.curve_index) {
+            return true;
+        } else if (left.curve_index > right.curve_index) {
+            return false;
+        } else if (left.intersection.t < right.intersection.t) {
+            return true;
+        } else if (right.is_end) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     // intersections must be sorted by curve_index, t
@@ -237,15 +251,21 @@ pub const Raster = struct {
     fn fragmentIntersectionLessThan(_: u32, left: FragmentIntersection, right: FragmentIntersection) bool {
         if (left.shape_index < right.shape_index) {
             return true;
-        } else if (left.shape_index == right.shape_index) {
-            if (left.pixel.y < right.pixel.y) {
-                return true;
-            } else if (left.pixel.y == right.pixel.y) {
-                return left.pixel.x < right.pixel.x;
-            }
+        } else if (left.shape_index > right.shape_index) {
+            return false;
+        } else if (left.curve_index < right.curve_index) {
+            return true;
+        } else if (left.curve_index > right.curve_index) {
+            return false;
+        } else if (left.pixel.y < right.pixel.y) {
+            return true;
+        } else if (left.pixel.y > right.pixel.y) {
+            return false;
+        } else if (left.pixel.x < right.pixel.x) {
+            return true;
+        } else {
+            return false;
         }
-
-        return false;
     }
 
     pub fn unwindFragmentIntersectionsAlloc(self: *Raster, allocator: Allocator, fragment_intersections: []FragmentIntersection) !BoundaryFragmentList {
@@ -436,6 +456,7 @@ pub const Raster = struct {
 };
 
 test "raster intersections" {
+    const test_util = @import("./test_util.zig");
     const pen_module = @import("./pen.zig");
     const UnmanagedTextureRgba = texture_module.UnmanagedTextureRgba;
 
@@ -480,11 +501,63 @@ test "raster intersections" {
         },
     }).?;
 
-    const intersections = try Raster.createIntersections(std.testing.allocator, path, &texture_view);
-    defer intersections.deinit();
+    const path_intersections = try Raster.createIntersections(std.testing.allocator, path, &texture_view);
+    defer path_intersections.deinit();
 
     std.debug.print("Intersections:\n", .{});
-    for (intersections.items) |intersection| {
+    for (path_intersections.items) |intersection| {
         std.debug.print("{}\n", .{intersection});
     }
+
+    try test_util.expectPathIntersectionsContains(PathIntersection{
+        .shape_index = 0,
+        .curve_index = 0,
+        .is_end = false,
+        .intersection = Intersection{
+            .t = 0.0,
+            .point = PointF32{
+                .x = 1.0,
+                .y = 4.0,
+            },
+        },
+    }, path_intersections.items, 0.0);
+
+    try test_util.expectPathIntersectionsContains(PathIntersection{
+        .shape_index = 0,
+        .curve_index = 0,
+        .is_end = false,
+        .intersection = Intersection{
+            .t = 0.3333333,
+            .point = PointF32{
+                .x = 1.0,
+                .y = 3.0,
+            },
+        },
+    }, path_intersections.items, test_util.DEFAULT_TOLERANCE);
+
+    try test_util.expectPathIntersectionsContains(PathIntersection{
+        .shape_index = 0,
+        .curve_index = 0,
+        .is_end = false,
+        .intersection = Intersection{
+            .t = 0.6666666,
+            .point = PointF32{
+                .x = 1.0,
+                .y = 2.0,
+            },
+        },
+    }, path_intersections.items, test_util.DEFAULT_TOLERANCE);
+
+    try test_util.expectPathIntersectionsContains(PathIntersection{
+        .shape_index = 0,
+        .curve_index = 0,
+        .is_end = false,
+        .intersection = Intersection{
+            .t = 1.0,
+            .point = PointF32{
+                .x = 1.0,
+                .y = 1.0,
+            },
+        },
+    }, path_intersections.items, 0.0);
 }

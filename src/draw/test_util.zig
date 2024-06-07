@@ -26,32 +26,40 @@ pub fn expectApproxEqlIntersectionTY(expected: Intersection, actual: Intersectio
     try expectApproxEqlIntersectionTXY(expected, actual, t_tol, 0.0, y_tol);
 }
 
-pub fn expectPathIntersectionsContains(expected: PathIntersection, intersections: []const PathIntersection, tol: f32) !void {
-    std.sort.binarySearch(Intersection, expected, intersections, tol, compareIntersection);
+pub fn expectPathIntersectionsContains(expected: PathIntersection, intersections: []const PathIntersection, t_tol: f32) !void {
+    const index = std.sort.binarySearch(
+        PathIntersection,
+        expected,
+        intersections,
+        t_tol,
+        compareIntersection,
+    );
+
+    if (index == null) {
+        return error.TestExpectedError;
+    }
 }
 
-fn compareIntersection(tol: f32, key: PathIntersection, mid_item: PathIntersection) std.math.Order {
-    if (key.path_id < mid_item.path_id) {
+fn compareIntersection(t_tol: f32, key: PathIntersection, mid_item: PathIntersection) std.math.Order {
+    if (key.shape_index < mid_item.shape_index) {
         return .lt;
-    } else if (key.path_id > mid_item.path_id) {
+    } else if (key.shape_index > mid_item.shape_index) {
         return .gt;
     } else if (key.curve_index < mid_item.curve_index) {
         return .lt;
     } else if (key.curve_index > mid_item.curve_index) {
         return .gt;
+    } else if (std.math.approxEqAbs(f32, key.intersection.t, mid_item.intersection.t, t_tol) and key.is_end == mid_item.is_end) {
+        return .eq;
     } else if (key.intersection.t < mid_item.intersection.t) {
         return .lt;
     } else if (key.intersection.t > mid_item.intersection.t) {
         return .gt;
+    } else if (!key.is_end and mid_item.is_end) {
+        return .lt;
+    } else if (key.is_end and !mid_item.is_end) {
+        return .gt;
     } else {
-        const t_eq = std.math.approxEqAbs(f32, key.intersection.t, mid_item.intersection.t, tol);
-
-        if (t_eq) {
-            return .eq;
-        } else if (key.intersection.t < mid_item.intersection.t) {
-            return .lt;
-        } else {
-            return .gt;
-        }
+        return .eq;
     }
 }

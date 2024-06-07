@@ -101,21 +101,15 @@ pub const Pen = struct {
     }
 
     pub fn currentShape(self: *@This()) !*Shape {
-        if (self.shapes.items.len == 0) {
-            return self.nextShape();
-        }
-
         return &self.shapes.items[self.shapes.items.len - 1];
     }
 
-    pub fn nextShape(self: *@This()) !*Shape {
+    pub fn nextShape(self: *@This()) !void {
         const ao = try self.shapes.addOne();
         ao.* = Shape{ .curve_offsets = RangeU32{
-            .start = @intCast(self.shapes.items.len),
-            .end = @intCast(self.shapes.items.len),
+            .start = @intCast(self.curves.items.len),
+            .end = @intCast(self.curves.items.len),
         } };
-
-        return ao;
     }
 
     pub fn moveTo(self: *@This(), point: PointF32) !void {
@@ -131,6 +125,7 @@ pub const Pen = struct {
     pub fn lineTo(self: *@This(), point: PointF32) !void {
         if (self.start == null) {
             self.start = self.location;
+            try self.nextShape();
         }
 
         // attempt to add a line curve from current location to point
@@ -152,6 +147,7 @@ pub const Pen = struct {
     pub fn quadTo(self: *@This(), point: PointF32, control: PointF32) !void {
         if (self.start == null) {
             self.start = self.location;
+            try self.nextShape();
         }
 
         // attempt to add a quadratic curve from current location to point
