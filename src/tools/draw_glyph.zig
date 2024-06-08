@@ -65,7 +65,7 @@ pub fn main() !void {
     }
     std.debug.print("==============\n", .{});
 
-    const fragment_intersections = try draw.Raster.createFragmentIntersectionsAlloc(allocator, intersections.items);
+    const fragment_intersections = try raster.createFragmentIntersectionsAlloc(allocator, intersections.items);
     defer fragment_intersections.deinit();
 
     var boundary_fragments = try draw.Raster.unwindFragmentIntersectionsAlloc(allocator, fragment_intersections.items);

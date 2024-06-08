@@ -216,7 +216,7 @@ pub const Raster = struct {
                 continue;
             }
 
-            if (intersection1.is_end or intersection1.shape_index != intersection2.shape_index) {
+            if (intersection1.is_end or intersection1.shape_index != intersection2.shape_index or intersection1.curve_index != intersection2.curve_index) {
                 continue;
             }
 
@@ -226,21 +226,36 @@ pub const Raster = struct {
                 intersection1.intersection.point,
                 intersection2.intersection.point,
             ));
-            var horizontal_sign: i2 = 0;
             var vertical_mask: u16 = 0;
+            var horizontal_sign: i2 = 0;
             var vertical_sign: i2 = 0;
             if (intersection1.intersection.point.x == 0.0) {
                 vertical_mask = self.half_planes.getVerticalMask(intersection1.intersection.point.y);
+
+                if (intersection1.intersection.point.y > 0.5) {
+                    vertical_sign = -1;
+                } else {
+                    vertical_sign = 1;
+                }
             } else if (intersection2.intersection.point.x == 0.0) {
                 vertical_mask = self.half_planes.getVerticalMask(intersection2.intersection.point.y);
+
+                if (intersection2.intersection.point.y > 0.5) {
+                    vertical_sign = -1;
+                } else {
+                    vertical_sign = 1;
+                }
             }
 
             if (intersection1.intersection.point.y > intersection2.intersection.point.y) {
                 horizontal_sign = 1;
-                vertical_sign = 1;
             } else if (intersection1.intersection.point.y < intersection2.intersection.point.y) {
                 horizontal_sign = -1;
-                vertical_sign = -1;
+            }
+
+            if (intersection1.intersection.t > intersection2.intersection.t) {
+                horizontal_sign *= -1;
+                vertical_sign *= -1;
             }
 
             const ao = fragment_intersections.addOneAssumeCapacity();
@@ -357,19 +372,28 @@ pub const Raster = struct {
                 // - calculalate the bitmask for Mv and Mh and store it in the FragmentIntersection
 
                 // var bitmask: u16 = 0;
-                // if (end_index > start_index) {
-                //     for (fragment_intersections[start_index .. end_index - 1]) |fi| {
-                //         // calculate bitmask
-                //         // fi is sorted on x from 0 -> 1
-                //         const curve_mask = self.half_planes.getLineMask(fi.getLine());
-                //         if (boundary_fragment.winding.start_value % 2 == 0) {
+                var samples: [16]i8 = [_]i8{0} ** 16;
+                if (end_index > start_index) {
+                    for (fragment_intersections[start_index .. end_index - 1]) |fi| {
+                        for (0..16) |sample_index| {
+                            const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(sample_index));
+                            const main_ray: i8 = @intFromFloat(boundary_fragment.winding);
+                            const horizontal_ray: i8 = fi.horizontal_sign * @intFromBool((fi.horizontal_mask & bit_index) != 0);
+                            const vertical_ray: i8 = fi.vertical_sign * @intFromBool((fi.vertical_mask & bit_index) != 0);
+                            samples[sample_index] += main_ray + horizontal_ray + vertical_ray;
+                        }
+                    }
+                }
 
-                //         }
-                //         // bitmask = bitmask & self.half_planes.;
-                //     }
-                // }
+                var mask: u16 = 0;
+                for (0..16) |sample_index| {
+                    const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(sample_index));
+                    if (samples[sample_index] != 0) {
+                        mask |= bit_index;
+                    }
+                }
 
-                // boundary_fragment.bitmask = bitmask;
+                boundary_fragment.bitmask = mask;
             }
         }
 
