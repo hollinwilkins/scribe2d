@@ -146,7 +146,6 @@ pub const CurveFragment = struct {
     
     pixel: PointI32,
     intersections: [2]Intersection,
-    masks: Masks = Masks{},
 
     pub fn create(pixel_intersections: [2]*const PixelIntersection) CurveFragment {
         const pixel = pixel_intersections[0].getPixel().min(pixel_intersections[1].getPixel());
@@ -182,9 +181,36 @@ pub const CurveFragment = struct {
         };
     }
 
-    pub fn calculateMasks(self: *CurveFragment, half_planes: HalfPlanesU16) void {
-        _ = self;
-        _ = half_planes;
+    pub fn calculateMasks(self: *CurveFragment, half_planes: HalfPlanesU16) Masks {
+        var masks = Masks{};
+        if (self.intersections[0].point.x == 0.0 and !self.intersections[1].point.x != 0.0) {
+            masks.vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
+
+            if (self.intersections[0].point.y < 0.5) {
+                masks.vertical_sign = -1;
+            } else {
+                masks.vertical_sign = 1;
+            }
+        } else if (self.intersections[1].point.x == 0.0 and self.intersections[0].point.x != 0.0) {
+            masks.vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
+
+            if (self.intersections[1].point.y < 0.5) {
+                masks.vertical_sign = 1;
+            } else {
+                masks.vertical_sign = -1;
+            }
+        }
+
+        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
+
+        if (self.intersections[0].point.y > self.intersections[1].point.y) {
+            // crossing top to bottom
+            masks.horizontal_sign = 1;
+        } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+            masks.horizontal_sign = -1;
+        }
+
+        return masks;
     }
 
     pub fn getLine(self: CurveFragment) Line {
