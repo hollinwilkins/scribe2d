@@ -102,7 +102,12 @@ pub fn main() !void {
     std.debug.print("Boundary Fragments:\n", .{});
     for (raster_data.getShapeRecords(), 0..) |shape_record, shape_index| {
         for (raster_data.getBoundaryFragments()[shape_record.boundary_fragment_offsets.start..shape_record.boundary_fragment_offsets.end]) |boundary_fragment| {
-            std.debug.print("BoundaryFragment({}), StencilMask({b:0>16})\n", .{shape_index, boundary_fragment.stencil_mask});
+            std.debug.print("BoundaryFragment({}), Pixel({},{}), StencilMask({b:0>16})\n", .{
+                shape_index,
+                boundary_fragment.pixel.x,
+                boundary_fragment.pixel.y,
+                boundary_fragment.stencil_mask,
+            });
         }
     }
 
