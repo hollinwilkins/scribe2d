@@ -26,19 +26,27 @@ const Intersection = curve_module.Intersection;
 const UnmanagedTexture = texture_module.UnmanagedTexture;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
+pub const ShapeRecord = struct {
+    curve_fragment_offsets: RangeU32 = RangeU32{},
+};
+
 pub const CurveRecord = struct {
-    pixel_intersection_offests: RangeU32,
+    pixel_intersection_offests: RangeU32 = RangeU32{},
 };
 
 pub const RasterData = struct {
+    const ShapeRecordList = std.ArrayListUnmanaged(ShapeRecord);
     const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
     const PixelIntersectionList = std.ArrayListUnmanaged(PixelIntersection);
+    const CurveFragmentList = std.ArrayListUnmanaged(CurveFragment);
 
     allocator: Allocator,
     path: *const Path,
     view: *TextureViewRgba,
+    shape_records: ShapeRecordList = ShapeRecordList{},
     curve_records: CurveRecordList = CurveRecordList{},
     pixel_intersections: PixelIntersectionList = PixelIntersectionList{},
+    curve_fragments: CurveFragmentList = CurveFragmentList{},
 
     pub fn init(allocator: Allocator, path: *const Path, view: *TextureViewRgba) RasterData {
         return RasterData{
@@ -49,8 +57,10 @@ pub const RasterData = struct {
     }
 
     pub fn deinit(self: *RasterData) void {
+        self.shape_records.deinit(self.allocator);
         self.curve_records.deinit(self.allocator);
         self.pixel_intersections.deinit(self.allocator);
+        self.curve_fragments.deinit(self.allocator);
     }
 
     pub fn getPath(self: RasterData) *const Path {
@@ -65,6 +75,10 @@ pub const RasterData = struct {
         return self.path.getShapes();
     }
 
+    pub fn getShapeRecords(self: *RasterData) []ShapeRecord {
+        return self.shape_records.items;
+    }
+
     pub fn getCurves(self: RasterData) []const Curve {
         return self.path.getCurves();
     }
@@ -77,12 +91,24 @@ pub const RasterData = struct {
         return self.pixel_intersections.items;
     }
 
+    pub fn getCurveFragments(self: *RasterData) []CurveFragment {
+        return self.curve_fragments.items;
+    }
+
+    pub fn addShapeRecord(self: *RasterData) !*ShapeRecord {
+        return try self.shape_records.addOne(self.allocator);
+    }
+
     pub fn addCurveRecord(self: *RasterData) !*CurveRecord {
         return try self.curve_records.addOne(self.allocator);
     }
 
     pub fn addPixelIntersection(self: *RasterData) !*PixelIntersection {
         return try self.pixel_intersections.addOne(self.allocator);
+    }
+
+    pub fn addCurveFragment(self: *RasterData) !*CurveFragment {
+        return try self.curve_fragments.addOne(self.allocator);
     }
 };
 
@@ -107,6 +133,49 @@ pub const PixelIntersection = struct {
 
     pub fn getPixel(self: PixelIntersection) PointI32 {
         return self.pixel;
+    }
+};
+
+pub const CurveFragment = struct {
+    pixel: PointI32,
+    intersections: [2]Intersection,
+
+    pub fn create(pixel_intersections: [2]*const PixelIntersection) CurveFragment {
+        const pixel = pixel_intersections[0].getPixel().min(pixel_intersections[1].getPixel());
+
+        // can move diagonally, but cannot move by more than 1 pixel in both directions
+        std.debug.assert(@abs(pixel.sub(pixel_intersections[0].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(pixel_intersections[0].pixel).y) <= 1);
+        std.debug.assert(@abs(pixel.sub(pixel_intersections[1].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(pixel_intersections[1].pixel).y) <= 1);
+
+        return CurveFragment {
+            .pixel = pixel,
+            .intersections = [2]Intersection{
+                Intersection{
+                    // retain t
+                    .t = pixel_intersections[0].getT(),
+                    // float component of the intersection points, range [0.0, 1.0]
+                    .point = PointF32{
+                        .x = @abs(pixel_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
+                        .y = @abs(pixel_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
+                    },
+                },
+                Intersection{
+                    // retain t
+                    .t = pixel_intersections[1].getT(),
+                    // float component of the intersection points, range [0.0, 1.0]
+                    .point = PointF32{
+                        .x = @abs(pixel_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
+                        .y = @abs(pixel_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
+                    },
+                },
+            }
+        };
+    }
+
+    pub fn getLine(self: CurveFragment) Line {
+        return Line.create(self.intersection1.point, self.intersection2.point);
     }
 };
 
@@ -156,6 +225,7 @@ pub const Raster = struct {
         errdefer raster_data.deinit();
 
         try self.populateIntersections(&raster_data);
+        try self.populateCurveFragments(&raster_data);
 
         return raster_data;
     }
@@ -251,121 +321,59 @@ pub const Raster = struct {
         return false;
     }
 
-    // intersections must be sorted by curve_index, t
-    // pub fn createFragmentIntersectionsAlloc(self: *@This(), allocator: Allocator, intersections: []const PathIntersection) !FragmentIntersectionList {
-    //     _ = self;
-    //     var fragment_intersections = try FragmentIntersectionList.initCapacity(allocator, intersections.len - 1);
+    pub fn populateCurveFragments(self: *@This(), raster_data: *RasterData) !void {
+        _ = self;
 
-    //     for (0..intersections.len) |index| {
-    //         if (index + 1 >= intersections.len) {
-    //             break;
-    //         }
+        for (raster_data.getShapes()) |shape| {
+            var curve_fragment_offsets = RangeU32{
+                .start = @intCast(raster_data.getCurveFragments().len),
+            };
+            // curve fragments are unique to curve
+            for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end]) |curve_record| {
+                const pixel_intersections = raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end];
+                std.debug.assert(pixel_intersections.len > 0);
 
-    //         var intersection1 = intersections[index];
-    //         var intersection2 = intersections[index + 1];
-    //         if (std.meta.eql(intersection1.getPoint(), intersection2.getPoint())) {
-    //             continue;
-    //         }
+                var previous_pixel_intersection: *PixelIntersection = &pixel_intersections[0];
+                for (pixel_intersections) |*pixel_intersection| {
+                    if (std.meta.eql(previous_pixel_intersection.getPoint(), pixel_intersection.getPoint())) {
+                        // skip if exactly the same point
+                        continue;
+                    }
 
-    //         if (intersection1.is_end or intersection1.shape_index != intersection2.shape_index or intersection1.curve_index != intersection2.curve_index) {
-    //             continue;
-    //         }
+                    const ao = try raster_data.addCurveFragment();
+                    ao.* = CurveFragment.create([_]*const PixelIntersection{previous_pixel_intersection, pixel_intersection});
+                    std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
 
-    //         const x_offset: f32 = @floatFromInt(@abs(intersection1.getPixel().x - intersection2.getPixel().x));
-    //         const y_offset: f32 = @floatFromInt(@abs(intersection1.getPixel().y - intersection2.getPixel().y));
-    //         const point_offset = PointF32{
-    //             .x = x_offset,
-    //             .y = y_offset,
-    //         };
-    //         std.debug.assert(x_offset <= 1.0 and x_offset >= 0.0);
-    //         std.debug.assert(y_offset <= 1.0 and y_offset >= 0.0);
+                    previous_pixel_intersection = pixel_intersection;
+                }
+            }
 
-    //         if (intersection1.getPixel().y > intersection2.getPixel().y) {
-    //             std.mem.swap(PathIntersection, &intersection1, &intersection2);
-    //             intersection2.intersection.intersection.point = intersection2.intersection.intersection.point.add(point_offset);
-    //         } else if (intersection1.getPixel().y == intersection2.getPixel().y and intersection1.getPixel().x > intersection2.getPixel().x) {
-    //             std.mem.swap(PathIntersection, &intersection1, &intersection2);
-    //             intersection2.intersection.intersection.point = intersection2.intersection.intersection.point.add(point_offset);
-    //         }
+            curve_fragment_offsets.end = @intCast(raster_data.getCurveFragments().len);
+            (try raster_data.addShapeRecord()).* = ShapeRecord{
+                .curve_fragment_offsets = curve_fragment_offsets,
+            };
 
-    //         const pixel = intersection1.getPixel();
+            // for each shape, sort the curve fragments by pixel y, x
+            std.mem.sort(
+                CurveFragment,
+                raster_data.getCurveFragments()[curve_fragment_offsets.start..curve_fragment_offsets.end],
+                @as(u32, 0),
+                curveFragmentLessThan,
+            );
+        }
+    }
 
-    //         // const horizontal_mask = self.half_planes.getHorizontalMask(Line.create(
-    //         //     intersection1.getPoint(),
-    //         //     intersection2.getPoint(),
-    //         // ));
-    //         // var vertical_mask: u16 = 0;
-    //         // var horizontal_sign: i2 = 0;
-    //         // var vertical_sign: i2 = 0;
-    //         // if (intersection1.getPoint().x == 0.0) {
-    //         //     vertical_mask = self.half_planes.getVerticalMask(intersection1.getPoint().y);
-
-    //         //     if (intersection1.getPoint().y > 0.5) {
-    //         //         vertical_sign = -1;
-    //         //     } else {
-    //         //         vertical_sign = 1;
-    //         //     }
-    //         // } else if (intersection2.getPoint().x == 0.0) {
-    //         //     vertical_mask = self.half_planes.getVerticalMask(intersection2.getPoint().y);
-
-    //         //     if (intersection2.getPoint().y > 0.5) {
-    //         //         vertical_sign = -1;
-    //         //     } else {
-    //         //         vertical_sign = 1;
-    //         //     }
-    //         // }
-
-    //         // if (intersection1.getPoint().y > intersection2.getPoint().y) {
-    //         //     horizontal_sign = 1;
-    //         // } else if (intersection1.getPoint().y < intersection2.getPoint().y) {
-    //         //     horizontal_sign = -1;
-    //         // }
-
-    //         // if (intersection1.getT() > intersection2.getT()) {
-    //         //     horizontal_sign *= -1;
-    //         //     vertical_sign *= -1;
-    //         // }
-
-    //         const ao = fragment_intersections.addOneAssumeCapacity();
-    //         ao.* = FragmentIntersection{
-    //             .shape_index = intersection1.shape_index,
-    //             .curve_index = intersection1.curve_index,
-    //             .pixel = pixel,
-    //             .intersection1 = intersection1.getIntersection(),
-    //             .intersection2 = intersection2.getIntersection(),
-    //             .horizontal_mask = 0,
-    //             .horizontal_sign = 0,
-    //             .vertical_mask = 0,
-    //             .vertical_sign = 0,
-    //         };
-    //     }
-
-    //     // sort by path_id, y, x
-    //     std.mem.sort(
-    //         FragmentIntersection,
-    //         fragment_intersections.items,
-    //         @as(u32, 0),
-    //         fragmentIntersectionLessThan,
-    //     );
-
-    //     return fragment_intersections;
-    // }
-
-    // fn fragmentIntersectionLessThan(_: u32, left: FragmentIntersection, right: FragmentIntersection) bool {
-    //     if (left.shape_index < right.shape_index) {
-    //         return true;
-    //     } else if (left.shape_index > right.shape_index) {
-    //         return false;
-    //     } else if (left.pixel.y < right.pixel.y) {
-    //         return true;
-    //     } else if (left.pixel.y > right.pixel.y) {
-    //         return false;
-    //     } else if (left.pixel.x < right.pixel.x) {
-    //         return true;
-    //     } else {
-    //         return false;
-    //     }
-    // }
+    fn curveFragmentLessThan(_: u32, left: CurveFragment, right: CurveFragment) bool {
+        if (left.pixel.y < right.pixel.y) {
+            return true;
+        } else if (left.pixel.y > right.pixel.y) {
+            return false;
+        } else if (left.pixel.x < right.pixel.x) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     // pub fn unwindFragmentIntersectionsAlloc(allocator: Allocator, fragment_intersections: []FragmentIntersection) !BoundaryFragmentList {
     //     var boundary_fragments = BoundaryFragmentList.init(allocator);

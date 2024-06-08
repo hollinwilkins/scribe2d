@@ -52,6 +52,7 @@ pub fn main() !void {
     defer raster_data.deinit();
 
     // output curves
+    std.debug.print("\n", .{});
     std.debug.print("Curves:\n", .{});
     for (raster_data.getShapes(), 0..) |shape, shape_index| {
         for (raster_data.getCurves()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve, curve_index| {
@@ -59,6 +60,8 @@ pub fn main() !void {
         }
     }
 
+    std.debug.print("\n", .{});
+    std.debug.print("Pixel Intersections:\n", .{});
     for (raster_data.getShapes(), 0..) |shape, shape_index| {
         for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve_record, curve_index| {
             for (raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end]) |pixel_intersection| {
@@ -74,6 +77,25 @@ pub fn main() !void {
             }
             std.debug.print("-----------------------------\n", .{});
         }
+    }
+
+    std.debug.print("\n", .{});
+    std.debug.print("Curve Fragments:\n", .{});
+    for (raster_data.getShapeRecords(), 0..) |shape_record, shape_index| {
+        for (raster_data.getCurveFragments()[shape_record.curve_fragment_offsets.start..shape_record.curve_fragment_offsets.end]) |curve_fragment| {
+            std.debug.print("CurveFragment({}), Pixel({},{}), Intersection(({},{}),({},{}):({},{}))\n", .{
+                shape_index,
+                curve_fragment.pixel.x,
+                curve_fragment.pixel.y,
+                curve_fragment.intersections[0].t,
+                curve_fragment.intersections[1].t,
+                curve_fragment.intersections[0].point.x,
+                curve_fragment.intersections[0].point.y,
+                curve_fragment.intersections[1].point.x,
+                curve_fragment.intersections[1].point.y,
+            });
+        }
+        std.debug.print("-----------------------------\n", .{});
     }
 
     // const intersections = try draw.Raster.createIntersections(allocator, path, &texture_view);

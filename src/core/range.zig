@@ -1,7 +1,7 @@
 pub fn Range(comptime T: type) type {
     return struct {
-        start: T,
-        end: T,
+        start: T = 0,
+        end: T = 0,
 
         pub fn size(self: @This()) usize {
             return @intCast(self.end - self.start);
