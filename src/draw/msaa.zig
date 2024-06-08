@@ -96,7 +96,7 @@ pub fn HalfPlanes(comptime T: type) type {
             return self.vertical_masks[index];
         }
 
-        pub fn getTrapezoidMask(self: *@This(), line: Line) u16 {
+        pub fn getHorizontalMask(self: *@This(), line: Line) u16 {
             const top_y = @min(line.start.y, line.end.y);
             const bottom_y = @max(line.start.y, line.end.y);
 
@@ -105,26 +105,6 @@ pub fn HalfPlanes(comptime T: type) type {
             const line_mask = self.getHalfPlaneMask(line.start, line.end);
 
             return top_mask & bottom_mask & line_mask;
-        }
-
-        pub fn getLineMask(self: *@This(), line: Line) u16 {
-            var mask: T = 0;
-            const pixel_line = Line.create(PointF32{
-                .x = std.math.modf(line.start.x).fpart,
-                .y = std.math.modf(line.start.y).fpart,
-            }, PointF32{
-                .x = std.math.modf(line.end.x).fpart,
-                .y = std.math.modf(line.end.y).fpart,
-            });
-
-            if (line.start.x == 0.0) {
-                mask = self.getVerticalMask(line.start.y);
-            } else if (line.end.x == 0.0) {
-                mask = self.getVerticalMask(line.end.y);
-            }
-
-            mask = mask & self.getTrapezoidMask(pixel_line);
-            return mask;
         }
     };
 }
@@ -300,7 +280,7 @@ test "16 bit msaa" {
     });
     try std.testing.expectEqual(0b0100000000000000, hp_bottom_right);
 
-    const trap1 = half_planes.getTrapezoidMask(Line.create(PointF32{
+    const trap1 = half_planes.getHorizontalMask(Line.create(PointF32{
         .x = 0.1,
         .y = 0.9,
     }, PointF32{
@@ -309,7 +289,7 @@ test "16 bit msaa" {
     }));
     try std.testing.expectEqual(0b0010000101101001, trap1);
 
-    const trap2 = half_planes.getTrapezoidMask(Line.create(PointF32{
+    const trap2 = half_planes.getHorizontalMask(Line.create(PointF32{
         .x = 0.5,
         .y = 0.6,
     }, PointF32{
@@ -318,7 +298,7 @@ test "16 bit msaa" {
     }));
     try std.testing.expectEqual(0b0010000000001001, trap2);
 
-    const trap3 = half_planes.getTrapezoidMask(Line.create(PointF32{
+    const trap3 = half_planes.getHorizontalMask(Line.create(PointF32{
         .x = 0.5,
         .y = 0.4,
     }, PointF32{

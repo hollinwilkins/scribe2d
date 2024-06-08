@@ -47,7 +47,9 @@ pub const FragmentIntersection = struct {
     intersection1: Intersection,
     intersection2: Intersection,
     horizontal_mask: u16,
+    horizontal_sign: i2,
     vertical_mask: u16,
+    vertical_sign: i2,
 
     pub fn getLine(self: FragmentIntersection) Line {
         return Line.create(self.intersection1.point, self.intersection2.point);
@@ -200,7 +202,7 @@ pub const Raster = struct {
     }
 
     // intersections must be sorted by curve_index, t
-    pub fn createFragmentIntersectionsAlloc(allocator: Allocator, intersections: []const PathIntersection) !FragmentIntersectionList {
+    pub fn createFragmentIntersectionsAlloc(self: *@This(), allocator: Allocator, intersections: []const PathIntersection) !FragmentIntersectionList {
         var fragment_intersections = try FragmentIntersectionList.initCapacity(allocator, intersections.len - 1);
 
         for (0..intersections.len) |index| {
@@ -220,6 +222,27 @@ pub const Raster = struct {
 
             const pixel = intersection1.getPixel().min(intersection2.getPixel());
 
+            const horizontal_mask = self.half_planes.getHorizontalMask(Line.create(
+                intersection1.intersection.point,
+                intersection2.intersection.point,
+            ));
+            var horizontal_sign: i2 = 0;
+            var vertical_mask: u16 = 0;
+            var vertical_sign: i2 = 0;
+            if (intersection1.intersection.point.x == 0.0) {
+                vertical_mask = self.half_planes.getVerticalMask(intersection1.intersection.point.y);
+            } else if (intersection2.intersection.point.x == 0.0) {
+                vertical_mask = self.half_planes.getVerticalMask(intersection2.intersection.point.y);
+            }
+
+            if (intersection1.intersection.point.y > intersection2.intersection.point.y) {
+                horizontal_sign = 1;
+                vertical_sign = 1;
+            } else if (intersection1.intersection.point.y < intersection2.intersection.point.y) {
+                horizontal_sign = -1;
+                vertical_sign = -1;
+            }
+
             const ao = fragment_intersections.addOneAssumeCapacity();
             ao.* = FragmentIntersection{
                 .shape_index = intersection1.shape_index,
@@ -227,9 +250,10 @@ pub const Raster = struct {
                 .pixel = pixel,
                 .intersection1 = intersection1.intersection,
                 .intersection2 = intersection2.intersection,
-                // TODO: horizontal_mask, vertical_mask
-                .horizontal_mask = 0,
-                .vertical_mask = 0,
+                .horizontal_mask = horizontal_mask,
+                .horizontal_sign = horizontal_sign,
+                .vertical_mask = vertical_mask,
+                .vertical_sign = vertical_sign,
             };
         }
 
