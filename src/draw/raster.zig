@@ -421,13 +421,13 @@ pub const Raster = struct {
     pub fn populateBoundaryFragments(self: *Raster, raster_data: *RasterData) !void {
         for (raster_data.getShapeRecords()) |*shape_record| {
             const first_curve_fragment = &raster_data.getCurveFragments()[shape_record.curve_fragment_offsets.start];
-            var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
-            boundary_fragment.* = BoundaryFragment{
-                .pixel = first_curve_fragment.pixel,
-            };
             var boundary_fragment_offsets = RangeU32{
                 .start = @intCast(raster_data.getBoundaryFragments().len),
                 .end = @intCast(raster_data.getBoundaryFragments().len),
+            };
+            var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
+            boundary_fragment.* = BoundaryFragment{
+                .pixel = first_curve_fragment.pixel,
             };
             var curve_fragment_offsets = RangeU32{
                 .start = shape_record.curve_fragment_offsets.start,
@@ -450,10 +450,13 @@ pub const Raster = struct {
                     boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
                     boundary_fragment = try raster_data.addBoundaryFragment();
                     curve_fragment_offsets.start = curve_fragment_offsets.end;
-                    main_ray_winding = 0.0;
                     boundary_fragment.* = BoundaryFragment{
                         .pixel = curve_fragment.pixel,
                     };
+
+                    if (curve_fragment.pixel.y != boundary_fragment.pixel.y) {
+                        main_ray_winding = 0.0;
+                    }
                 }
 
                 if (curve_fragment.getLine().intersectHorizontalLine(main_ray) != null) {
