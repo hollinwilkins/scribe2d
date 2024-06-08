@@ -64,9 +64,21 @@ pub fn HalfPlanes(comptime T: type) type {
                     .x = 0.5,
                     .y = 0.5,
                 });
+                const float_width: f32 = @floatFromInt(self.half_planes.dimensions.width);
+                const float_height: f32 = @floatFromInt(self.half_planes.dimensions.height);
+                const texel_x = std.math.clamp(
+                    @round(uv.x * float_width),
+                    0.0,
+                    float_width - 1.0,
+                );
+                const texel_y = std.math.clamp(
+                    @round(uv.y * float_height),
+                    0.0,
+                    float_height - 1.0,
+                );
                 const texel_coord = PointU32{
-                    .x = @intFromFloat(@round(uv.x * @as(f32, @floatFromInt(self.half_planes.dimensions.width)))),
-                    .y = @intFromFloat(@round(uv.y * @as(f32, @floatFromInt(self.half_planes.dimensions.height)))),
+                    .x = @intFromFloat(texel_x),
+                    .y = @intFromFloat(texel_y),
                 };
 
                 return self.half_planes.getPixel(texel_coord).?.*;
