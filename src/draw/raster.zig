@@ -168,28 +168,34 @@ pub const CurveFragment = struct {
         std.debug.assert(@abs(pixel.sub(pixel_intersections[1].pixel).x) <= 1);
         std.debug.assert(@abs(pixel.sub(pixel_intersections[1].pixel).y) <= 1);
 
-        return CurveFragment{
-            .pixel = pixel,
-            .intersections = [2]Intersection{
-                Intersection{
-                    // retain t
-                    .t = pixel_intersections[0].getT(),
-                    // float component of the intersection points, range [0.0, 1.0]
-                    .point = PointF32{
-                        .x = @abs(pixel_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
-                        .y = @abs(pixel_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
-                    },
-                },
-                Intersection{
-                    // retain t
-                    .t = pixel_intersections[1].getT(),
-                    // float component of the intersection points, range [0.0, 1.0]
-                    .point = PointF32{
-                        .x = @abs(pixel_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
-                        .y = @abs(pixel_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
-                    },
+        const intersections: [2]Intersection = [2]Intersection{
+            Intersection{
+                // retain t
+                .t = pixel_intersections[0].getT(),
+                // float component of the intersection points, range [0.0, 1.0]
+                .point = PointF32{
+                    .x = @abs(pixel_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
+                    .y = @abs(pixel_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
                 },
             },
+            Intersection{
+                // retain t
+                .t = pixel_intersections[1].getT(),
+                // float component of the intersection points, range [0.0, 1.0]
+                .point = PointF32{
+                    .x = @abs(pixel_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
+                    .y = @abs(pixel_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
+                },
+            },
+        };
+
+        std.debug.assert(intersections[0].point.x <= 1.0);
+        std.debug.assert(intersections[0].point.y <= 1.0);
+        std.debug.assert(intersections[1].point.x <= 1.0);
+        std.debug.assert(intersections[1].point.y <= 1.0);
+        return CurveFragment{
+            .pixel = pixel,
+            .intersections = intersections,
         };
     }
 
@@ -260,7 +266,7 @@ pub const Raster = struct {
 
         try self.populateIntersections(&raster_data);
         try self.populateCurveFragments(&raster_data);
-        try self.populateBoundaryFragments(&raster_data);
+        // try self.populateBoundaryFragments(&raster_data);
 
         return raster_data;
     }
@@ -359,12 +365,13 @@ pub const Raster = struct {
     pub fn populateCurveFragments(self: *@This(), raster_data: *RasterData) !void {
         _ = self;
 
-        for (raster_data.getShapes()) |shape| {
+        for (raster_data.getShapes(), 0..) |shape, shape_index| {
             var curve_fragment_offsets = RangeU32{
                 .start = @intCast(raster_data.getCurveFragments().len),
             };
             // curve fragments are unique to curve
-            for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end]) |curve_record| {
+            for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve_record, curve_index| {
+                std.debug.print("{}{}\n", .{shape_index, curve_index});
                 const pixel_intersections = raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end];
                 std.debug.assert(pixel_intersections.len > 0);
 

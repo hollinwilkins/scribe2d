@@ -47,7 +47,8 @@ pub fn HalfPlanes(comptime T: type) type {
             if (Line.create(p0, p1).getNormal().normalize()) |n_n| {
                 var n = n_n;
                 var c = n.dot(p0);
-                c -= 0.5 * (n.x + n.y);
+                // const c2 = c1 - 0.5 * (n.x + n.y);
+                // var c3 = c2;
 
                 if (c < 0) {
                     c = -c;
