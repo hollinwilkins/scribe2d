@@ -73,8 +73,7 @@ pub fn HalfPlanes(comptime T: type) type {
         }
 
         pub fn getVerticalMask(self: *@This(), y: f32) u16 {
-            const mod_y = std.math.modf(y);
-            if (mod_y.fpart == 0.5) {
+            if (y == 0.5) {
                 return std.math.maxInt(u16);
             }
 
@@ -100,8 +99,8 @@ pub fn HalfPlanes(comptime T: type) type {
             const top_y = @min(line.start.y, line.end.y);
             const bottom_y = @max(line.start.y, line.end.y);
 
-            const top_mask = self.getVerticalMaskRaw(std.math.modf(top_y).fpart);
-            const bottom_mask = ~self.getVerticalMaskRaw(std.math.modf(bottom_y).fpart);
+            const top_mask = self.getVerticalMaskRaw(top_y);
+            const bottom_mask = ~self.getVerticalMaskRaw(bottom_y);
             const line_mask = self.getHalfPlaneMask(line.start, line.end);
 
             return top_mask & bottom_mask & line_mask;
