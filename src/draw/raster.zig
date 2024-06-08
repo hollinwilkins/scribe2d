@@ -26,17 +26,11 @@ const Intersection = curve_module.Intersection;
 const UnmanagedTexture = texture_module.UnmanagedTexture;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
-pub const ShapeRecord = struct {
-    curve_fragment_offsets: RangeU32 = RangeU32{},
-    boundary_fragment_offsets: RangeU32 = RangeU32{},
-};
-
 pub const CurveRecord = struct {
     pixel_intersection_offests: RangeU32 = RangeU32{},
 };
 
 pub const RasterData = struct {
-    const ShapeRecordList = std.ArrayListUnmanaged(ShapeRecord);
     const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
     const PixelIntersectionList = std.ArrayListUnmanaged(PixelIntersection);
     const CurveFragmentList = std.ArrayListUnmanaged(CurveFragment);
@@ -45,7 +39,6 @@ pub const RasterData = struct {
     allocator: Allocator,
     path: *const Path,
     view: *TextureViewRgba,
-    shape_records: ShapeRecordList = ShapeRecordList{},
     curve_records: CurveRecordList = CurveRecordList{},
     pixel_intersections: PixelIntersectionList = PixelIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
@@ -60,7 +53,6 @@ pub const RasterData = struct {
     }
 
     pub fn deinit(self: *RasterData) void {
-        self.shape_records.deinit(self.allocator);
         self.curve_records.deinit(self.allocator);
         self.pixel_intersections.deinit(self.allocator);
         self.curve_fragments.deinit(self.allocator);
@@ -77,10 +69,6 @@ pub const RasterData = struct {
 
     pub fn getShapes(self: RasterData) []const Shape {
         return self.path.getShapes();
-    }
-
-    pub fn getShapeRecords(self: *RasterData) []ShapeRecord {
-        return self.shape_records.items;
     }
 
     pub fn getCurves(self: RasterData) []const Curve {
@@ -101,10 +89,6 @@ pub const RasterData = struct {
 
     pub fn getBoundaryFragments(self: *RasterData) []BoundaryFragment {
         return self.boundary_fragments.items;
-    }
-
-    pub fn addShapeRecord(self: *RasterData) !*ShapeRecord {
-        return try self.shape_records.addOne(self.allocator);
     }
 
     pub fn addCurveRecord(self: *RasterData) !*CurveRecord {
@@ -366,12 +350,9 @@ pub const Raster = struct {
         _ = self;
 
         for (raster_data.getShapes(), 0..) |shape, shape_index| {
-            var curve_fragment_offsets = RangeU32{
-                .start = @intCast(raster_data.getCurveFragments().len),
-            };
             // curve fragments are unique to curve
             for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve_record, curve_index| {
-                std.debug.print("{}{}\n", .{shape_index, curve_index});
+                std.debug.print("{}{}\n", .{ shape_index, curve_index });
                 const pixel_intersections = raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end];
                 std.debug.assert(pixel_intersections.len > 0);
 
@@ -383,27 +364,24 @@ pub const Raster = struct {
                         continue;
                     }
 
-                    const ao = try raster_data.addCurveFragment();
-                    ao.* = CurveFragment.create([_]*const PixelIntersection{ previous_pixel_intersection, pixel_intersection });
-                    std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
+                    {
+                        const ao = try raster_data.addCurveFragment();
+                        ao.* = CurveFragment.create([_]*const PixelIntersection{ previous_pixel_intersection, pixel_intersection });
+                        std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
+                    }
 
                     previous_pixel_intersection = pixel_intersection;
                 }
             }
-
-            curve_fragment_offsets.end = @intCast(raster_data.getCurveFragments().len);
-            (try raster_data.addShapeRecord()).* = ShapeRecord{
-                .curve_fragment_offsets = curve_fragment_offsets,
-            };
-
-            // for each shape, sort the curve fragments by pixel y, x
-            std.mem.sort(
-                CurveFragment,
-                raster_data.getCurveFragments()[curve_fragment_offsets.start..curve_fragment_offsets.end],
-                @as(u32, 0),
-                curveFragmentLessThan,
-            );
         }
+
+        // sort all curve fragments of all the shapes by y ascending, x ascending
+        std.mem.sort(
+            CurveFragment,
+            raster_data.getCurveFragments(),
+            @as(u32, 0),
+            curveFragmentLessThan,
+        );
     }
 
     fn curveFragmentLessThan(_: u32, left: CurveFragment, right: CurveFragment) bool {
@@ -419,19 +397,13 @@ pub const Raster = struct {
     }
 
     pub fn populateBoundaryFragments(self: *Raster, raster_data: *RasterData) !void {
-        for (raster_data.getShapeRecords()) |*shape_record| {
-            const first_curve_fragment = &raster_data.getCurveFragments()[shape_record.curve_fragment_offsets.start];
-            var boundary_fragment_offsets = RangeU32{
-                .start = @intCast(raster_data.getBoundaryFragments().len),
-                .end = @intCast(raster_data.getBoundaryFragments().len),
-            };
+        {
+            const first_curve_fragment = &raster_data.getCurveFragments()[0];
             var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
             boundary_fragment.* = BoundaryFragment{
                 .pixel = first_curve_fragment.pixel,
             };
-            var curve_fragment_offsets = RangeU32{
-                .start = shape_record.curve_fragment_offsets.start,
-            };
+            var curve_fragment_offsets = RangeU32{};
             const main_ray = Line.create(PointF32{
                 .x = 0.0,
                 .y = 0.5,
@@ -441,11 +413,11 @@ pub const Raster = struct {
             });
             var main_ray_winding: f32 = 0.0;
 
-            const curve_fragments = raster_data.getCurveFragments()[shape_record.curve_fragment_offsets.start..shape_record.curve_fragment_offsets.end];
+            const curve_fragments = raster_data.getCurveFragments();
             for (curve_fragments, 0..) |curve_fragment, curve_fragment_index| {
                 if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
                     std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
-                    curve_fragment_offsets.end = @intCast(shape_record.curve_fragment_offsets.start + curve_fragment_index);
+                    curve_fragment_offsets.end = @intCast(curve_fragment_index);
                     boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
                     boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
                     boundary_fragment = try raster_data.addBoundaryFragment();
@@ -477,13 +449,10 @@ pub const Raster = struct {
                     main_ray_winding += winding;
                 }
             }
-
-            boundary_fragment_offsets.end = @intCast(raster_data.getBoundaryFragments().len);
-            shape_record.boundary_fragment_offsets = boundary_fragment_offsets;
         }
 
-        for (raster_data.getShapeRecords()) |shape_record| {
-            const boundary_fragments = raster_data.getBoundaryFragments()[shape_record.boundary_fragment_offsets.start..shape_record.boundary_fragment_offsets.end];
+        {
+            const boundary_fragments = raster_data.getBoundaryFragments();
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {

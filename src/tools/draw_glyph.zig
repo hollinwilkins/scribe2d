@@ -81,34 +81,28 @@ pub fn main() !void {
 
     std.debug.print("\n", .{});
     std.debug.print("Curve Fragments:\n", .{});
-    for (raster_data.getShapeRecords(), 0..) |shape_record, shape_index| {
-        for (raster_data.getCurveFragments()[shape_record.curve_fragment_offsets.start..shape_record.curve_fragment_offsets.end]) |curve_fragment| {
-            std.debug.print("CurveFragment({}), Pixel({},{}), Intersection(({},{}),({},{}):({},{}))\n", .{
-                shape_index,
-                curve_fragment.pixel.x,
-                curve_fragment.pixel.y,
-                curve_fragment.intersections[0].t,
-                curve_fragment.intersections[1].t,
-                curve_fragment.intersections[0].point.x,
-                curve_fragment.intersections[0].point.y,
-                curve_fragment.intersections[1].point.x,
-                curve_fragment.intersections[1].point.y,
-            });
-        }
-        std.debug.print("-----------------------------\n", .{});
+    for (raster_data.getCurveFragments()) |curve_fragment| {
+        std.debug.print("CurveFragment, Pixel({},{}), Intersection(({},{}),({},{}):({},{}))\n", .{
+            curve_fragment.pixel.x,
+            curve_fragment.pixel.y,
+            curve_fragment.intersections[0].t,
+            curve_fragment.intersections[1].t,
+            curve_fragment.intersections[0].point.x,
+            curve_fragment.intersections[0].point.y,
+            curve_fragment.intersections[1].point.x,
+            curve_fragment.intersections[1].point.y,
+        });
     }
+    std.debug.print("-----------------------------\n", .{});
 
     std.debug.print("\n", .{});
     std.debug.print("Boundary Fragments:\n", .{});
-    for (raster_data.getShapeRecords(), 0..) |shape_record, shape_index| {
-        for (raster_data.getBoundaryFragments()[shape_record.boundary_fragment_offsets.start..shape_record.boundary_fragment_offsets.end]) |boundary_fragment| {
-            std.debug.print("BoundaryFragment({}), Pixel({},{}), StencilMask({b:0>16})\n", .{
-                shape_index,
-                boundary_fragment.pixel.x,
-                boundary_fragment.pixel.y,
-                boundary_fragment.stencil_mask,
-            });
-        }
+    for (raster_data.getBoundaryFragments()) |boundary_fragment| {
+        std.debug.print("BoundaryFragment, Pixel({},{}), StencilMask({b:0>16})\n", .{
+            boundary_fragment.pixel.x,
+            boundary_fragment.pixel.y,
+            boundary_fragment.stencil_mask,
+        });
     }
 
     std.debug.print("\n============== Boundary Texture\n\n", .{});
