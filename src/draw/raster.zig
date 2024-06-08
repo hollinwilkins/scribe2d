@@ -27,12 +27,12 @@ const UnmanagedTexture = texture_module.UnmanagedTexture;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
 pub const CurveRecord = struct {
-    pixel_intersection_offests: RangeU32 = RangeU32{},
+    grid_intersection_offests: RangeU32 = RangeU32{},
 };
 
 pub const RasterData = struct {
     const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
-    const PixelIntersectionList = std.ArrayListUnmanaged(PixelIntersection);
+    const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const CurveFragmentList = std.ArrayListUnmanaged(CurveFragment);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
 
@@ -40,7 +40,7 @@ pub const RasterData = struct {
     path: *const Path,
     view: *TextureViewRgba,
     curve_records: CurveRecordList = CurveRecordList{},
-    pixel_intersections: PixelIntersectionList = PixelIntersectionList{},
+    grid_intersections: GridIntersectionList = GridIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
 
@@ -54,7 +54,7 @@ pub const RasterData = struct {
 
     pub fn deinit(self: *RasterData) void {
         self.curve_records.deinit(self.allocator);
-        self.pixel_intersections.deinit(self.allocator);
+        self.grid_intersections.deinit(self.allocator);
         self.curve_fragments.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
     }
@@ -79,8 +79,8 @@ pub const RasterData = struct {
         return self.curve_records.items;
     }
 
-    pub fn getPixelIntersections(self: *RasterData) []PixelIntersection {
-        return self.pixel_intersections.items;
+    pub fn getGridIntersections(self: *RasterData) []GridIntersection {
+        return self.grid_intersections.items;
     }
 
     pub fn getCurveFragments(self: *RasterData) []CurveFragment {
@@ -95,8 +95,8 @@ pub const RasterData = struct {
         return try self.curve_records.addOne(self.allocator);
     }
 
-    pub fn addPixelIntersection(self: *RasterData) !*PixelIntersection {
-        return try self.pixel_intersections.addOne(self.allocator);
+    pub fn addGridIntersection(self: *RasterData) !*GridIntersection {
+        return try self.grid_intersections.addOne(self.allocator);
     }
 
     pub fn addCurveFragment(self: *RasterData) !*CurveFragment {
@@ -108,26 +108,26 @@ pub const RasterData = struct {
     }
 };
 
-pub const PixelIntersection = struct {
+pub const GridIntersection = struct {
     intersection: Intersection,
     pixel: PointI32,
 
-    pub fn create(intersection: Intersection) PixelIntersection {
-        return PixelIntersection{ .intersection = intersection, .pixel = PointI32{
+    pub fn create(intersection: Intersection) GridIntersection {
+        return GridIntersection{ .intersection = intersection, .pixel = PointI32{
             .x = @intFromFloat(intersection.point.x),
             .y = @intFromFloat(intersection.point.y),
         } };
     }
 
-    pub fn getT(self: PixelIntersection) f32 {
+    pub fn getT(self: GridIntersection) f32 {
         return self.intersection.t;
     }
 
-    pub fn getPoint(self: PixelIntersection) PointF32 {
+    pub fn getPoint(self: GridIntersection) PointF32 {
         return self.intersection.point;
     }
 
-    pub fn getPixel(self: PixelIntersection) PointI32 {
+    pub fn getPixel(self: GridIntersection) PointI32 {
         return self.pixel;
     }
 };
@@ -143,32 +143,32 @@ pub const CurveFragment = struct {
     pixel: PointI32,
     intersections: [2]Intersection,
 
-    pub fn create(pixel_intersections: [2]*const PixelIntersection) CurveFragment {
-        const pixel = pixel_intersections[0].getPixel().min(pixel_intersections[1].getPixel());
+    pub fn create(grid_intersections: [2]*const GridIntersection) CurveFragment {
+        const pixel = grid_intersections[0].getPixel().min(grid_intersections[1].getPixel());
 
         // can move diagonally, but cannot move by more than 1 pixel in both directions
-        std.debug.assert(@abs(pixel.sub(pixel_intersections[0].pixel).x) <= 1);
-        std.debug.assert(@abs(pixel.sub(pixel_intersections[0].pixel).y) <= 1);
-        std.debug.assert(@abs(pixel.sub(pixel_intersections[1].pixel).x) <= 1);
-        std.debug.assert(@abs(pixel.sub(pixel_intersections[1].pixel).y) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[0].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[0].pixel).y) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[1].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[1].pixel).y) <= 1);
 
         const intersections: [2]Intersection = [2]Intersection{
             Intersection{
                 // retain t
-                .t = pixel_intersections[0].getT(),
+                .t = grid_intersections[0].getT(),
                 // float component of the intersection points, range [0.0, 1.0]
                 .point = PointF32{
-                    .x = @abs(pixel_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
-                    .y = @abs(pixel_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
+                    .x = @abs(grid_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
+                    .y = @abs(grid_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
                 },
             },
             Intersection{
                 // retain t
-                .t = pixel_intersections[1].getT(),
+                .t = grid_intersections[1].getT(),
                 // float component of the intersection points, range [0.0, 1.0]
                 .point = PointF32{
-                    .x = @abs(pixel_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
-                    .y = @abs(pixel_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
+                    .x = @abs(grid_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
+                    .y = @abs(grid_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
                 },
             },
         };
@@ -248,14 +248,14 @@ pub const Raster = struct {
         var raster_data = RasterData.init(self.allocator, path, view);
         errdefer raster_data.deinit();
 
-        try self.populateIntersections(&raster_data);
+        try self.populateGridIntersections(&raster_data);
         try self.populateCurveFragments(&raster_data);
         try self.populateBoundaryFragments(&raster_data);
 
         return raster_data;
     }
 
-    pub fn populateIntersections(self: *Raster, raster_data: *RasterData) !void {
+    pub fn populateGridIntersections(self: *Raster, raster_data: *RasterData) !void {
         _ = self;
         var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
@@ -267,15 +267,15 @@ pub const Raster = struct {
 
         for (raster_data.getSubpaths()) |subpath| {
             for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve| {
-                var pixel_intersection_offsets = RangeU32{
-                    .start = @intCast(raster_data.getPixelIntersections().len),
-                    .end = @intCast(raster_data.getPixelIntersections().len),
+                var grid_intersection_offsets = RangeU32{
+                    .start = @intCast(raster_data.getGridIntersections().len),
+                    .end = @intCast(raster_data.getGridIntersections().len),
                 };
                 const scaled_curve = curve.invertY().scale(scaled_pixel_dimensions);
                 const scaled_curve_bounds = scaled_curve.getBounds();
 
                 // first virtual intersection
-                (try raster_data.addPixelIntersection()).* = PixelIntersection.create(
+                (try raster_data.addGridIntersection()).* = GridIntersection.create(
                     Intersection{
                         .t = 0.0,
                         .point = scaled_curve.applyT(0.0),
@@ -310,35 +310,35 @@ pub const Raster = struct {
 
                 // insert monotonic cuts, which ensure curves are monotonic within a pixel
                 for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
-                    const ao = try raster_data.addPixelIntersection();
-                    ao.* = PixelIntersection.create(intersection);
+                    const ao = try raster_data.addGridIntersection();
+                    ao.* = GridIntersection.create(intersection);
                 }
 
                 // last virtual intersection
-                (try raster_data.addPixelIntersection()).* = PixelIntersection.create(Intersection{
+                (try raster_data.addGridIntersection()).* = GridIntersection.create(Intersection{
                     .t = 1.0,
                     .point = scaled_curve.applyT(1.0),
                 });
 
-                pixel_intersection_offsets.end = @intCast(raster_data.getPixelIntersections().len);
+                grid_intersection_offsets.end = @intCast(raster_data.getGridIntersections().len);
 
                 // sort by t within a curve
                 std.mem.sort(
-                    PixelIntersection,
-                    raster_data.getPixelIntersections()[pixel_intersection_offsets.start..pixel_intersection_offsets.end],
+                    GridIntersection,
+                    raster_data.getGridIntersections()[grid_intersection_offsets.start..grid_intersection_offsets.end],
                     @as(u32, 0),
                     pixelIntersectionLessThan,
                 );
 
                 // add curve record with offsets
                 (try raster_data.addCurveRecord()).* = CurveRecord{
-                    .pixel_intersection_offests = pixel_intersection_offsets,
+                    .grid_intersection_offests = grid_intersection_offsets,
                 };
             }
         }
     }
 
-    fn pixelIntersectionLessThan(_: u32, left: PixelIntersection, right: PixelIntersection) bool {
+    fn pixelIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
         if (left.getT() < right.getT()) {
             return true;
         }
@@ -353,24 +353,24 @@ pub const Raster = struct {
             // curve fragments are unique to curve
             for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve_record, curve_index| {
                 std.debug.print("{}{}\n", .{ subpath_index, curve_index });
-                const pixel_intersections = raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end];
-                std.debug.assert(pixel_intersections.len > 0);
+                const grid_intersections = raster_data.getGridIntersections()[curve_record.grid_intersection_offests.start..curve_record.grid_intersection_offests.end];
+                std.debug.assert(grid_intersections.len > 0);
 
-                var previous_pixel_intersection: *PixelIntersection = &pixel_intersections[0];
-                for (pixel_intersections) |*pixel_intersection| {
-                    if (std.meta.eql(previous_pixel_intersection.getPoint(), pixel_intersection.getPoint())) {
+                var previous_grid_intersection: *GridIntersection = &grid_intersections[0];
+                for (grid_intersections) |*grid_intersection| {
+                    if (std.meta.eql(previous_grid_intersection.getPoint(), grid_intersection.getPoint())) {
                         // skip if exactly the same point
-                        previous_pixel_intersection = pixel_intersection;
+                        previous_grid_intersection = grid_intersection;
                         continue;
                     }
 
                     {
                         const ao = try raster_data.addCurveFragment();
-                        ao.* = CurveFragment.create([_]*const PixelIntersection{ previous_pixel_intersection, pixel_intersection });
+                        ao.* = CurveFragment.create([_]*const GridIntersection{ previous_grid_intersection, grid_intersection });
                         std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
                     }
 
-                    previous_pixel_intersection = pixel_intersection;
+                    previous_grid_intersection = grid_intersection;
                 }
             }
         }
@@ -495,8 +495,8 @@ pub const Raster = struct {
         const scaled_intersections = curve.intersectVerticalLine(line, &scaled_intersections_result);
 
         for (scaled_intersections) |intersection| {
-            const ao = try raster_data.addPixelIntersection();
-            ao.* = PixelIntersection.create(intersection);
+            const ao = try raster_data.addGridIntersection();
+            ao.* = GridIntersection.create(intersection);
         }
     }
 
@@ -520,8 +520,8 @@ pub const Raster = struct {
         const scaled_intersections = curve.intersectHorizontalLine(line, &scaled_intersections_result);
 
         for (scaled_intersections) |intersection| {
-            const ao = try raster_data.addPixelIntersection();
-            ao.* = PixelIntersection.create(intersection);
+            const ao = try raster_data.addGridIntersection();
+            ao.* = GridIntersection.create(intersection);
         }
     }
 };

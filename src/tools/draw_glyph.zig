@@ -61,18 +61,18 @@ pub fn main() !void {
     }
 
     std.debug.print("\n", .{});
-    std.debug.print("Pixel Intersections:\n", .{});
+    std.debug.print("Grid Intersections:\n", .{});
     for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
         for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve_record, curve_index| {
-            for (raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end]) |pixel_intersection| {
-                std.debug.print("PixelIntersection({},{}): Pixel({},{}), T({}), Intersection({},{})\n", .{
+            for (raster_data.getGridIntersections()[curve_record.grid_intersection_offests.start..curve_record.grid_intersection_offests.end]) |grid_intersection| {
+                std.debug.print("GridIntersection({},{}): Pixel({},{}), T({}), Intersection({},{})\n", .{
                     subpath_index,
                     curve_index,
-                    pixel_intersection.getPixel().x,
-                    pixel_intersection.getPixel().y,
-                    pixel_intersection.getT(),
-                    pixel_intersection.getPoint().x,
-                    pixel_intersection.getPoint().y,
+                    grid_intersection.getPixel().x,
+                    grid_intersection.getPixel().y,
+                    grid_intersection.getT(),
+                    grid_intersection.getPoint().x,
+                    grid_intersection.getPoint().y,
                 });
             }
             std.debug.print("-----------------------------\n", .{});
