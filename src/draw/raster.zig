@@ -22,6 +22,7 @@ const RangeUsize = core.RangeUsize;
 const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
+const PixelIntersection = curve_module.PixelIntersection;
 const UnmanagedTexture = texture_module.UnmanagedTexture;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
@@ -29,13 +30,22 @@ pub const PathIntersection = struct {
     shape_index: u32,
     curve_index: u32,
     is_end: bool,
-    intersection: Intersection,
+    intersection: PixelIntersection,
+
+    pub fn getT(self: PathIntersection) f32 {
+        return self.intersection.intersection.t;
+    }
+
+    pub fn getPoint(self: PathIntersection) PointF32 {
+        return self.intersection.intersection.point;
+    }
 
     pub fn getPixel(self: PathIntersection) PointI32 {
-        return PointI32{
-            .x = @intFromFloat(self.intersection.point.x),
-            .y = @intFromFloat(self.intersection.point.y),
-        };
+        return self.intersection.pixel;
+    }
+
+    pub fn getIntersection(self: PathIntersection) Intersection {
+        return self.intersection.intersection;
     }
 };
 pub const PathIntersectionList = std.ArrayList(PathIntersection);
@@ -109,10 +119,10 @@ pub const Raster = struct {
                 (try intersections.addOne()).* = PathIntersection{
                     .shape_index = shape_index,
                     .curve_index = curve_index,
-                    .intersection = Intersection{
+                    .intersection = (Intersection{
                         .t = 0.0,
                         .point = scaled_curve.applyT(0.0),
-                    },
+                    }).createPixelIntersection(),
                     .is_end = false,
                 };
                 const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
@@ -150,7 +160,7 @@ pub const Raster = struct {
                     ao.* = PathIntersection{
                         .shape_index = shape_index,
                         .curve_index = curve_index,
-                        .intersection = intersection,
+                        .intersection = intersection.createPixelIntersection(),
                         .is_end = false,
                     };
                 }
@@ -159,10 +169,10 @@ pub const Raster = struct {
                 (try intersections.addOne()).* = PathIntersection{
                     .shape_index = shape_index,
                     .curve_index = curve_index,
-                    .intersection = Intersection{
+                    .intersection = (Intersection{
                         .t = 1.0,
                         .point = scaled_curve.applyT(1.0),
-                    },
+                    }).createPixelIntersection(),
                     .is_end = scaled_curve.isEndCurve(),
                 };
             }
@@ -190,9 +200,9 @@ pub const Raster = struct {
             return true;
         } else if (left.curve_index > right.curve_index) {
             return false;
-        } else if (left.intersection.t < right.intersection.t) {
+        } else if (left.getT() < right.getT()) {
             return true;
-        } else if (left.intersection.t > right.intersection.t) {
+        } else if (left.getT() > right.getT()) {
             return false;
         } else if (right.is_end) {
             return true;
@@ -212,7 +222,7 @@ pub const Raster = struct {
 
             const intersection1 = intersections[index];
             const intersection2 = intersections[index + 1];
-            if (std.meta.eql(intersection1.intersection.point, intersection2.intersection.point)) {
+            if (std.meta.eql(intersection1.getPoint(), intersection2.getPoint())) {
                 continue;
             }
 
@@ -223,37 +233,37 @@ pub const Raster = struct {
             const pixel = intersection1.getPixel().min(intersection2.getPixel());
 
             const horizontal_mask = self.half_planes.getHorizontalMask(Line.create(
-                intersection1.intersection.point,
-                intersection2.intersection.point,
+                intersection1.getPoint(),
+                intersection2.getPoint(),
             ));
             var vertical_mask: u16 = 0;
             var horizontal_sign: i2 = 0;
             var vertical_sign: i2 = 0;
-            if (intersection1.intersection.point.x == 0.0) {
-                vertical_mask = self.half_planes.getVerticalMask(intersection1.intersection.point.y);
+            if (intersection1.getPoint().x == 0.0) {
+                vertical_mask = self.half_planes.getVerticalMask(intersection1.getPoint().y);
 
-                if (intersection1.intersection.point.y > 0.5) {
+                if (intersection1.getPoint().y > 0.5) {
                     vertical_sign = -1;
                 } else {
                     vertical_sign = 1;
                 }
-            } else if (intersection2.intersection.point.x == 0.0) {
-                vertical_mask = self.half_planes.getVerticalMask(intersection2.intersection.point.y);
+            } else if (intersection2.getPoint().x == 0.0) {
+                vertical_mask = self.half_planes.getVerticalMask(intersection2.getPoint().y);
 
-                if (intersection2.intersection.point.y > 0.5) {
+                if (intersection2.getPoint().y > 0.5) {
                     vertical_sign = -1;
                 } else {
                     vertical_sign = 1;
                 }
             }
 
-            if (intersection1.intersection.point.y > intersection2.intersection.point.y) {
+            if (intersection1.getPoint().y > intersection2.getPoint().y) {
                 horizontal_sign = 1;
-            } else if (intersection1.intersection.point.y < intersection2.intersection.point.y) {
+            } else if (intersection1.getPoint().y < intersection2.getPoint().y) {
                 horizontal_sign = -1;
             }
 
-            if (intersection1.intersection.t > intersection2.intersection.t) {
+            if (intersection1.getT() > intersection2.getT()) {
                 horizontal_sign *= -1;
                 vertical_sign *= -1;
             }
@@ -263,8 +273,8 @@ pub const Raster = struct {
                 .shape_index = intersection1.shape_index,
                 .curve_index = intersection1.curve_index,
                 .pixel = pixel,
-                .intersection1 = intersection1.intersection,
-                .intersection2 = intersection2.intersection,
+                .intersection1 = intersection1.getIntersection(),
+                .intersection2 = intersection2.getIntersection(),
                 .horizontal_mask = horizontal_mask,
                 .horizontal_sign = horizontal_sign,
                 .vertical_mask = vertical_mask,
@@ -426,7 +436,7 @@ pub const Raster = struct {
             ao.* = PathIntersection{
                 .shape_index = shape_index,
                 .curve_index = curve_index,
-                .intersection = intersection,
+                .intersection = intersection.createPixelIntersection(),
                 .is_end = false,
             };
         }
@@ -458,7 +468,7 @@ pub const Raster = struct {
             ao.* = PathIntersection{
                 .shape_index = shape_index,
                 .curve_index = curve_index,
-                .intersection = intersection,
+                .intersection = intersection.createPixelIntersection(),
                 .is_end = false,
             };
         }

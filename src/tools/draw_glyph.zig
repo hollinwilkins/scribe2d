@@ -58,9 +58,9 @@ pub fn main() !void {
         std.debug.print("Intersection: shape({}) curve({}) t({}), ({} @ {})\n", .{
             intersection.shape_index,
             intersection.curve_index,
-            intersection.intersection.t,
-            intersection.intersection.point.x,
-            intersection.intersection.point.y,
+            intersection.getT(),
+            intersection.getPoint().x,
+            intersection.getPoint().y,
         });
     }
     std.debug.print("==============\n", .{});

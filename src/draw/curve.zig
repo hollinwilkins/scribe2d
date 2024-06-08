@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const PointF32 = core.PointF32;
+const PointI32 = core.PointI32;
 const RectF32 = core.RectF32;
 const RangeU32 = core.RangeU32;
 const DimensionsF32 = core.DimensionsF32;
@@ -8,6 +9,30 @@ const DimensionsF32 = core.DimensionsF32;
 pub const Intersection = struct {
     t: f32,
     point: PointF32,
+
+    pub fn createPixelIntersection(self: Intersection) PixelIntersection {
+        const x_mod = std.math.modf(self.point.x);
+        const y_mod = std.math.modf(self.point.y);
+
+        return PixelIntersection{
+            .pixel = PointI32{
+                .x = @intFromFloat(x_mod.ipart),
+                .y = @intFromFloat(y_mod.ipart),
+            },
+            .intersection = Intersection{
+                .t = self.t,
+                .point = PointF32{
+                    .x = x_mod.fpart,
+                    .y = y_mod.fpart,
+                },
+            },
+        };
+    }
+};
+
+pub const PixelIntersection = struct {
+    intersection: Intersection,
+    pixel: PointI32,
 };
 
 pub const Shape = struct {
@@ -382,13 +407,10 @@ pub const QuadraticBezier = struct {
                 continue;
             }
 
-            result[intersections] = Intersection{
-                .t = root,
-                .point = PointF32{
-                    .x = point.x,
-                    .y = line.start.y,
-                }
-            };
+            result[intersections] = Intersection{ .t = root, .point = PointF32{
+                .x = point.x,
+                .y = line.start.y,
+            } };
             intersections += 1;
         }
 
@@ -414,19 +436,15 @@ pub const QuadraticBezier = struct {
                 continue;
             }
 
-            result[intersections] = Intersection{
-                .t = root,
-                .point = PointF32{
-                    .x = line.start.x,
-                    .y = point.y,
-                }
-            };
+            result[intersections] = Intersection{ .t = root, .point = PointF32{
+                .x = line.start.x,
+                .y = point.y,
+            } };
             intersections += 1;
         }
 
         return result[0..intersections];
     }
-
 
     pub fn getRoots(a: f32, b: f32, c: f32, result: *[2]f32) []const f32 {
         if (a == 0) {
@@ -711,10 +729,7 @@ test "horizontal line x quadratic bezier intersections" {
 
     var intersections_result: [2]Intersection = [_]Intersection{undefined} ** 2;
 
-    const intersections1 = bezier1.intersectHorizontalLine(Line.create(PointF32{
-        .x = -1.0,
-        .y = 0.25
-    }, PointF32{
+    const intersections1 = bezier1.intersectHorizontalLine(Line.create(PointF32{ .x = -1.0, .y = 0.25 }, PointF32{
         .x = 2.0,
         .y = 0.25,
     }), &intersections_result);
@@ -724,10 +739,7 @@ test "horizontal line x quadratic bezier intersections" {
         .y = 0.25,
     } }, intersections1[0], test_util.DEFAULT_TOLERANCE, 0.0);
 
-    const intersections2 = bezier1.intersectHorizontalLine(Line.create(PointF32{
-        .x = -1.0,
-        .y = 0.25
-    }, PointF32{
+    const intersections2 = bezier1.intersectHorizontalLine(Line.create(PointF32{ .x = -1.0, .y = 0.25 }, PointF32{
         .x = -0.5,
         .y = 0.25,
     }), &intersections_result);
