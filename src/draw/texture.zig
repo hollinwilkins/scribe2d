@@ -122,7 +122,7 @@ pub fn UnmanagedTexture(comptime T: type) type {
             return self.pixels;
         }
 
-        pub fn getPixel(self: *@This(), point: PointU32) ?*T {
+        pub fn getPixel(self: @This(), point: PointU32) ?*T {
             if (point.x >= self.dimensions.width or point.y >= self.dimensions.height) {
                 return null;
             }
@@ -130,7 +130,7 @@ pub fn UnmanagedTexture(comptime T: type) type {
             return self.getPixelUnsafe(point);
         }
 
-        pub fn getPixelUnsafe(self: *@This(), point: PointU32) *T {
+        pub fn getPixelUnsafe(self: @This(), point: PointU32) *T {
             return &self.pixels[point.y * self.dimensions.width + point.x];
         }
 
