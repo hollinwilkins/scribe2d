@@ -98,6 +98,14 @@ pub fn main() !void {
         std.debug.print("-----------------------------\n", .{});
     }
 
+    std.debug.print("\n", .{});
+    std.debug.print("Boundary Fragments:\n", .{});
+    for (raster_data.getShapeRecords(), 0..) |shape_record, shape_index| {
+        for (raster_data.getBoundaryFragments()[shape_record.boundary_fragment_offsets.start..shape_record.boundary_fragment_offsets.end]) |boundary_fragment| {
+            std.debug.print("BoundaryFragment({}), StencilMask({b:0>16})\n", .{shape_index, boundary_fragment.stencil_mask});
+        }
+    }
+
     std.debug.print("\n============== Boundary Texture\n\n", .{});
     var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
         .width = dimensions.width + 2,
