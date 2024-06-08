@@ -213,6 +213,7 @@ pub const Raster = struct {
 
     // intersections must be sorted by curve_index, t
     pub fn createFragmentIntersectionsAlloc(self: *@This(), allocator: Allocator, intersections: []const PathIntersection) !FragmentIntersectionList {
+        _ = self;
         var fragment_intersections = try FragmentIntersectionList.initCapacity(allocator, intersections.len - 1);
 
         for (0..intersections.len) |index| {
@@ -232,41 +233,41 @@ pub const Raster = struct {
 
             const pixel = intersection1.getPixel().min(intersection2.getPixel());
 
-            const horizontal_mask = self.half_planes.getHorizontalMask(Line.create(
-                intersection1.getPoint(),
-                intersection2.getPoint(),
-            ));
-            var vertical_mask: u16 = 0;
-            var horizontal_sign: i2 = 0;
-            var vertical_sign: i2 = 0;
-            if (intersection1.getPoint().x == 0.0) {
-                vertical_mask = self.half_planes.getVerticalMask(intersection1.getPoint().y);
+            // const horizontal_mask = self.half_planes.getHorizontalMask(Line.create(
+            //     intersection1.getPoint(),
+            //     intersection2.getPoint(),
+            // ));
+            // var vertical_mask: u16 = 0;
+            // var horizontal_sign: i2 = 0;
+            // var vertical_sign: i2 = 0;
+            // if (intersection1.getPoint().x == 0.0) {
+            //     vertical_mask = self.half_planes.getVerticalMask(intersection1.getPoint().y);
 
-                if (intersection1.getPoint().y > 0.5) {
-                    vertical_sign = -1;
-                } else {
-                    vertical_sign = 1;
-                }
-            } else if (intersection2.getPoint().x == 0.0) {
-                vertical_mask = self.half_planes.getVerticalMask(intersection2.getPoint().y);
+            //     if (intersection1.getPoint().y > 0.5) {
+            //         vertical_sign = -1;
+            //     } else {
+            //         vertical_sign = 1;
+            //     }
+            // } else if (intersection2.getPoint().x == 0.0) {
+            //     vertical_mask = self.half_planes.getVerticalMask(intersection2.getPoint().y);
 
-                if (intersection2.getPoint().y > 0.5) {
-                    vertical_sign = -1;
-                } else {
-                    vertical_sign = 1;
-                }
-            }
+            //     if (intersection2.getPoint().y > 0.5) {
+            //         vertical_sign = -1;
+            //     } else {
+            //         vertical_sign = 1;
+            //     }
+            // }
 
-            if (intersection1.getPoint().y > intersection2.getPoint().y) {
-                horizontal_sign = 1;
-            } else if (intersection1.getPoint().y < intersection2.getPoint().y) {
-                horizontal_sign = -1;
-            }
+            // if (intersection1.getPoint().y > intersection2.getPoint().y) {
+            //     horizontal_sign = 1;
+            // } else if (intersection1.getPoint().y < intersection2.getPoint().y) {
+            //     horizontal_sign = -1;
+            // }
 
-            if (intersection1.getT() > intersection2.getT()) {
-                horizontal_sign *= -1;
-                vertical_sign *= -1;
-            }
+            // if (intersection1.getT() > intersection2.getT()) {
+            //     horizontal_sign *= -1;
+            //     vertical_sign *= -1;
+            // }
 
             const ao = fragment_intersections.addOneAssumeCapacity();
             ao.* = FragmentIntersection{
@@ -275,10 +276,10 @@ pub const Raster = struct {
                 .pixel = pixel,
                 .intersection1 = intersection1.getIntersection(),
                 .intersection2 = intersection2.getIntersection(),
-                .horizontal_mask = horizontal_mask,
-                .horizontal_sign = horizontal_sign,
-                .vertical_mask = vertical_mask,
-                .vertical_sign = vertical_sign,
+                .horizontal_mask = 0,
+                .horizontal_sign = 0,
+                .vertical_mask = 0,
+                .vertical_sign = 0,
             };
         }
 
@@ -378,32 +379,32 @@ pub const Raster = struct {
                     previous_boundary_fragment = boundary_fragment.*;
                 }
 
-                // for each fragment intersection, you can
-                // - calculalate the bitmask for Mv and Mh and store it in the FragmentIntersection
+                // // for each fragment intersection, you can
+                // // - calculalate the bitmask for Mv and Mh and store it in the FragmentIntersection
 
-                // var bitmask: u16 = 0;
-                var samples: [16]i8 = [_]i8{0} ** 16;
-                if (end_index > start_index) {
-                    for (fragment_intersections[start_index .. end_index - 1]) |fi| {
-                        for (0..16) |sample_index| {
-                            const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(sample_index));
-                            const main_ray: i8 = @intFromFloat(boundary_fragment.winding);
-                            const horizontal_ray: i8 = fi.horizontal_sign * @intFromBool((fi.horizontal_mask & bit_index) != 0);
-                            const vertical_ray: i8 = fi.vertical_sign * @intFromBool((fi.vertical_mask & bit_index) != 0);
-                            samples[sample_index] += main_ray + horizontal_ray + vertical_ray;
-                        }
-                    }
-                }
+                // // var bitmask: u16 = 0;
+                // var samples: [16]i8 = [_]i8{0} ** 16;
+                // if (end_index > start_index) {
+                //     for (fragment_intersections[start_index .. end_index - 1]) |fi| {
+                //         for (0..16) |sample_index| {
+                //             const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(sample_index));
+                //             const main_ray: i8 = @intFromFloat(boundary_fragment.winding);
+                //             const horizontal_ray: i8 = fi.horizontal_sign * @intFromBool((fi.horizontal_mask & bit_index) != 0);
+                //             const vertical_ray: i8 = fi.vertical_sign * @intFromBool((fi.vertical_mask & bit_index) != 0);
+                //             samples[sample_index] += main_ray + horizontal_ray + vertical_ray;
+                //         }
+                //     }
+                // }
 
-                var mask: u16 = 0;
-                for (0..16) |sample_index| {
-                    const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(sample_index));
-                    if (samples[sample_index] != 0) {
-                        mask |= bit_index;
-                    }
-                }
+                // var mask: u16 = 0;
+                // for (0..16) |sample_index| {
+                //     const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(sample_index));
+                //     if (samples[sample_index] != 0) {
+                //         mask |= bit_index;
+                //     }
+                // }
 
-                boundary_fragment.bitmask = mask;
+                // boundary_fragment.bitmask = mask;
             }
         }
 
