@@ -39,6 +39,7 @@ pub const RasterData = struct {
     const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
     const PixelIntersectionList = std.ArrayListUnmanaged(PixelIntersection);
     const CurveFragmentList = std.ArrayListUnmanaged(CurveFragment);
+    const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
 
     allocator: Allocator,
     path: *const Path,
@@ -47,6 +48,7 @@ pub const RasterData = struct {
     curve_records: CurveRecordList = CurveRecordList{},
     pixel_intersections: PixelIntersectionList = PixelIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
+    boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
 
     pub fn init(allocator: Allocator, path: *const Path, view: *TextureViewRgba) RasterData {
         return RasterData{
@@ -61,6 +63,7 @@ pub const RasterData = struct {
         self.curve_records.deinit(self.allocator);
         self.pixel_intersections.deinit(self.allocator);
         self.curve_fragments.deinit(self.allocator);
+        self.boundary_fragments.deinit(self.allocator);
     }
 
     pub fn getPath(self: RasterData) *const Path {
@@ -95,6 +98,10 @@ pub const RasterData = struct {
         return self.curve_fragments.items;
     }
 
+    pub fn getBoundaryFragments(self: *RasterData) []BoundaryFragment {
+        return self.boundary_fragments.items;
+    }
+
     pub fn addShapeRecord(self: *RasterData) !*ShapeRecord {
         return try self.shape_records.addOne(self.allocator);
     }
@@ -109,6 +116,10 @@ pub const RasterData = struct {
 
     pub fn addCurveFragment(self: *RasterData) !*CurveFragment {
         return try self.curve_fragments.addOne(self.allocator);
+    }
+
+    pub fn addBoundaryFragment(self: *RasterData) !*BoundaryFragment {
+        return try self.boundary_fragments.addOne(self.allocator);
     }
 };
 
@@ -214,13 +225,16 @@ pub const CurveFragment = struct {
     }
 
     pub fn getLine(self: CurveFragment) Line {
-        return Line.create(self.intersection1.point, self.intersection2.point);
+        return Line.create(self.intersections[0].point, self.intersections[1].point);
     }
 };
 
 pub const BoundaryFragment = struct {
     pixel: PointI32,
-    stencil_mask: u16,
+    main_ray_winding: i8 = 0,
+    winding: [16]i8 = [_]i8{0} ** 16,
+    stencil_mask: u16 = 0,
+    curve_fragment_offsets: RangeU32 = RangeU32{},
 };
 
 pub const Raster = struct {
@@ -246,6 +260,7 @@ pub const Raster = struct {
 
         try self.populateIntersections(&raster_data);
         try self.populateCurveFragments(&raster_data);
+        try self.populateBoundaryFragments(&raster_data);
 
         return raster_data;
     }
@@ -392,6 +407,63 @@ pub const Raster = struct {
             return true;
         } else {
             return false;
+        }
+    }
+
+    pub fn populateBoundaryFragments(self: *Raster, raster_data: *RasterData) !void {
+        _ = self;
+
+        for (raster_data.getShapeRecords()) |shape_record| {
+            const first_curve_fragment = &raster_data.getCurveFragments()[shape_record.curve_fragment_offsets.start];
+            var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
+            boundary_fragment.* = BoundaryFragment{
+                .pixel = first_curve_fragment.pixel,
+            };
+            var curve_fragment_offsets = RangeU32{
+                .start = shape_record.curve_fragment_offsets.start,
+            };
+            const main_ray = Line.create(PointF32{
+                .x = 0.0,
+                .y = 0.5,
+            }, PointF32{
+                .x = 1.0,
+                .y = 0.5,
+            });
+            var main_ray_winding: f32 = 0.0;
+
+            const curve_fragments = raster_data.getCurveFragments()[shape_record.curve_fragment_offsets.start..shape_record.curve_fragment_offsets.end];
+            for (curve_fragments, 0..) |curve_fragment, curve_fragment_index| {
+                if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
+                    std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
+                    curve_fragment_offsets.end = @intCast(shape_record.curve_fragment_offsets.start + curve_fragment_index);
+                    boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
+                    boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
+                    boundary_fragment = try raster_data.addBoundaryFragment();
+                    curve_fragment_offsets.start = curve_fragment_offsets.end;
+                    main_ray_winding = 0.0;
+                    boundary_fragment.* = BoundaryFragment {
+                        .pixel = curve_fragment.pixel,
+                    };
+                }
+
+                if (curve_fragment.getLine().intersectHorizontalLine(main_ray) != null) {
+                    // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
+
+                    var winding: f32 = 0.0;
+
+                    if (curve_fragment.intersections[0].point.y > curve_fragment.intersections[1].point.y) {
+                        winding = 1.0;
+                    } else if (curve_fragment.intersections[0].point.y < curve_fragment.intersections[1].point.y) {
+                        winding = -1.0;
+                    }
+
+                    if (curve_fragment.intersections[0].point.y == 0.5 or curve_fragment.intersections[1].point.y == 0.5) {
+                        winding *= 0.5;
+                    }
+
+                    main_ray_winding += winding;
+                }
+            }
         }
     }
 
