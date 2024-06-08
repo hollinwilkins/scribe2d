@@ -179,29 +179,10 @@ pub const CurveFragment = struct {
     }
 };
 
-// pub const PixelCurve = struct {
-//     shape_index: u32,
-//     curve_index: u32,
-//     pixel: PointI32,
-//     intersection1: Intersection,
-//     intersection2: Intersection,
-//     horizontal_mask: u16,
-//     horizontal_sign: i2,
-//     vertical_mask: u16,
-//     vertical_sign: i2,
-
-//     pub fn getLine(self: PixelCurve) Line {
-//         return Line.create(self.intersection1.point, self.intersection2.point);
-//     }
-// };
-// pub const PixelCurveList = std.ArrayList(PixelCurve);
-
-// pub const BoundaryFragment = struct {
-//     pixel: PointI32,
-//     winding: f32,
-//     bitmask: u16 = 0,
-// };
-// pub const BoundaryFragmentList = std.ArrayList(BoundaryFragment);
+pub const BoundaryFragment = struct {
+    pixel: PointI32,
+    stencil_mask: u16,
+};
 
 pub const Raster = struct {
     const BitmaskTexture = UnmanagedTexture(u16);
