@@ -19,7 +19,7 @@ const RangeF32 = core.RangeF32;
 const RangeU32 = core.RangeU32;
 const RangeI32 = core.RangeI32;
 const RangeUsize = core.RangeUsize;
-const Shape = curve_module.Shape;
+const Subpath = curve_module.Subpath;
 const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
@@ -67,8 +67,8 @@ pub const RasterData = struct {
         return self.view;
     }
 
-    pub fn getShapes(self: RasterData) []const Shape {
-        return self.path.getShapes();
+    pub fn getSubpaths(self: RasterData) []const Subpath {
+        return self.path.getSubpaths();
     }
 
     pub fn getCurves(self: RasterData) []const Curve {
@@ -265,8 +265,8 @@ pub const Raster = struct {
             .height = @floatFromInt(pixel_view_dimensions.height),
         };
 
-        for (raster_data.getShapes()) |shape| {
-            for (raster_data.getCurves()[shape.curve_offsets.start..shape.curve_offsets.end]) |curve| {
+        for (raster_data.getSubpaths()) |subpath| {
+            for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve| {
                 var pixel_intersection_offsets = RangeU32{
                     .start = @intCast(raster_data.getPixelIntersections().len),
                     .end = @intCast(raster_data.getPixelIntersections().len),
@@ -349,10 +349,10 @@ pub const Raster = struct {
     pub fn populateCurveFragments(self: *@This(), raster_data: *RasterData) !void {
         _ = self;
 
-        for (raster_data.getShapes(), 0..) |shape, shape_index| {
+        for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
             // curve fragments are unique to curve
-            for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve_record, curve_index| {
-                std.debug.print("{}{}\n", .{ shape_index, curve_index });
+            for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve_record, curve_index| {
+                std.debug.print("{}{}\n", .{ subpath_index, curve_index });
                 const pixel_intersections = raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end];
                 std.debug.assert(pixel_intersections.len > 0);
 
@@ -375,7 +375,7 @@ pub const Raster = struct {
             }
         }
 
-        // sort all curve fragments of all the shapes by y ascending, x ascending
+        // sort all curve fragments of all the subpaths by y ascending, x ascending
         std.mem.sort(
             CurveFragment,
             raster_data.getCurveFragments(),
@@ -581,7 +581,7 @@ pub const Raster = struct {
 //     // }
 
 //     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .shape_index = 0,
+//         .subpath_index = 0,
 //         .curve_index = 0,
 //         .is_end = false,
 //         .intersection = Intersection{
@@ -594,7 +594,7 @@ pub const Raster = struct {
 //     }, path_intersections.items, 0.0);
 
 //     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .shape_index = 0,
+//         .subpath_index = 0,
 //         .curve_index = 0,
 //         .is_end = false,
 //         .intersection = Intersection{
@@ -607,7 +607,7 @@ pub const Raster = struct {
 //     }, path_intersections.items, test_util.DEFAULT_TOLERANCE);
 
 //     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .shape_index = 0,
+//         .subpath_index = 0,
 //         .curve_index = 0,
 //         .is_end = false,
 //         .intersection = Intersection{
@@ -620,7 +620,7 @@ pub const Raster = struct {
 //     }, path_intersections.items, test_util.DEFAULT_TOLERANCE);
 
 //     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .shape_index = 0,
+//         .subpath_index = 0,
 //         .curve_index = 0,
 //         .is_end = false,
 //         .intersection = Intersection{

@@ -11,7 +11,7 @@ pub const Intersection = struct {
     point: PointF32,
 };
 
-pub const Shape = struct {
+pub const Subpath = struct {
     curve_offsets: RangeU32,
 };
 

@@ -54,19 +54,19 @@ pub fn main() !void {
     // output curves
     std.debug.print("\n", .{});
     std.debug.print("Curves:\n", .{});
-    for (raster_data.getShapes(), 0..) |shape, shape_index| {
-        for (raster_data.getCurves()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve, curve_index| {
-            std.debug.print("Curve({},{}): {}\n", .{ shape_index, curve_index, curve.curve_fn });
+    for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
+        for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
+            std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve.curve_fn });
         }
     }
 
     std.debug.print("\n", .{});
     std.debug.print("Pixel Intersections:\n", .{});
-    for (raster_data.getShapes(), 0..) |shape, shape_index| {
-        for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve_record, curve_index| {
+    for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
+        for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve_record, curve_index| {
             for (raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end]) |pixel_intersection| {
                 std.debug.print("PixelIntersection({},{}): Pixel({},{}), T({}), Intersection({},{})\n", .{
-                    shape_index,
+                    subpath_index,
                     curve_index,
                     pixel_intersection.getPixel().x,
                     pixel_intersection.getPixel().y,

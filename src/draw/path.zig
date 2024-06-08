@@ -9,7 +9,7 @@ const PointF32 = core.PointF32;
 const RangeF32 = core.RangeF32;
 const RangeU32 = core.RangeU32;
 const Curve = curve_module.Curve;
-const Shape = curve_module.Shape;
+const Subpath = curve_module.Subpath;
 const Line = curve_module.Line;
 const QuadraticBezier = curve_module.QuadraticBezier;
 const SequenceU32 = core.SequenceU32;
@@ -19,19 +19,19 @@ pub const Path = struct {
         var IdSequence = SequenceU32.initValue(0);
 
         id: u32,
-        shapes: []const Shape,
+        subpaths: []const Subpath,
         curves: []const Curve,
 
-        pub fn create(shapes: []const Shape, curves: []const Curve) Unmanaged {
+        pub fn create(subpaths: []const Subpath, curves: []const Curve) Unmanaged {
             return Unmanaged{
                 .id = IdSequence.next(),
-                .shapes = shapes,
+                .subpaths = subpaths,
                 .curves = curves,
             };
         }
 
         pub fn deinit(self: Unmanaged, allocator: Allocator) void {
-            allocator.free(self.shapes);
+            allocator.free(self.subpaths);
             allocator.free(self.curves);
         }
     };
@@ -47,8 +47,8 @@ pub const Path = struct {
         return self.unmanaged.id;
     }
 
-    pub fn getShapes(self: *const Path) []const Shape {
-        return self.unmanaged.shapes;
+    pub fn getSubpaths(self: *const Path) []const Subpath {
+        return self.unmanaged.subpaths;
     }
 
     pub fn getCurves(self: *const Path) []const Curve {
