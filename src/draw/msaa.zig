@@ -43,12 +43,14 @@ pub fn HalfPlanes(comptime T: type) type {
             if (p0.y > p1.y) {
                 std.mem.swap(PointF32, &p0, &p1);
             }
+            const line = Line.create(p0, p1).translate(PointF32{
+                .x = -0.5,
+                .y = -0.5,
+            });
 
-            if (Line.create(p0, p1).getNormal().normalize()) |n_n| {
+            if (line.getNormal().normalize()) |n_n| {
                 var n = n_n;
-                var c = n.dot(p0);
-                // const c2 = c1 - 0.5 * (n.x + n.y);
-                // var c3 = c2;
+                var c = n.dot(line.start);
 
                 if (c < 0) {
                     c = -c;
@@ -240,7 +242,7 @@ test "16 bit msaa" {
 
     try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(0.0));
     try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(1.9999999));
-    try std.testing.expectEqual(0b1111111111111111, half_planes.getVerticalMask(52.5));
+    try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(52.5));
     try std.testing.expectEqual(0b1010011010010010, half_planes.getVerticalMask(0.4));
     try std.testing.expectEqual(0b0100100100100000, half_planes.getVerticalMask(0.75));
 
@@ -251,6 +253,7 @@ test "16 bit msaa" {
         .x = 0.5,
         .y = 0.0,
     });
+    std.debug.print("FOUND: {b:0>16}\n", .{hp_top_left});
     try std.testing.expectEqual(0b0111101111111111, hp_top_left);
 
     const hp_bottom_left = half_planes.getHalfPlaneMask(PointF32{

@@ -160,6 +160,13 @@ pub const Line = struct {
         };
     }
 
+    pub fn translate(self: Line, point: PointF32) Line {
+        return Line{
+            .start = self.start.add(point),
+            .end = self.end.add(point),
+        };
+    }
+
     pub fn isVertical(self: Line) bool {
         return self.start.x == self.end.x;
     }

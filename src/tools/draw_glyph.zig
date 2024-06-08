@@ -62,8 +62,8 @@ pub fn main() !void {
 
     std.debug.print("\n", .{});
     std.debug.print("Pixel Intersections:\n", .{});
-    for (raster_data.getShapeRecords(), 0..) |shape_record, shape_index| {
-        for (raster_data.getCurveRecords()[shape_record.curve_fragment_offsets.start..shape_record.curve_fragment_offsets.end], 0..) |curve_record, curve_index| {
+    for (raster_data.getShapes(), 0..) |shape, shape_index| {
+        for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve_record, curve_index| {
             for (raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end]) |pixel_intersection| {
                 std.debug.print("PixelIntersection({},{}): Pixel({},{}), T({}), Intersection({},{})\n", .{
                     shape_index,

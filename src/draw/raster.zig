@@ -266,7 +266,7 @@ pub const Raster = struct {
 
         try self.populateIntersections(&raster_data);
         try self.populateCurveFragments(&raster_data);
-        // try self.populateBoundaryFragments(&raster_data);
+        try self.populateBoundaryFragments(&raster_data);
 
         return raster_data;
     }
@@ -299,7 +299,7 @@ pub const Raster = struct {
                 );
 
                 // scan x lines within bounds
-                const grid_x_size: usize = @intFromFloat(scaled_curve_bounds.getWidth());
+                const grid_x_size: usize = @intFromFloat(@ceil(scaled_curve_bounds.getWidth()));
                 const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
                 for (0..grid_x_size + 1) |x_offset| {
                     const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
@@ -312,7 +312,7 @@ pub const Raster = struct {
                 }
 
                 // scan y lines within bounds
-                const grid_y_size: usize = @intFromFloat(scaled_curve_bounds.getHeight());
+                const grid_y_size: usize = @intFromFloat(@ceil(scaled_curve_bounds.getHeight()));
                 const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
                 for (0..grid_y_size + 1) |y_offset| {
                     const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
@@ -379,6 +379,7 @@ pub const Raster = struct {
                 for (pixel_intersections) |*pixel_intersection| {
                     if (std.meta.eql(previous_pixel_intersection.getPoint(), pixel_intersection.getPoint())) {
                         // skip if exactly the same point
+                        previous_pixel_intersection = pixel_intersection;
                         continue;
                     }
 
