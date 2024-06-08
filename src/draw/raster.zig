@@ -221,8 +221,8 @@ pub const Raster = struct {
                 break;
             }
 
-            const intersection1 = intersections[index];
-            const intersection2 = intersections[index + 1];
+            var intersection1 = intersections[index];
+            var intersection2 = intersections[index + 1];
             if (std.meta.eql(intersection1.getPoint(), intersection2.getPoint())) {
                 continue;
             }
@@ -231,7 +231,24 @@ pub const Raster = struct {
                 continue;
             }
 
-            const pixel = intersection1.getPixel().min(intersection2.getPixel());
+            const x_offset: f32 = @floatFromInt(@abs(intersection1.getPixel().x - intersection2.getPixel().x));
+            const y_offset: f32 = @floatFromInt(@abs(intersection1.getPixel().y - intersection2.getPixel().y));
+            const point_offset = PointF32{
+                .x = x_offset,
+                .y = y_offset,
+            };
+            std.debug.assert(x_offset <= 1.0 and x_offset >= 0.0);
+            std.debug.assert(y_offset <= 1.0 and y_offset >= 0.0);
+
+            if (intersection1.getPixel().y > intersection2.getPixel().y) {
+                std.mem.swap(PathIntersection, &intersection1, &intersection2);
+                intersection2.intersection.intersection.point = intersection2.intersection.intersection.point.add(point_offset);
+            } else if (intersection1.getPixel().y == intersection2.getPixel().y and intersection1.getPixel().x > intersection2.getPixel().x) {
+                std.mem.swap(PathIntersection, &intersection1, &intersection2);
+                intersection2.intersection.intersection.point = intersection2.intersection.intersection.point.add(point_offset);
+            }
+
+            const pixel = intersection1.getPixel();
 
             // const horizontal_mask = self.half_planes.getHorizontalMask(Line.create(
             //     intersection1.getPoint(),
