@@ -23,6 +23,7 @@ const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
 const UnmanagedTexture = texture_module.UnmanagedTexture;
+const HalfPlanesU16 = msaa.HalfPlanesU16;
 
 pub const PathIntersection = struct {
     shape_index: u32,
@@ -45,6 +46,8 @@ pub const FragmentIntersection = struct {
     pixel: PointI32,
     intersection1: Intersection,
     intersection2: Intersection,
+    horizontal_mask: u16,
+    vertical_mask: u16,
 
     pub fn getLine(self: FragmentIntersection) Line {
         return Line.create(self.intersection1.point, self.intersection2.point);
@@ -54,37 +57,26 @@ pub const FragmentIntersectionList = std.ArrayList(FragmentIntersection);
 
 pub const BoundaryFragment = struct {
     pixel: PointI32,
-    winding: Winding = Winding{},
+    winding: f32,
     bitmask: u16 = 0,
 };
 pub const BoundaryFragmentList = std.ArrayList(BoundaryFragment);
-
-pub const Winding = struct {
-    start_value: i32 = 0,
-    end_value: i32 = 0,
-};
 
 pub const Raster = struct {
     const BitmaskTexture = UnmanagedTexture(u16);
 
     allocator: Allocator,
-    half_planes: BitmaskTexture,
-    horizontal_half_planes: []u16,
+    half_planes: HalfPlanesU16,
 
     pub fn init(allocator: Allocator) !Raster {
         return Raster{
             .allocator = allocator,
-            .half_planes = try msaa.createHalfPlanes(u16, allocator, &msaa.UV_SAMPLE_COUNT_16, DimensionsU32{
-                .width = 64,
-                .height = 64,
-            }),
-            .horizontal_half_planes = try msaa.createVerticalLookup(u16, allocator, 32, &msaa.UV_SAMPLE_COUNT_16),
+            .half_planes = try HalfPlanesU16.create(allocator, &msaa.UV_SAMPLE_COUNT_16),
         };
     }
 
     pub fn deinit(self: *Raster) void {
-        self.half_planes.deinit(self.allocator);
-        self.allocator.free(self.horizontal_half_planes);
+        self.half_planes.deinit();
     }
 
     pub fn createIntersections(allocator: Allocator, path: Path, view: *TextureViewRgba) !PathIntersectionList {
@@ -235,6 +227,9 @@ pub const Raster = struct {
                 .pixel = pixel,
                 .intersection1 = intersection1.intersection,
                 .intersection2 = intersection2.intersection,
+                // TODO: horizontal_mask, vertical_mask
+                .horizontal_mask = 0,
+                .vertical_mask = 0,
             };
         }
 
@@ -265,7 +260,7 @@ pub const Raster = struct {
         }
     }
 
-    pub fn unwindFragmentIntersectionsAlloc(self: *Raster, allocator: Allocator, fragment_intersections: []FragmentIntersection) !BoundaryFragmentList {
+    pub fn unwindFragmentIntersectionsAlloc(allocator: Allocator, fragment_intersections: []FragmentIntersection) !BoundaryFragmentList {
         var boundary_fragments = BoundaryFragmentList.init(allocator);
         var index: usize = 0;
 
@@ -280,6 +275,7 @@ pub const Raster = struct {
                 var boundary_fragment: *BoundaryFragment = try boundary_fragments.addOne();
                 boundary_fragment.* = BoundaryFragment{
                     .pixel = fragment_intersection.pixel,
+                    .winding = 0.0,
                 };
                 const x = fragment_intersection.pixel.x;
 
@@ -290,13 +286,7 @@ pub const Raster = struct {
                         // set both winding values to the previous end winding value
                         // we haven't intersected the ray yet, so it is just
                         // continuous with the previous winding
-                        boundary_fragment.winding = Winding{
-                            .start_value = previous.winding.end_value,
-                            .end_value = previous.winding.end_value,
-                        };
-                    } else {
-                        // this is the first boundary fragment on this scan line
-                        boundary_fragment.winding = Winding{};
+                        boundary_fragment.winding = previous.winding;
                     }
 
                     const ray_y: f32 = @as(f32, @floatFromInt(fragment_intersection.pixel.y)) + 0.5;
@@ -313,12 +303,21 @@ pub const Raster = struct {
                     const fragment_intersection_line = fragment_intersection.getLine();
 
                     if (ray_line.intersectHorizontalLine(fragment_intersection_line) != null) {
-                        if (fragment_intersection_line.start.y >= ray_y) {
+                        if (fragment_intersection_line.start.y < ray_y) {
                             // curve passing top to bottom
-                            boundary_fragment.winding.end_value -= 1;
-                        } else {
+                            boundary_fragment.winding -= 1;
+                        } else if (fragment_intersection_line.start.y > ray_y) {
                             // curve passing bottom to top
-                            boundary_fragment.winding.end_value += 1;
+                            boundary_fragment.winding += 1;
+                        } else if (fragment_intersection_line.end.y < ray_y) {
+                            // curve passing top to bottom, starting on ray
+                            boundary_fragment.winding -= 0.5;
+                        } else if (fragment_intersection_line.end.y > ray_y) {
+                            // curve passing bottom to top, starting on ray
+                            boundary_fragment.winding += 0.5;
+                        } else {
+                            // shouldn't happend, parallel lines
+                            unreachable;
                         }
                     }
                     index += 1;
@@ -330,61 +329,27 @@ pub const Raster = struct {
                     previous_boundary_fragment = boundary_fragment.*;
                 }
 
-                var bitmask: u16 = 0;
-                if (end_index > start_index) {
-                    for (fragment_intersections[start_index .. end_index - 1]) |fi| {
-                        // calculate bitmask
-                        bitmask = bitmask & self.calculateBitmaskFragmentIntersection(boundary_fragment.winding, fi);
-                    }
-                }
+                // for each fragment intersection, you can
+                // - calculalate the bitmask for Mv and Mh and store it in the FragmentIntersection
 
-                boundary_fragment.bitmask = bitmask;
+                // var bitmask: u16 = 0;
+                // if (end_index > start_index) {
+                //     for (fragment_intersections[start_index .. end_index - 1]) |fi| {
+                //         // calculate bitmask
+                //         // fi is sorted on x from 0 -> 1
+                //         const curve_mask = self.half_planes.getLineMask(fi.getLine());
+                //         if (boundary_fragment.winding.start_value % 2 == 0) {
+
+                //         }
+                //         // bitmask = bitmask & self.half_planes.;
+                //     }
+                // }
+
+                // boundary_fragment.bitmask = bitmask;
             }
         }
 
         return boundary_fragments;
-    }
-
-    pub fn calculateBitmaskFragmentIntersection(self: *Raster, winding: Winding, fragment_intersection: FragmentIntersection) u16 {
-        _ = self;
-        _ = winding;
-        // vertical
-        // horizontal
-
-        const mask: u16 = 0;
-        var left_intersection: ?*const PointF32 = null;
-        if (fragment_intersection.intersection1.point.x == @as(f32, @floatFromInt(fragment_intersection.pixel.x))) {
-            left_intersection = &fragment_intersection.intersection1.point;
-        } else if (fragment_intersection.intersection2.point.x == @as(f32, @floatFromInt(fragment_intersection.pixel.x))) {
-            left_intersection = &fragment_intersection.intersection2.point;
-        }
-
-        // if (left_intersection) |left| {
-        //     const horizontal_mask = self.getHorizontalMask(left.y);
-
-        //     if (winding.start_value > 0) {
-        //         mask = horizontal_mask;
-        //     } else if (winding.start_value < 0) {
-        //         mask = ~horizontal_mask;
-        //     }
-        // }
-
-        // calculate n + c, get the half plane
-        // get half plane for intersection1.y and intersection2.y
-        // & them all together
-
-        // const intersection1_mask = self.getHorizontalMask(fragment_intersection.intersection1.point.y);
-        // const intersection2_mask = self.getHorizontalMask(fragment_intersection.intersection2.point.y);
-        // const line_mask = self.getHalfPlaneMask(fragment_intersection.intersection1.point, fragment_intersection.intersection2.point);
-        // const horizontal_ray_mask = intersection1_mask & intersection2_mask & line_mask;
-
-        // if (winding.start_value > 0) {
-        //     mask = mask & horizontal_ray_mask;
-        // } else if (winding.start_value < 0) {
-        //     mask = mask & ~horizontal_ray_mask;
-        // }
-
-        return mask;
     }
 
     fn scanX(

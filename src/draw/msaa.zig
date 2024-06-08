@@ -92,6 +92,26 @@ pub fn HalfPlanes(comptime T: type) type {
 
             return top_mask & bottom_mask & line_mask;
         }
+
+        pub fn getLineMask(self: *@This(), line: Line) u16 {
+            var mask: T = 0;
+            const pixel_line = Line.create(PointF32{
+                .x = std.math.modf(line.start.x).fpart,
+                .y = std.math.modf(line.start.y).fpart,
+            }, PointF32{
+                .x = std.math.modf(line.end.x).fpart,
+                .y = std.math.modf(line.end.y).fpart,
+            });
+
+            if (line.start.x == 0.0) {
+                mask = self.getVerticalMask(line.start.y);
+            } else if (line.end.x == 0.0) {
+                mask = self.getVerticalMask(line.end.y);
+            }
+
+            mask = mask & self.getTrapezoidMask(pixel_line);
+            return mask;
+        }
     };
 }
 
