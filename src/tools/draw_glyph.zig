@@ -45,84 +45,110 @@ pub fn main() !void {
         },
     }).?;
 
-    path.debug();
-
     var raster = try draw.Raster.init(allocator);
     defer raster.deinit();
 
-    const intersections = try draw.Raster.createIntersections(allocator, path, &texture_view);
-    defer intersections.deinit();
+    var raster_data = try raster.rasterizeDebug(&path, &texture_view);
+    defer raster_data.deinit();
 
-    std.debug.print("\n============== Intersections\n", .{});
-    for (intersections.items) |intersection| {
-        std.debug.print("Intersection: shape({}) curve({}) t({}), ({} @ {})\n", .{
-            intersection.shape_index,
-            intersection.curve_index,
-            intersection.getT(),
-            intersection.getPoint().x,
-            intersection.getPoint().y,
-        });
+    // output curves
+    std.debug.print("Curves:\n", .{});
+    for (raster_data.getShapes(), 0..) |shape, shape_index| {
+        for (raster_data.getCurves()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve, curve_index| {
+            std.debug.print("Curve({},{}): {}\n", .{ shape_index, curve_index, curve.curve_fn });
+        }
     }
-    std.debug.print("==============\n", .{});
 
-    const fragment_intersections = try raster.createFragmentIntersectionsAlloc(allocator, intersections.items);
-    defer fragment_intersections.deinit();
-
-    var boundary_fragments = try draw.Raster.unwindFragmentIntersectionsAlloc(allocator, fragment_intersections.items);
-    defer boundary_fragments.deinit();
-
-    std.debug.print("\n============== Fragment Intersections\n", .{});
-    for (fragment_intersections.items) |fragment_intersection| {
-        std.debug.print("Intersection: {}\n", .{fragment_intersection});
+    for (raster_data.getShapes(), 0..) |shape, shape_index| {
+        for (raster_data.getCurveRecords()[shape.curve_offsets.start..shape.curve_offsets.end], 0..) |curve_record, curve_index| {
+            for (raster_data.getPixelIntersections()[curve_record.pixel_intersection_offests.start..curve_record.pixel_intersection_offests.end]) |pixel_intersection| {
+                std.debug.print("PixelIntersection({},{}): Pixel({},{}), T({}), Intersection({},{})\n", .{
+                    shape_index,
+                    curve_index,
+                    pixel_intersection.getPixel().x,
+                    pixel_intersection.getPixel().y,
+                    pixel_intersection.getT(),
+                    pixel_intersection.getPoint().x,
+                    pixel_intersection.getPoint().y,
+                });
+            }
+            std.debug.print("-----------------------------\n", .{});
+        }
     }
-    std.debug.print("==============\n", .{});
 
-    // std.debug.print("\n============== Boundary Fragments\n", .{});
-    // for (boundary_fragments.items) |fragment| {
-    //     std.debug.print("Boundary Fragment: {}\n", .{fragment});
+    // const intersections = try draw.Raster.createIntersections(allocator, path, &texture_view);
+    // defer intersections.deinit();
+
+    // std.debug.print("\n============== Intersections\n", .{});
+    // for (intersections.items) |intersection| {
+    //     std.debug.print("Intersection: shape({}) curve({}) t({}), ({} @ {})\n", .{
+    //         intersection.shape_index,
+    //         intersection.curve_index,
+    //         intersection.getT(),
+    //         intersection.getPoint().x,
+    //         intersection.getPoint().y,
+    //     });
     // }
     // std.debug.print("==============\n", .{});
 
-    std.debug.print("\n============== Boundary Texture\n\n", .{});
-    var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
-        .width = dimensions.width + 2,
-        .height = dimensions.height + 2,
-    });
-    defer boundary_texture.deinit(allocator);
-    boundary_texture.clear(draw.Monotone{ .a = 0.0 });
-    var boundary_texture_view = boundary_texture.createView(core.RectU32.create(core.PointU32{
-        .x = 1,
-        .y = 1,
-    }, core.PointU32{
-        .x = dimensions.width + 1,
-        .y = dimensions.height + 1,
-    })).?;
+    // const fragment_intersections = try raster.createFragmentIntersectionsAlloc(allocator, intersections.items);
+    // defer fragment_intersections.deinit();
 
-    for (boundary_fragments.items) |fragment| {
-        // const pixel = fragment.getPixel();
-        const pixel = fragment.pixel;
-        if (pixel.x >= 0 and pixel.y >= 0) {
-            boundary_texture_view.getPixelUnsafe(core.PointU32{
-                .x = @intCast(pixel.x),
-                .y = @intCast(pixel.y),
-            }).* = draw.Monotone{
-                .a = 1.0,
-            };
-        }
-    }
+    // var boundary_fragments = try draw.Raster.unwindFragmentIntersectionsAlloc(allocator, fragment_intersections.items);
+    // defer boundary_fragments.deinit();
 
-    for (0..boundary_texture_view.view.getHeight()) |y| {
-        std.debug.print("{:0>4}: ", .{y});
-        for (boundary_texture_view.getRow(@intCast(y)).?) |pixel| {
-            if (pixel.a > 0.0) {
-                std.debug.print("#", .{});
-            } else {
-                std.debug.print(";", .{});
-            }
-        }
+    // std.debug.print("\n============== Fragment Intersections\n", .{});
+    // for (fragment_intersections.items) |fragment_intersection| {
+    //     std.debug.print("Intersection: {}\n", .{fragment_intersection});
+    // }
+    // std.debug.print("==============\n", .{});
 
-        std.debug.print("\n", .{});
-    }
+    // // std.debug.print("\n============== Boundary Fragments\n", .{});
+    // // for (boundary_fragments.items) |fragment| {
+    // //     std.debug.print("Boundary Fragment: {}\n", .{fragment});
+    // // }
+    // // std.debug.print("==============\n", .{});
 
-    std.debug.print("==============\n", .{});
+    // std.debug.print("\n============== Boundary Texture\n\n", .{});
+    // var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
+    //     .width = dimensions.width + 2,
+    //     .height = dimensions.height + 2,
+    // });
+    // defer boundary_texture.deinit(allocator);
+    // boundary_texture.clear(draw.Monotone{ .a = 0.0 });
+    // var boundary_texture_view = boundary_texture.createView(core.RectU32.create(core.PointU32{
+    //     .x = 1,
+    //     .y = 1,
+    // }, core.PointU32{
+    //     .x = dimensions.width + 1,
+    //     .y = dimensions.height + 1,
+    // })).?;
+
+    // for (boundary_fragments.items) |fragment| {
+    //     // const pixel = fragment.getPixel();
+    //     const pixel = fragment.pixel;
+    //     if (pixel.x >= 0 and pixel.y >= 0) {
+    //         boundary_texture_view.getPixelUnsafe(core.PointU32{
+    //             .x = @intCast(pixel.x),
+    //             .y = @intCast(pixel.y),
+    //         }).* = draw.Monotone{
+    //             .a = 1.0,
+    //         };
+    //     }
+    // }
+
+    // for (0..boundary_texture_view.view.getHeight()) |y| {
+    //     std.debug.print("{:0>4}: ", .{y});
+    //     for (boundary_texture_view.getRow(@intCast(y)).?) |pixel| {
+    //         if (pixel.a > 0.0) {
+    //             std.debug.print("#", .{});
+    //         } else {
+    //             std.debug.print(";", .{});
+    //         }
+    //     }
+
+    //     std.debug.print("\n", .{});
+    // }
+
+    // std.debug.print("==============\n", .{});
 }

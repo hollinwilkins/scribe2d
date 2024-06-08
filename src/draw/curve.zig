@@ -9,30 +9,6 @@ const DimensionsF32 = core.DimensionsF32;
 pub const Intersection = struct {
     t: f32,
     point: PointF32,
-
-    pub fn createPixelIntersection(self: Intersection) PixelIntersection {
-        const x_mod = std.math.modf(self.point.x);
-        const y_mod = std.math.modf(self.point.y);
-
-        return PixelIntersection{
-            .pixel = PointI32{
-                .x = @intFromFloat(x_mod.ipart),
-                .y = @intFromFloat(y_mod.ipart),
-            },
-            .intersection = Intersection{
-                .t = self.t,
-                .point = PointF32{
-                    .x = x_mod.fpart,
-                    .y = y_mod.fpart,
-                },
-            },
-        };
-    }
-};
-
-pub const PixelIntersection = struct {
-    intersection: Intersection,
-    pixel: PointI32,
 };
 
 pub const Shape = struct {
