@@ -137,8 +137,16 @@ pub const PixelIntersection = struct {
 };
 
 pub const CurveFragment = struct {
+    pub const Masks = struct {
+        vertical_mask: u16 = 0,
+        vertical_sign: i2 = 0,
+        horizontal_mask: u16 = 0,
+        horizontal_sign: i2 = 0,
+    };
+    
     pixel: PointI32,
     intersections: [2]Intersection,
+    masks: Masks = Masks{},
 
     pub fn create(pixel_intersections: [2]*const PixelIntersection) CurveFragment {
         const pixel = pixel_intersections[0].getPixel().min(pixel_intersections[1].getPixel());
@@ -172,6 +180,11 @@ pub const CurveFragment = struct {
                 },
             }
         };
+    }
+
+    pub fn calculateMasks(self: *CurveFragment, half_planes: HalfPlanesU16) void {
+        _ = self;
+        _ = half_planes;
     }
 
     pub fn getLine(self: CurveFragment) Line {
