@@ -466,10 +466,10 @@ test "raster intersections" {
     const path_intersections = try Raster.createIntersections(std.testing.allocator, path, &texture_view);
     defer path_intersections.deinit();
 
-    std.debug.print("Intersections:\n", .{});
-    for (path_intersections.items) |intersection| {
-        std.debug.print("{}\n", .{intersection});
-    }
+    // std.debug.print("Intersections:\n", .{});
+    // for (path_intersections.items) |intersection| {
+    //     std.debug.print("{}\n", .{intersection});
+    // }
 
     try test_util.expectPathIntersectionsContains(PathIntersection{
         .shape_index = 0,

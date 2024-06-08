@@ -74,11 +74,25 @@ pub fn HalfPlanes(comptime T: type) type {
 
         pub fn getVerticalMask(self: *@This(), y: f32) u16 {
             const mod_y = std.math.modf(y);
-            const index_f32: f32 = @round(mod_y.fpart * @as(f32, @floatFromInt(self.vertical_masks.len)));
+            if (mod_y.fpart == 0.5) {
+                return std.math.maxInt(u16);
+            }
+
+            const mask = self.getVerticalMaskRaw(y);
+            if (y < 0.5) {
+                return ~mask;
+            } else {
+                return mask;
+            }
+        }
+
+        pub fn getVerticalMaskRaw(self: *@This(), y: f32) u16 {
+            const index_f32: f32 = @round(y * @as(f32, @floatFromInt(self.vertical_masks.len)));
             const index = @min(
                 self.vertical_masks.len - 1,
                 @max(0, @as(u32, @intFromFloat(index_f32))),
             );
+
             return self.vertical_masks[index];
         }
 
@@ -86,8 +100,8 @@ pub fn HalfPlanes(comptime T: type) type {
             const top_y = @min(line.start.y, line.end.y);
             const bottom_y = @max(line.start.y, line.end.y);
 
-            const top_mask = self.getVerticalMask(top_y);
-            const bottom_mask = ~self.getVerticalMask(bottom_y);
+            const top_mask = self.getVerticalMaskRaw(std.math.modf(top_y).fpart);
+            const bottom_mask = ~self.getVerticalMaskRaw(std.math.modf(bottom_y).fpart);
             const line_mask = self.getHalfPlaneMask(line.start, line.end);
 
             return top_mask & bottom_mask & line_mask;
@@ -244,10 +258,11 @@ test "16 bit msaa" {
     var half_planes = try HalfPlanesU16.create(std.testing.allocator, &UV_SAMPLE_COUNT_16);
     defer half_planes.deinit();
 
-    try std.testing.expectEqual(0b1111111111111111, half_planes.getVerticalMask(0.0));
+    try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(0.0));
     try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(1.9999999));
-    try std.testing.expectEqual(0b0101100101100101, half_planes.getVerticalMask(52.5));
-    try std.testing.expectEqual(0b0101100101101101, half_planes.getVerticalMask(0.4));
+    try std.testing.expectEqual(0b1111111111111111, half_planes.getVerticalMask(52.5));
+    try std.testing.expectEqual(0b1010011010010010, half_planes.getVerticalMask(0.4));
+    try std.testing.expectEqual(0b0100100100100000, half_planes.getVerticalMask(0.75));
 
     const hp_top_left = half_planes.getHalfPlaneMask(PointF32{
         .x = 0.0,
