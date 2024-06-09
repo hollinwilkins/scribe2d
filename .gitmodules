@@ -1,0 +1,6 @@
+[submodule "deps/deps/zig-gamedev"]
+	path = deps/deps/zig-gamedev
+	url = https://github.com/zig-gamedev/zig-gamedev.git
+[submodule "deps/zig-gamedev"]
+	path = deps/zig-gamedev
+	url = https://github.com/zig-gamedev/zig-gamedev.git
