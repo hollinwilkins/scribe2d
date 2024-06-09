@@ -227,9 +227,14 @@ pub const CurveFragment = struct {
         } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
             masks.horizontal_sign = -1;
         }
-        const winding = main_ray_winding + masks.horizontal_sign + masks.vertical_sign;
-        std.debug.print("Winding({}), VerticalSign({}), HorizontalSign({})\n", .{winding, masks.vertical_sign, masks.horizontal_sign});
-        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine(), winding != 0);
+        const winding = main_ray_winding + masks.horizontal_sign;
+        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine(), winding == 0);
+        std.debug.print("Winding({}), VerticalSign({}), HorizontalSign({}), HMask({b:0>16})\n", .{
+            winding,
+            masks.vertical_sign,
+            masks.horizontal_sign,
+            masks.horizontal_mask,
+        });
 
         return masks;
     }
@@ -488,10 +493,14 @@ pub const Raster = struct {
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 82 and curve_fragment.pixel.y == 124) {
+                    if (curve_fragment.pixel.x == 108 and curve_fragment.pixel.y == 96) {
                         std.debug.print("HEY\n", .{});
                     }
-                    const masks = curve_fragment.calculateMasks(self.half_planes, boundary_fragment.main_ray_winding);
+                    var previous_main_ray_winding: i8 = 0;
+                    if (previous_boundary_fragment) |pbf| {
+                        previous_main_ray_winding = pbf.main_ray_winding;
+                    }
+                    const masks = curve_fragment.calculateMasks(self.half_planes, previous_main_ray_winding);
 
                     const vertical_sign: i8 = @intCast(masks.vertical_sign);
                     const horizontal_sign: i8 = @intCast(masks.horizontal_sign);
@@ -510,9 +519,9 @@ pub const Raster = struct {
 
                 if (previous_boundary_fragment) |pbf| {
                     if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1) {
-                        (try raster_data.addSpan()).* = Span {
+                        (try raster_data.addSpan()).* = Span{
                             .y = boundary_fragment.pixel.y,
-                            .x_range = RangeI32 {
+                            .x_range = RangeI32{
                                 .start = pbf.pixel.x + 1,
                                 .end = boundary_fragment.pixel.x,
                             },
