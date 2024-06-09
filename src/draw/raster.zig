@@ -227,10 +227,11 @@ pub const CurveFragment = struct {
         } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
             masks.horizontal_sign = -1;
         }
-        const winding = main_ray_winding + masks.horizontal_sign;
+        const winding = main_ray_winding + masks.horizontal_sign + masks.vertical_sign;
         masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine(), winding == 0);
-        std.debug.print("Winding({}), VerticalSign({}), HorizontalSign({}), HMask({b:0>16})\n", .{
+        std.debug.print("Winding({}), MainRay({}), VerticalSign({}), HorizontalSign({}), HMask({b:0>16})\n", .{
             winding,
+            main_ray_winding,
             masks.vertical_sign,
             masks.horizontal_sign,
             masks.horizontal_mask,
