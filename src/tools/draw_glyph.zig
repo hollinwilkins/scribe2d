@@ -144,6 +144,20 @@ pub fn main() !void {
         }
     }
 
+    for (raster_data.getSpans()) |span| {
+        for (0..span.x_range.size()) |x_offset| {
+            if (span.filled) {
+                const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
+                boundary_texture_view.getPixelUnsafe(core.PointU32{
+                    .x = @intCast(x),
+                    .y = @intCast(span.y),
+                }).* = draw.Monotone{
+                    .a = 1.0,
+                };
+            }
+        }
+    }
+
     for (0..boundary_texture_view.view.getHeight()) |y| {
         std.debug.print("{:0>4}: ", .{y});
         for (boundary_texture_view.getRow(@intCast(y)).?) |pixel| {

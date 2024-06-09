@@ -242,6 +242,7 @@ pub const Span = struct {
     y: i32 = 0,
     x_range: RangeI32 = RangeI32{},
     winding: i8 = 0,
+    filled: bool = false,
 };
 
 pub const Raster = struct {
@@ -499,6 +500,7 @@ pub const Raster = struct {
                                 .end = boundary_fragment.pixel.x,
                             },
                             .winding = pbf.main_ray_winding,
+                            .filled = pbf.main_ray_winding != 0,
                         };
                     }
                 }
