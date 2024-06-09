@@ -105,6 +105,17 @@ pub fn main() !void {
         });
     }
 
+    std.debug.print("\n", .{});
+    std.debug.print("Spans:\n", .{});
+    for (raster_data.getSpans()) |span| {
+        std.debug.print("Span, Y({}), X({},{}), Winding({})\n", .{
+            span.y,
+            span.x_range.start,
+            span.x_range.end,
+            span.winding,
+        });
+    }
+
     std.debug.print("\n============== Boundary Texture\n\n", .{});
     var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
         .width = dimensions.width + 2,

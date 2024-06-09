@@ -35,6 +35,7 @@ pub const RasterData = struct {
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const CurveFragmentList = std.ArrayListUnmanaged(CurveFragment);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
+    const SpanList = std.ArrayListUnmanaged(Span);
 
     allocator: Allocator,
     path: *const Path,
@@ -43,6 +44,7 @@ pub const RasterData = struct {
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
+    spans: SpanList = SpanList{},
 
     pub fn init(allocator: Allocator, path: *const Path, view: *TextureViewRgba) RasterData {
         return RasterData{
@@ -57,6 +59,7 @@ pub const RasterData = struct {
         self.grid_intersections.deinit(self.allocator);
         self.curve_fragments.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
+        self.spans.deinit(self.allocator);
     }
 
     pub fn getPath(self: RasterData) *const Path {
@@ -91,6 +94,10 @@ pub const RasterData = struct {
         return self.boundary_fragments.items;
     }
 
+    pub fn getSpans(self: *RasterData) []Span {
+        return self.spans.items;
+    }
+
     pub fn addCurveRecord(self: *RasterData) !*CurveRecord {
         return try self.curve_records.addOne(self.allocator);
     }
@@ -105,6 +112,10 @@ pub const RasterData = struct {
 
     pub fn addBoundaryFragment(self: *RasterData) !*BoundaryFragment {
         return try self.boundary_fragments.addOne(self.allocator);
+    }
+
+    pub fn addSpan(self: *RasterData) !*Span {
+        return try self.spans.addOne(self.allocator);
     }
 };
 
@@ -225,6 +236,12 @@ pub const BoundaryFragment = struct {
     winding: [16]i8 = [_]i8{0} ** 16,
     stencil_mask: u16 = 0,
     curve_fragment_offsets: RangeU32 = RangeU32{},
+};
+
+pub const Span = struct {
+    y: i32 = 0,
+    x_range: RangeI32 = RangeI32{},
+    winding: i8 = 0,
 };
 
 pub const Raster = struct {
@@ -453,6 +470,7 @@ pub const Raster = struct {
 
         {
             const boundary_fragments = raster_data.getBoundaryFragments();
+            var previous_boundary_fragment: ?*BoundaryFragment = null;
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {
@@ -471,6 +489,21 @@ pub const Raster = struct {
                     const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
                     boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
                 }
+
+                if (previous_boundary_fragment) |pbf| {
+                    if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1) {
+                        (try raster_data.addSpan()).* = Span {
+                            .y = boundary_fragment.pixel.y,
+                            .x_range = RangeI32 {
+                                .start = pbf.pixel.x,
+                                .end = boundary_fragment.pixel.x,
+                            },
+                            .winding = pbf.main_ray_winding,
+                        };
+                    }
+                }
+
+                previous_boundary_fragment = boundary_fragment;
             }
         }
     }
