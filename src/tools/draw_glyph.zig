@@ -98,8 +98,10 @@ pub fn main() !void {
 
     std.debug.print("\n", .{});
     std.debug.print("Boundary Fragments:\n", .{});
-    for (raster_data.getBoundaryFragments()) |boundary_fragment| {
-        std.debug.print("BoundaryFragment, Pixel({},{}), StencilMask({b:0>16})\n", .{
+    for (raster_data.getBoundaryFragments(), 0..) |boundary_fragment, index| {
+        std.debug.print("BoundaryFragment({}), MainRayWinding({}), Pixel({},{}), StencilMask({b:0>16})\n", .{
+            index,
+            boundary_fragment.main_ray_winding,
             boundary_fragment.pixel.x,
             boundary_fragment.pixel.y,
             boundary_fragment.stencil_mask,

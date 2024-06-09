@@ -460,7 +460,6 @@ pub const Raster = struct {
                     std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
                     curve_fragment_offsets.end = @intCast(curve_fragment_index);
                     boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
-                    boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
                     boundary_fragment = try raster_data.addBoundaryFragment();
                     curve_fragment_offsets.start = curve_fragment_offsets.end;
                     boundary_fragment.* = BoundaryFragment{
@@ -469,6 +468,8 @@ pub const Raster = struct {
 
                     if (curve_fragment.pixel.y != boundary_fragment.pixel.y) {
                         main_ray_winding = 0.0;
+                    } else {
+                        boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
                     }
                 }
 
@@ -506,10 +507,6 @@ pub const Raster = struct {
                         });
                     }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
-                    var previous_main_ray_winding: i8 = 0;
-                    if (previous_boundary_fragment) |pbf| {
-                        previous_main_ray_winding = pbf.main_ray_winding;
-                    }
 
                     const vertical_sign: i8 = @intCast(masks.vertical_sign);
                     const horizontal_sign: i8 = @intCast(masks.horizontal_sign);
@@ -517,7 +514,7 @@ pub const Raster = struct {
                         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
                         const vertical_winding: i8 = vertical_sign * @as(i8, @intFromBool(masks.vertical_mask & bit_index != 0));
                         const horizontal_winding: i8 = horizontal_sign * @as(i8, @intFromBool(masks.horizontal_mask & bit_index != 0));
-                        boundary_fragment.winding[index] = previous_main_ray_winding + vertical_winding + horizontal_winding;
+                        boundary_fragment.winding[index] = boundary_fragment.main_ray_winding + vertical_winding + horizontal_winding;
                     }
                 }
 
@@ -534,8 +531,8 @@ pub const Raster = struct {
                                 .start = pbf.pixel.x + 1,
                                 .end = boundary_fragment.pixel.x,
                             },
-                            .winding = pbf.main_ray_winding,
-                            .filled = pbf.main_ray_winding != 0,
+                            .winding = boundary_fragment.main_ray_winding,
+                            .filled = boundary_fragment.main_ray_winding != 0,
                         };
                     }
                 }
