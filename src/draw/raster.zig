@@ -455,7 +455,7 @@ pub const Raster = struct {
 
             const curve_fragments = raster_data.getCurveFragments();
             for (curve_fragments, 0..) |curve_fragment, curve_fragment_index| {
-                if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
+                if (curve_fragment.pixel.x != boundary_fragment.pixel.x) {
                     std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
                     curve_fragment_offsets.end = @intCast(curve_fragment_index);
                     boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
@@ -464,11 +464,10 @@ pub const Raster = struct {
                     boundary_fragment.* = BoundaryFragment{
                         .pixel = curve_fragment.pixel,
                     };
+                    boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
 
                     if (curve_fragment.pixel.y != boundary_fragment.pixel.y) {
                         main_ray_winding = 0.0;
-                    } else {
-                        boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
                     }
                 }
 
