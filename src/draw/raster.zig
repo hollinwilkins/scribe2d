@@ -194,7 +194,7 @@ pub const CurveFragment = struct {
         };
     }
 
-    pub fn calculateMasks(self: CurveFragment, half_planes: HalfPlanesU16) Masks {
+    pub fn calculateMasks(self: CurveFragment, half_planes: HalfPlanesU16, main_ray_winding: i18) Masks {
         var masks = Masks{};
         if (self.intersections[0].point.x == 0.0 and self.intersections[1].point.x != 0.0) {
             masks.vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
@@ -214,7 +214,7 @@ pub const CurveFragment = struct {
             }
         }
 
-        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
+        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine(), main_ray_winding == 0);
         if (self.intersections[0].point.y > self.intersections[1].point.y) {
             // crossing top to bottom
             masks.horizontal_sign = 1;
@@ -479,7 +479,7 @@ pub const Raster = struct {
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {
-                    const masks = curve_fragment.calculateMasks(self.half_planes);
+                    const masks = curve_fragment.calculateMasks(self.half_planes, boundary_fragment.main_ray_winding);
                     const vertical_sign: i8 = @intCast(masks.vertical_sign);
                     const horizontal_sign: i8 = @intCast(masks.horizontal_sign);
                     for (0..16) |index| {

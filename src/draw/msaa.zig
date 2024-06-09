@@ -24,8 +24,8 @@ pub fn HalfPlanes(comptime T: type) type {
             return @This(){
                 .allocator = allocator,
                 .half_planes = try createHalfPlanes(T, allocator, points, DimensionsU32{
-                    .width = bit_size * 8,
-                    .height = bit_size * 8,
+                    .width = bit_size * 8 * 2,
+                    .height = bit_size * 8 * 2,
                 }),
                 .vertical_masks = try createVerticalLookup(T, allocator, bit_size * 2, points),
             };
@@ -110,13 +110,17 @@ pub fn HalfPlanes(comptime T: type) type {
             return self.vertical_masks[index];
         }
 
-        pub fn getHorizontalMask(self: @This(), line: Line) u16 {
+        pub fn getHorizontalMask(self: @This(), line: Line, left: bool) u16 {
             const top_y = @min(line.start.y, line.end.y);
             const bottom_y = @max(line.start.y, line.end.y);
 
             const top_mask = self.getVerticalMaskRaw(top_y);
             const bottom_mask = ~self.getVerticalMaskRaw(bottom_y);
-            const line_mask = self.getHalfPlaneMask(line.start, line.end);
+            var line_mask = self.getHalfPlaneMask(line.start, line.end);
+
+            if (left) {
+                line_mask = ~line_mask;
+            }
 
             return top_mask & bottom_mask & line_mask;
         }
@@ -265,7 +269,6 @@ test "16 bit msaa" {
         .x = 0.5,
         .y = 0.0,
     });
-    std.debug.print("FOUND: {b:0>16}\n", .{hp_top_left});
     try std.testing.expectEqual(0b0111101111111111, hp_top_left);
 
     const hp_bottom_left = half_planes.getHalfPlaneMask(PointF32{
