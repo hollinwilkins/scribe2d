@@ -149,11 +149,11 @@ pub fn HalfPlanes(comptime T: type) type {
             const bottom_mask = ~self.getVerticalMaskRaw(bottom_y);
             const line_mask = self.getHalfPlaneMask(line.start, line.end);
 
-            std.debug.print("----------------\n", .{});
-            std.debug.print("T: {b:0>16}\n", .{top_mask});
-            std.debug.print("B: {b:0>16}\n", .{bottom_mask});
-            std.debug.print("L: {b:0>16}\n", .{line_mask});
-            std.debug.print("----------------\n", .{});
+            // std.debug.print("----------------\n", .{});
+            // std.debug.print("T: {b:0>16}\n", .{top_mask});
+            // std.debug.print("B: {b:0>16}\n", .{bottom_mask});
+            // std.debug.print("L: {b:0>16}\n", .{line_mask});
+            // std.debug.print("----------------\n", .{});
 
             return top_mask & bottom_mask & line_mask;
         }

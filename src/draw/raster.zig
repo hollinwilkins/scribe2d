@@ -234,12 +234,12 @@ pub const CurveFragment = struct {
         }
 
         masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
-        std.debug.print("VerticalSign({}), HorizontalSign({}), VMask({b:0>16}), HMask({b:0>16})\n", .{
-            masks.vertical_sign,
-            masks.horizontal_sign,
-            masks.vertical_mask,
-            masks.horizontal_mask,
-        });
+        // std.debug.print("VerticalSign({}), HorizontalSign({}), VMask({b:0>16}), HMask({b:0>16})\n", .{
+        //     masks.vertical_sign,
+        //     masks.horizontal_sign,
+        //     masks.vertical_mask,
+        //     masks.horizontal_mask,
+        // });
 
         return masks;
     }
@@ -390,10 +390,9 @@ pub const Raster = struct {
     pub fn populateCurveFragments(self: *@This(), raster_data: *RasterData) !void {
         _ = self;
 
-        for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
+        for (raster_data.getSubpaths()) |subpath| {
             // curve fragments are unique to curve
-            for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve_record, curve_index| {
-                std.debug.print("{}{}\n", .{ subpath_index, curve_index });
+            for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve_record| {
                 const grid_intersections = raster_data.getGridIntersections()[curve_record.grid_intersection_offests.start..curve_record.grid_intersection_offests.end];
                 std.debug.assert(grid_intersections.len > 0);
 
