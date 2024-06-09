@@ -149,6 +149,12 @@ pub fn HalfPlanes(comptime T: type) type {
             const bottom_mask = ~self.getVerticalMaskRaw(bottom_y);
             var line_mask = self.getHalfPlaneMask(line.start, line.end);
 
+            std.debug.print("----------------\n", .{});
+            std.debug.print("T: {b:0>16}\n", .{top_mask});
+            std.debug.print("B: {b:0>16}\n", .{bottom_mask});
+            std.debug.print("L: {b:0>16}\n", .{line_mask});
+            std.debug.print("----------------\n", .{});
+
             if (left) {
                 line_mask = ~line_mask;
             }
@@ -357,10 +363,10 @@ test "16 bit msaa" {
     // try std.testing.expectEqual(0b0010000000000000, trap3);
 
     _ = half_planes.getHorizontalMask(Line.create(PointF32{
-        .x = 1.0,
-        .y = 0.023765564,
+        .x = 0.317733765,
+        .y = 1.0,
     }, PointF32{
         .x = 0.0,
-        .y = 0.970344543,
+        .y = 0.63772583,
     }), false);
 }
