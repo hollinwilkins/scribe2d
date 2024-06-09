@@ -192,8 +192,13 @@ pub fn main() !void {
     for (0..boundary_texture_view.getDimensions().height) |y| {
         for (boundary_texture_view.getRow(@intCast(y)).?, 0..) |pixel, x| {
             const image_pixel = (y * image.bytes_per_row) + (x * image.num_components * image.bytes_per_component);
+            // const value = std.math.maxInt(u8) - std.math.clamp(
+            //     @as(u8, @intFromFloat(@round(std.math.pow(f32, pixel.a, 1.0 / 2.2) * std.math.maxInt(u8)))),
+            //     0,
+            //     std.math.maxInt(u8),
+            // );
             const value = std.math.maxInt(u8) - std.math.clamp(
-                @as(u8, @intFromFloat(@round(std.math.pow(f32, pixel.a, 1.0 / 2.2) * std.math.maxInt(u8)))),
+                @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
                 0,
                 std.math.maxInt(u8),
             );
