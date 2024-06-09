@@ -455,6 +455,7 @@ pub const Raster = struct {
 
             const curve_fragments = raster_data.getCurveFragments();
             for (curve_fragments, 0..) |curve_fragment, curve_fragment_index| {
+                const y_changing = curve_fragment.pixel.y != boundary_fragment.pixel.y;
                 if (curve_fragment.pixel.x != boundary_fragment.pixel.x) {
                     std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
                     curve_fragment_offsets.end = @intCast(curve_fragment_index);
@@ -465,8 +466,8 @@ pub const Raster = struct {
                         .pixel = curve_fragment.pixel,
                     };
                     boundary_fragment.main_ray_winding = @intFromFloat(main_ray_winding);
-
-                    if (curve_fragment.pixel.y != boundary_fragment.pixel.y) {
+                    
+                    if (y_changing) {
                         main_ray_winding = 0.0;
                     }
                 }
@@ -497,12 +498,6 @@ pub const Raster = struct {
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 0 and curve_fragment.pixel.y == 0) {
-                        std.debug.print("HEY\n", .{});
-                        std.debug.print("MainRay({})\n", .{
-                            boundary_fragment.main_ray_winding,
-                        });
-                    }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
 
                     const vertical_sign: i8 = @intCast(masks.vertical_sign);
