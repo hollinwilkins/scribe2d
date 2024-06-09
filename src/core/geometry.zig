@@ -103,6 +103,16 @@ pub fn Point(comptime T: type) type {
                 .y = self.y + t * (other.y - self.y),
             };
         }
+
+        pub fn rotate(self: @This(), theta: f32) @This() {
+            const cos_theta = std.math.cos(theta);
+            const sin_theta = std.math.sin(theta);
+
+            return @This() {
+                .x = (self.x * cos_theta) - (self.y * sin_theta),
+                .y = (self.y * cos_theta) + (self.x * sin_theta),
+            };
+        }
     };
 }
 

@@ -149,6 +149,13 @@ pub const CurveFragment = struct {
         vertical_sign: i2 = 0,
         horizontal_mask: u16 = 0,
         horizontal_sign: i2 = 0,
+
+        pub fn debugPrint(self: Masks) void {
+            std.debug.print("-----------\n", .{});
+            std.debug.print("V: {b:0>16}\n", .{self.vertical_mask});
+            std.debug.print("H: {b:0>16}\n", .{self.horizontal_mask});
+            std.debug.print("-----------\n", .{});
+        }
     };
 
     pixel: PointI32,
@@ -214,13 +221,14 @@ pub const CurveFragment = struct {
             }
         }
 
-        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine(), main_ray_winding == 0);
         if (self.intersections[0].point.y > self.intersections[1].point.y) {
             // crossing top to bottom
             masks.horizontal_sign = 1;
         } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
             masks.horizontal_sign = -1;
         }
+        const winding = main_ray_winding + masks.horizontal_sign + masks.vertical_sign;
+        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine(), winding != 0);
 
         return masks;
     }
@@ -480,6 +488,12 @@ pub const Raster = struct {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {
                     const masks = curve_fragment.calculateMasks(self.half_planes, boundary_fragment.main_ray_winding);
+
+                    if (curve_fragment.pixel.x == 126 and curve_fragment.pixel.y == 64) {
+                        std.debug.print("HEY\n", .{});
+                        masks.debugPrint();
+                    }
+
                     const vertical_sign: i8 = @intCast(masks.vertical_sign);
                     const horizontal_sign: i8 = @intCast(masks.horizontal_sign);
                     for (0..16) |index| {
