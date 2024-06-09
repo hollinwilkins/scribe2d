@@ -497,11 +497,10 @@ pub const Raster = struct {
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 136 and curve_fragment.pixel.y == 4) {
+                    if (curve_fragment.pixel.x == 0 and curve_fragment.pixel.y == 0) {
                         std.debug.print("HEY\n", .{});
-                        std.debug.print("MainRay({}), PreviousMainRay({})\n", .{
+                        std.debug.print("MainRay({})\n", .{
                             boundary_fragment.main_ray_winding,
-                            previous_boundary_fragment.?.main_ray_winding,
                         });
                     }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
@@ -512,7 +511,7 @@ pub const Raster = struct {
                         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
                         const vertical_winding: i8 = vertical_sign * @as(i8, @intFromBool(masks.vertical_mask & bit_index != 0));
                         const horizontal_winding: i8 = horizontal_sign * @as(i8, @intFromBool(masks.horizontal_mask & bit_index != 0));
-                        boundary_fragment.winding[index] = boundary_fragment.main_ray_winding + vertical_winding + horizontal_winding;
+                        boundary_fragment.winding[index] += boundary_fragment.main_ray_winding + vertical_winding + horizontal_winding;
                     }
                 }
 
