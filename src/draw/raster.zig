@@ -236,6 +236,10 @@ pub const BoundaryFragment = struct {
     winding: [16]i8 = [_]i8{0} ** 16,
     stencil_mask: u16 = 0,
     curve_fragment_offsets: RangeU32 = RangeU32{},
+
+    pub fn getIntensity(self: BoundaryFragment) f32 {
+        return @as(f32, @floatFromInt(@popCount(self.stencil_mask))) / 16.0;
+    }
 };
 
 pub const Span = struct {
@@ -496,7 +500,7 @@ pub const Raster = struct {
                         (try raster_data.addSpan()).* = Span {
                             .y = boundary_fragment.pixel.y,
                             .x_range = RangeI32 {
-                                .start = pbf.pixel.x,
+                                .start = pbf.pixel.x + 1,
                                 .end = boundary_fragment.pixel.x,
                             },
                             .winding = pbf.main_ray_winding,

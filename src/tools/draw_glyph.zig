@@ -1,5 +1,6 @@
 const std = @import("std");
 const scriobh = @import("scriobh");
+const zstbi = @import("zstbi");
 const text = scriobh.text;
 const draw = scriobh.draw;
 const core = scriobh.core;
@@ -139,7 +140,7 @@ pub fn main() !void {
                 .x = @intCast(pixel.x),
                 .y = @intCast(pixel.y),
             }).* = draw.Monotone{
-                .a = 1.0,
+                .a = fragment.getIntensity(),
             };
         }
     }
@@ -172,4 +173,35 @@ pub fn main() !void {
     }
 
     std.debug.print("==============\n", .{});
+
+    zstbi.init(allocator);
+    defer zstbi.deinit();
+
+    var image = try zstbi.Image.createEmpty(
+        dimensions.width,
+        dimensions.height,
+        3,
+        .{},
+    );
+    defer image.deinit();
+
+    for (image.data) |*v| {
+        v.* = std.math.maxInt(u8);
+    }
+
+    for (0..boundary_texture_view.getDimensions().height) |y| {
+        for (boundary_texture_view.getRow(@intCast(y)).?, 0..) |pixel, x| {
+            const image_pixel = (y * image.bytes_per_row) + (x * image.num_components * image.bytes_per_component);
+            const value = std.math.maxInt(u8) - std.math.clamp(
+                @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
+                0,
+                std.math.maxInt(u8),
+            );
+            image.data[image_pixel] = value;
+            image.data[image_pixel + 1] = value;
+            image.data[image_pixel + 2] = value;
+        }
+    }
+
+    try image.writeToFile("/tmp/output.png", .png);
 }
