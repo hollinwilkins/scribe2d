@@ -489,7 +489,7 @@ pub const Raster = struct {
                 for (curve_fragments) |curve_fragment| {
                     const masks = curve_fragment.calculateMasks(self.half_planes, boundary_fragment.main_ray_winding);
 
-                    if (curve_fragment.pixel.x == 126 and curve_fragment.pixel.y == 64) {
+                    if (curve_fragment.pixel.x == 82 and curve_fragment.pixel.y == 124) {
                         std.debug.print("HEY\n", .{});
                         masks.debugPrint();
                     }
