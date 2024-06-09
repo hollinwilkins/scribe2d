@@ -141,23 +141,19 @@ pub fn HalfPlanes(comptime T: type) type {
             return self.vertical_masks[index];
         }
 
-        pub fn getHorizontalMask(self: @This(), line: Line, left: bool) u16 {
+        pub fn getHorizontalMask(self: @This(), line: Line) u16 {
             const top_y = @min(line.start.y, line.end.y);
             const bottom_y = @max(line.start.y, line.end.y);
 
             const top_mask = self.getVerticalMaskRaw(top_y);
             const bottom_mask = ~self.getVerticalMaskRaw(bottom_y);
-            var line_mask = self.getHalfPlaneMask(line.start, line.end);
+            const line_mask = self.getHalfPlaneMask(line.start, line.end);
 
             std.debug.print("----------------\n", .{});
             std.debug.print("T: {b:0>16}\n", .{top_mask});
             std.debug.print("B: {b:0>16}\n", .{bottom_mask});
             std.debug.print("L: {b:0>16}\n", .{line_mask});
             std.debug.print("----------------\n", .{});
-
-            if (left) {
-                line_mask = ~line_mask;
-            }
 
             return top_mask & bottom_mask & line_mask;
         }

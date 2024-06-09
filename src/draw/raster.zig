@@ -201,39 +201,43 @@ pub const CurveFragment = struct {
         };
     }
 
-    pub fn calculateMasks(self: CurveFragment, half_planes: HalfPlanesU16, main_ray_winding: i18) Masks {
+    pub fn calculateMasks(self: CurveFragment, half_planes: HalfPlanesU16) Masks {
         var masks = Masks{};
         if (self.intersections[0].point.x == 0.0 and self.intersections[1].point.x != 0.0) {
             masks.vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
 
             if (self.intersections[0].point.y < 0.5) {
-                masks.vertical_sign = -1;
-            } else {
                 masks.vertical_sign = 1;
+            } else {
+                masks.vertical_sign = -1;
             }
         } else if (self.intersections[1].point.x == 0.0 and self.intersections[0].point.x != 0.0) {
             masks.vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
 
             if (self.intersections[1].point.y < 0.5) {
-                masks.vertical_sign = 1;
-            } else {
                 masks.vertical_sign = -1;
+            } else {
+                masks.vertical_sign = 1;
             }
         }
 
         if (self.intersections[0].point.y > self.intersections[1].point.y) {
             // crossing top to bottom
-            masks.horizontal_sign = 1;
-        } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
             masks.horizontal_sign = -1;
+        } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+            masks.horizontal_sign = 1;
         }
-        const winding = main_ray_winding + masks.horizontal_sign + masks.vertical_sign;
-        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine(), winding == 0);
-        std.debug.print("Winding({}), MainRay({}), VerticalSign({}), HorizontalSign({}), HMask({b:0>16})\n", .{
-            winding,
-            main_ray_winding,
+
+        if (self.intersections[0].t > self.intersections[1].t) {
+            masks.horizontal_sign *= -1;
+            masks.vertical_sign *= -1;
+        }
+
+        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
+        std.debug.print("VerticalSign({}), HorizontalSign({}), VMask({b:0>16}), HMask({b:0>16})\n", .{
             masks.vertical_sign,
             masks.horizontal_sign,
+            masks.vertical_mask,
             masks.horizontal_mask,
         });
 
@@ -474,9 +478,9 @@ pub const Raster = struct {
                     var winding: f32 = 0.0;
 
                     if (curve_fragment.intersections[0].point.y > curve_fragment.intersections[1].point.y) {
-                        winding = 1.0;
-                    } else if (curve_fragment.intersections[0].point.y < curve_fragment.intersections[1].point.y) {
                         winding = -1.0;
+                    } else if (curve_fragment.intersections[0].point.y < curve_fragment.intersections[1].point.y) {
+                        winding = 1.0;
                     }
 
                     if (curve_fragment.intersections[0].point.y == 0.5 or curve_fragment.intersections[1].point.y == 0.5) {
@@ -494,14 +498,18 @@ pub const Raster = struct {
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 108 and curve_fragment.pixel.y == 96) {
+                    if (curve_fragment.pixel.x == 136 and curve_fragment.pixel.y == 4) {
                         std.debug.print("HEY\n", .{});
+                        std.debug.print("MainRay({}), PreviousMainRay({})\n", .{
+                            boundary_fragment.main_ray_winding,
+                            previous_boundary_fragment.?.main_ray_winding,
+                        });
                     }
+                    const masks = curve_fragment.calculateMasks(self.half_planes);
                     var previous_main_ray_winding: i8 = 0;
                     if (previous_boundary_fragment) |pbf| {
                         previous_main_ray_winding = pbf.main_ray_winding;
                     }
-                    const masks = curve_fragment.calculateMasks(self.half_planes, previous_main_ray_winding);
 
                     const vertical_sign: i8 = @intCast(masks.vertical_sign);
                     const horizontal_sign: i8 = @intCast(masks.horizontal_sign);
@@ -509,7 +517,7 @@ pub const Raster = struct {
                         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
                         const vertical_winding: i8 = vertical_sign * @as(i8, @intFromBool(masks.vertical_mask & bit_index != 0));
                         const horizontal_winding: i8 = horizontal_sign * @as(i8, @intFromBool(masks.horizontal_mask & bit_index != 0));
-                        boundary_fragment.winding[index] = boundary_fragment.main_ray_winding + vertical_winding + horizontal_winding;
+                        boundary_fragment.winding[index] = previous_main_ray_winding + vertical_winding + horizontal_winding;
                     }
                 }
 

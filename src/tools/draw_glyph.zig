@@ -200,12 +200,12 @@ pub fn main() !void {
             //     0,
             //     std.math.maxInt(u8),
             // );
-            // const value = std.math.maxInt(u8) - std.math.clamp(
-            //     @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
-            //     0,
-            //     std.math.maxInt(u8),
-            // );
-            const value: u8 = if (pixel.a > 0.0) 0 else std.math.maxInt(u8);
+            const value = std.math.maxInt(u8) - std.math.clamp(
+                @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
+                0,
+                std.math.maxInt(u8),
+            );
+            // const value: u8 = if (pixel.a > 0.0) 0 else std.math.maxInt(u8);
             image.data[image_pixel] = value;
             image.data[image_pixel + 1] = value;
             image.data[image_pixel + 2] = value;
