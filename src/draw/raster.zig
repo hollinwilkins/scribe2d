@@ -146,9 +146,9 @@ pub const GridIntersection = struct {
 pub const CurveFragment = struct {
     pub const Masks = struct {
         vertical_mask: u16 = 0,
-        vertical_sign: i8 = 0,
+        vertical_sign: i2 = 0,
         horizontal_mask: u16 = 0,
-        horizontal_sign: i8 = 0,
+        horizontal_sign: i2 = 0,
 
         pub fn debugPrint(self: Masks) void {
             std.debug.print("-----------\n", .{});
