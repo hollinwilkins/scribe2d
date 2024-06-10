@@ -120,7 +120,7 @@ pub fn HalfPlanes(comptime T: type) type {
 
         pub fn getVerticalMask(self: @This(), y: f32) u16 {
             if (y == 0.5) {
-                return std.math.maxInt(u16);
+                return 0;
             }
 
             const mask = self.getVerticalMaskRaw(y);

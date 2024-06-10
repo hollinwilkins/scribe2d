@@ -155,6 +155,14 @@ pub const GridIntersection = struct {
 };
 
 pub const CurveFragment = struct {
+    pub const MAIN_RAY: Line = Line.create(PointF32{
+        .x = 0.0,
+        .y = 0.5,
+    }, PointF32{
+        .x = 1.0,
+        .y = 0.5,
+    });
+
     pub const Masks = struct {
         vertical_mask: u16 = 0,
         vertical_sign: i2 = 0,
@@ -257,6 +265,28 @@ pub const CurveFragment = struct {
 
     pub fn getLine(self: CurveFragment) Line {
         return Line.create(self.intersections[0].point, self.intersections[1].point);
+    }
+
+    pub fn calculateMainRayWinding(self: CurveFragment) f32 {
+        if (self.getLine().intersectHorizontalLine(MAIN_RAY) != null) {
+            // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
+
+            var winding: f32 = 0.0;
+
+            if (self.intersections[0].point.y > self.intersections[1].point.y) {
+                winding = -1.0;
+            } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+                winding = 1.0;
+            }
+
+            if (self.intersections[0].point.y == 0.5 or self.intersections[1].point.y == 0.5) {
+                winding *= 0.5;
+            }
+
+            return winding;
+        }
+
+        return 0.0;
     }
 };
 
@@ -463,6 +493,10 @@ pub const Raster = struct {
             return false;
         } else if (left.pixel.x < right.pixel.x) {
             return true;
+        } else if (left.pixel.x > right.pixel.x) {
+            return false;
+        } else if (@min(left.intersections[0].t, left.intersections[1].t) < @min(right.intersections[0].t, right.intersections[1].t)) {
+            return true;
         } else {
             return false;
         }
@@ -476,13 +510,6 @@ pub const Raster = struct {
                 .pixel = first_curve_fragment.pixel,
             };
             var curve_fragment_offsets = RangeU32{};
-            const main_ray = Line.create(PointF32{
-                .x = 0.0,
-                .y = 0.5,
-            }, PointF32{
-                .x = 1.0,
-                .y = 0.5,
-            });
             var main_ray_winding: f32 = 0.0;
 
             const curve_fragments = raster_data.getCurveFragments();
@@ -490,6 +517,7 @@ pub const Raster = struct {
                 const y_changing = curve_fragment.pixel.y != boundary_fragment.pixel.y;
                 if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
                     std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
+
                     curve_fragment_offsets.end = @intCast(curve_fragment_index);
                     boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
                     boundary_fragment = try raster_data.addBoundaryFragment();
@@ -504,22 +532,19 @@ pub const Raster = struct {
                     }
                 }
 
-                if (curve_fragment.getLine().intersectHorizontalLine(main_ray) != null) {
-                    // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
-
-                    var winding: f32 = 0.0;
-
-                    if (curve_fragment.intersections[0].point.y > curve_fragment.intersections[1].point.y) {
-                        winding = -1.0;
-                    } else if (curve_fragment.intersections[0].point.y < curve_fragment.intersections[1].point.y) {
-                        winding = 1.0;
+                main_ray_winding += curve_fragment.calculateMainRayWinding();
+                if (curve_fragment.intersections[0].point.y == 0.5) {
+                    if (curve_fragment.intersections[0].point.x == 0.0) {
+                        main_ray_winding += curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
+                    } else if (curve_fragment.intersections[0].point.x == 1.0) {
+                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
                     }
-
-                    if (curve_fragment.intersections[0].point.y == 0.5 or curve_fragment.intersections[1].point.y == 0.5) {
-                        winding *= 0.5;
+                } else if (curve_fragment.intersections[1].point.y == 0.5) {
+                    if (curve_fragment.intersections[1].point.x == 0.0) {
+                        main_ray_winding += curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
+                    } else if (curve_fragment.intersections[1].point.x == 1.0) {
+                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
                     }
-
-                    main_ray_winding += winding;
                 }
             }
         }
@@ -535,7 +560,7 @@ pub const Raster = struct {
                 }
 
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 49 and curve_fragment.pixel.y == 100) {
+                    if (curve_fragment.pixel.x == 130 and curve_fragment.pixel.y == 154) {
                         std.debug.print("HEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
                     }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
