@@ -227,26 +227,26 @@ pub const CurveFragment = struct {
 
             if (self.intersections[0].point.y < 0.5) {
                 masks.vertical_mask = ~masks.vertical_mask;
-                masks.vertical_sign = 1;
-            } else {
                 masks.vertical_sign = -1;
+            } else {
+                masks.vertical_sign = 1;
             }
         } else if (self.intersections[1].point.x == 0.0 and self.intersections[0].point.x != 0.0) {
             masks.vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
 
             if (self.intersections[1].point.y < 0.5) {
                 masks.vertical_mask = ~masks.vertical_mask;
-                masks.vertical_sign = -1;
-            } else {
                 masks.vertical_sign = 1;
+            } else {
+                masks.vertical_sign = -1;
             }
         }
 
         if (self.intersections[0].point.y > self.intersections[1].point.y) {
             // crossing top to bottom
-            masks.horizontal_sign = -1;
-        } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
             masks.horizontal_sign = 1;
+        } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+            masks.horizontal_sign = -1;
         }
 
         if (self.intersections[0].t > self.intersections[1].t) {
@@ -276,9 +276,9 @@ pub const CurveFragment = struct {
             var winding: f32 = 0.0;
 
             if (self.intersections[0].point.y > self.intersections[1].point.y) {
-                winding = -1.0;
-            } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
                 winding = 1.0;
+            } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+                winding = -1.0;
             }
 
             if (self.intersections[0].point.y == 0.5 or self.intersections[1].point.y == 0.5) {
