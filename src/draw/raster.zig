@@ -126,12 +126,14 @@ pub const GridIntersection = struct {
         virtual,
     };
 
+    curve_index: u32,
     intersection: Intersection,
     pixel: PointI32,
     grid_line: GridLine,
 
-    pub fn create(intersection: Intersection, grid_line: GridLine) GridIntersection {
+    pub fn create(curve_index: u32, intersection: Intersection, grid_line: GridLine) GridIntersection {
         return GridIntersection{
+            .curve_index = curve_index,
             .intersection = intersection,
             .pixel = PointI32{
                 .x = @intFromFloat(intersection.point.x),
@@ -177,6 +179,7 @@ pub const CurveFragment = struct {
         }
     };
 
+    order: u32,
     pixel: PointI32,
     intersections: [2]Intersection,
 
@@ -214,7 +217,9 @@ pub const CurveFragment = struct {
         std.debug.assert(intersections[0].point.y <= 1.0);
         std.debug.assert(intersections[1].point.x <= 1.0);
         std.debug.assert(intersections[1].point.y <= 1.0);
+        std.debug.assert(grid_intersections[0].curve_index <= grid_intersections[1].curve_index);
         return CurveFragment{
+            .order = grid_intersections[0].curve_index,
             .pixel = pixel,
             .intersections = intersections,
         };
@@ -269,7 +274,8 @@ pub const CurveFragment = struct {
         return Line.create(self.intersections[0].point, self.intersections[1].point);
     }
 
-    pub fn calculateMainRayWinding(self: CurveFragment) f32 {
+    pub fn calculateMainRayWinding(self: CurveFragment, tail: []CurveFragment) f32 {
+        _ = tail;
         if (self.getLine().intersectHorizontalLine(MAIN_RAY) != null) {
             // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
 
@@ -283,6 +289,11 @@ pub const CurveFragment = struct {
 
             if (self.intersections[0].point.y == 0.5 or self.intersections[1].point.y == 0.5) {
                 winding *= 0.5;
+
+                // need to scan tail for next non-0.5 Y intersection
+                // for (tail) |curve_fragment| {
+
+                // }
             }
 
             return winding;
@@ -350,7 +361,8 @@ pub const Raster = struct {
         };
 
         for (raster_data.getSubpaths()) |subpath| {
-            for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve| {
+            for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index_offset| {
+                const curve_index: u32 = @intCast(subpath.curve_offsets.start + curve_index_offset);
                 var grid_intersection_offsets = RangeU32{
                     .start = @intCast(raster_data.getGridIntersections().len),
                     .end = @intCast(raster_data.getGridIntersections().len),
@@ -360,6 +372,7 @@ pub const Raster = struct {
 
                 // first virtual intersection
                 (try raster_data.addGridIntersection()).* = GridIntersection.create(
+                    curve_index,
                     Intersection{
                         .t = 0.0,
                         .point = scaled_curve.applyT(0.0),
@@ -373,6 +386,7 @@ pub const Raster = struct {
                 for (0..grid_x_size + 1) |x_offset| {
                     const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                     try scanX(
+                        curve_index,
                         raster_data,
                         @as(f32, @floatFromInt(grid_x)),
                         scaled_curve,
@@ -386,6 +400,7 @@ pub const Raster = struct {
                 for (0..grid_y_size + 1) |y_offset| {
                     const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                     try scanY(
+                        curve_index,
                         raster_data,
                         @as(f32, @floatFromInt(grid_y)),
                         scaled_curve,
@@ -396,14 +411,18 @@ pub const Raster = struct {
                 // insert monotonic cuts, which ensure curves are monotonic within a pixel
                 for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
                     const ao = try raster_data.addGridIntersection();
-                    ao.* = GridIntersection.create(intersection, .virtual);
+                    ao.* = GridIntersection.create(curve_index, intersection, .virtual);
                 }
 
                 // last virtual intersection
-                (try raster_data.addGridIntersection()).* = GridIntersection.create(Intersection{
-                    .t = 1.0,
-                    .point = scaled_curve.applyT(1.0),
-                }, .virtual);
+                (try raster_data.addGridIntersection()).* = GridIntersection.create(
+                    curve_index,
+                    Intersection{
+                        .t = 1.0,
+                        .point = scaled_curve.applyT(1.0),
+                    },
+                    .virtual,
+                );
 
                 grid_intersection_offsets.end = @intCast(raster_data.getGridIntersections().len);
 
@@ -497,7 +516,7 @@ pub const Raster = struct {
             return true;
         } else if (left.pixel.x > right.pixel.x) {
             return false;
-        } else if (@min(left.intersections[0].t, left.intersections[1].t) < @min(right.intersections[0].t, right.intersections[1].t)) {
+        } else if (left.order < right.order) {
             return true;
         } else {
             return false;
@@ -534,19 +553,20 @@ pub const Raster = struct {
                     }
                 }
 
-                const curve_winding = curve_fragment.calculateMainRayWinding();
+                const tail = curve_fragments[curve_fragment_index..];
+                const curve_winding = curve_fragment.calculateMainRayWinding(tail);
                 main_ray_winding += curve_winding;
                 if (curve_fragment.intersections[0].point.y == 0.5) {
                     if (curve_fragment.intersections[0].point.x == 0.0) {
-                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
+                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding(tail);
                     } else if (curve_fragment.intersections[0].point.x == 1.0) {
-                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
+                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding(tail);
                     }
                 } else if (curve_fragment.intersections[1].point.y == 0.5) {
                     if (curve_fragment.intersections[1].point.x == 0.0) {
-                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
+                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding(tail);
                     } else if (curve_fragment.intersections[1].point.x == 1.0) {
-                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
+                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding(tail);
                     }
                 }
             }
@@ -604,6 +624,7 @@ pub const Raster = struct {
     }
 
     fn scanX(
+        curve_index: u32,
         raster_data: *RasterData,
         grid_x: f32,
         curve: Curve,
@@ -624,11 +645,12 @@ pub const Raster = struct {
 
         for (scaled_intersections) |intersection| {
             const ao = try raster_data.addGridIntersection();
-            ao.* = GridIntersection.create(intersection, .x);
+            ao.* = GridIntersection.create(curve_index, intersection, .x);
         }
     }
 
     fn scanY(
+        curve_index: u32,
         raster_data: *RasterData,
         grid_y: f32,
         curve: Curve,
@@ -649,7 +671,7 @@ pub const Raster = struct {
 
         for (scaled_intersections) |intersection| {
             const ao = try raster_data.addGridIntersection();
-            ao.* = GridIntersection.create(intersection, .y);
+            ao.* = GridIntersection.create(curve_index, intersection, .y);
         }
     }
 };
