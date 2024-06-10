@@ -532,16 +532,17 @@ pub const Raster = struct {
                     }
                 }
 
-                main_ray_winding += curve_fragment.calculateMainRayWinding();
+                const curve_winding = curve_fragment.calculateMainRayWinding();
+                main_ray_winding += curve_winding;
                 if (curve_fragment.intersections[0].point.y == 0.5) {
                     if (curve_fragment.intersections[0].point.x == 0.0) {
-                        main_ray_winding += curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
+                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
                     } else if (curve_fragment.intersections[0].point.x == 1.0) {
                         main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
                     }
                 } else if (curve_fragment.intersections[1].point.y == 0.5) {
                     if (curve_fragment.intersections[1].point.x == 0.0) {
-                        main_ray_winding += curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
+                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
                     } else if (curve_fragment.intersections[1].point.x == 1.0) {
                         main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
                     }
@@ -560,8 +561,8 @@ pub const Raster = struct {
                 }
 
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 130 and curve_fragment.pixel.y == 154) {
-                        std.debug.print("HEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
+                    if (curve_fragment.pixel.x == 70 and curve_fragment.pixel.y == 154) {
+                        std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
                     }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
                     for (0..16) |index| {
