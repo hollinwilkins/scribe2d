@@ -226,6 +226,7 @@ pub const CurveFragment = struct {
             masks.vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
 
             if (self.intersections[0].point.y < 0.5) {
+                masks.vertical_mask = ~masks.vertical_mask;
                 masks.vertical_sign = 1;
             } else {
                 masks.vertical_sign = -1;
@@ -234,6 +235,7 @@ pub const CurveFragment = struct {
             masks.vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
 
             if (self.intersections[1].point.y < 0.5) {
+                masks.vertical_mask = ~masks.vertical_mask;
                 masks.vertical_sign = -1;
             } else {
                 masks.vertical_sign = 1;

@@ -119,19 +119,6 @@ pub fn HalfPlanes(comptime T: type) type {
         }
 
         pub fn getVerticalMask(self: @This(), y: f32) u16 {
-            if (y == 0.5) {
-                return 0;
-            }
-
-            const mask = self.getVerticalMaskRaw(y);
-            if (y < 0.5) {
-                return ~mask;
-            } else {
-                return mask;
-            }
-        }
-
-        pub fn getVerticalMaskRaw(self: @This(), y: f32) u16 {
             const index_f32: f32 = @round(y * @as(f32, @floatFromInt(self.vertical_masks.len)));
             const index = @min(
                 self.vertical_masks.len - 1,
@@ -145,8 +132,8 @@ pub fn HalfPlanes(comptime T: type) type {
             const top_y = @min(line.start.y, line.end.y);
             const bottom_y = @max(line.start.y, line.end.y);
 
-            const top_mask = self.getVerticalMaskRaw(top_y);
-            const bottom_mask = ~self.getVerticalMaskRaw(bottom_y);
+            const top_mask = self.getVerticalMask(top_y);
+            const bottom_mask = ~self.getVerticalMask(bottom_y);
             const line_mask = self.getHalfPlaneMask(line.start, line.end);
 
             // std.debug.print("----------------\n", .{});
