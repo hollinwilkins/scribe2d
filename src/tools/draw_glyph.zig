@@ -31,8 +31,8 @@ pub fn main() !void {
         .y = 0.0,
     });
     try pen.lineTo(core.PointF32{
-        .x = 0,
-        .y = 1.0,
+        .x = 1.00,
+        .y = 0.0,
     });
     try pen.quadTo(core.PointF32{
         .x = 0.0,

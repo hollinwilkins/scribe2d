@@ -484,7 +484,7 @@ pub const Raster = struct {
             var main_ray_winding: f32 = 0.0;
 
             const curve_fragments = raster_data.getCurveFragments();
-            for (curve_fragments, 0..) |curve_fragment, curve_fragment_index| {
+            for (curve_fragments, 0..) |*curve_fragment, curve_fragment_index| {
                 const y_changing = curve_fragment.pixel.y != boundary_fragment.pixel.y;
                 if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
                     std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
