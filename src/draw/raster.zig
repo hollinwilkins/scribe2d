@@ -274,8 +274,7 @@ pub const CurveFragment = struct {
         return Line.create(self.intersections[0].point, self.intersections[1].point);
     }
 
-    pub fn calculateMainRayWinding(self: CurveFragment, tail: []CurveFragment) f32 {
-        _ = tail;
+    pub fn calculateMainRayWinding(self: CurveFragment) f32 {
         if (self.getLine().intersectHorizontalLine(MAIN_RAY) != null) {
             // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
 
@@ -289,11 +288,6 @@ pub const CurveFragment = struct {
 
             if (self.intersections[0].point.y == 0.5 or self.intersections[1].point.y == 0.5) {
                 winding *= 0.5;
-
-                // need to scan tail for next non-0.5 Y intersection
-                // for (tail) |curve_fragment| {
-
-                // }
             }
 
             return winding;
@@ -553,20 +547,19 @@ pub const Raster = struct {
                     }
                 }
 
-                const tail = curve_fragments[curve_fragment_index..];
-                const curve_winding = curve_fragment.calculateMainRayWinding(tail);
+                const curve_winding = curve_fragment.calculateMainRayWinding();
                 main_ray_winding += curve_winding;
                 if (curve_fragment.intersections[0].point.y == 0.5) {
                     if (curve_fragment.intersections[0].point.x == 0.0) {
-                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding(tail);
+                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
                     } else if (curve_fragment.intersections[0].point.x == 1.0) {
-                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding(tail);
+                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
                     }
                 } else if (curve_fragment.intersections[1].point.y == 0.5) {
                     if (curve_fragment.intersections[1].point.x == 0.0) {
-                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding(tail);
+                        main_ray_winding -= curve_fragments[curve_fragment_index - 1].calculateMainRayWinding();
                     } else if (curve_fragment.intersections[1].point.x == 1.0) {
-                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding(tail);
+                        main_ray_winding += curve_fragments[curve_fragment_index + 1].calculateMainRayWinding();
                     }
                 }
             }
