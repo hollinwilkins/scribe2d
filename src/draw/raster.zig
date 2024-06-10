@@ -258,9 +258,9 @@ pub const CurveFragment = struct {
             } else {
                 // need two masks and two signs...
                 masks.vertical_mask0 = vertical_mask; // > 0.5
-                masks.vertical_sign0 = 0.5;
+                masks.vertical_sign0 = -0.5;
                 masks.vertical_mask1 = ~vertical_mask; // < 0.5
-                masks.vertical_sign1 = -0.5;
+                masks.vertical_sign1 = 0.5;
             }
         }
 
