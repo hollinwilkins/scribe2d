@@ -584,7 +584,7 @@ pub const Raster = struct {
                 }
 
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 90 and curve_fragment.pixel.y == 150) {
+                    if (curve_fragment.pixel.x == 193 and curve_fragment.pixel.y == 167) {
                         std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
                     }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
@@ -594,8 +594,12 @@ pub const Raster = struct {
                         const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
                         const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
                         boundary_fragment.winding[index] += vertical_winding0 + vertical_winding1 + horizontal_winding;
-                        boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
                     }
+                }
+
+                for (0..16) |index| {
+                    const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+                    boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
                 }
 
                 std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{

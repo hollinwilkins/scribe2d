@@ -10,10 +10,8 @@ pub fn main() !void {
 
     _ = args.skip();
     const font_file = args.next() orelse @panic("need to provide a font file");
-    _ = font_file;
     const glyph_id_str = args.next() orelse @panic("need to provide a glyph_id");
     const glyph_id = try std.fmt.parseInt(u16, glyph_id_str, 10);
-    _ = glyph_id;
     const size_str = args.next() orelse "16";
     const size = try std.fmt.parseInt(u32, size_str, 10);
 
@@ -21,27 +19,27 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // var face = try text.Face.initFile(allocator, font_file);
-    // defer face.deinit();
+    var face = try text.Face.initFile(allocator, font_file);
+    defer face.deinit();
 
     var pen = try draw.Pen.init(allocator);
     defer pen.deinit();
-    try pen.moveTo(core.PointF32{
-        .x = 0.0,
-        .y = 0.0,
-    });
-    try pen.lineTo(core.PointF32{
-        .x = 1.0,
-        .y = 0.0,
-    });
-    try pen.quadTo(core.PointF32{
-        .x = 0.0,
-        .y = 0.0,
-    }, core.PointF32{
-        .x = 0.5,
-        .y = 0.5,
-    });
-    // _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
+    // try pen.moveTo(core.PointF32{
+    //     .x = 0.0,
+    //     .y = 0.0,
+    // });
+    // try pen.lineTo(core.PointF32{
+    //     .x = 1.0,
+    //     .y = 0.0,
+    // });
+    // try pen.quadTo(core.PointF32{
+    //     .x = 0.0,
+    //     .y = 0.0,
+    // }, core.PointF32{
+    //     .x = 0.5,
+    //     .y = 0.5,
+    // });
+    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
     const path = try pen.createPathAlloc(allocator);
     defer path.deinit();
 
