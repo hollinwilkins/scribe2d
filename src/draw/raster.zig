@@ -120,14 +120,25 @@ pub const RasterData = struct {
 };
 
 pub const GridIntersection = struct {
+    pub const GridLine = enum {
+        x,
+        y,
+        virtual,
+    };
+
     intersection: Intersection,
     pixel: PointI32,
+    grid_line: GridLine,
 
-    pub fn create(intersection: Intersection) GridIntersection {
-        return GridIntersection{ .intersection = intersection, .pixel = PointI32{
-            .x = @intFromFloat(intersection.point.x),
-            .y = @intFromFloat(intersection.point.y),
-        } };
+    pub fn create(intersection: Intersection, grid_line: GridLine) GridIntersection {
+        return GridIntersection{
+            .intersection = intersection,
+            .pixel = PointI32{
+                .x = @intFromFloat(intersection.point.x),
+                .y = @intFromFloat(intersection.point.y),
+            },
+            .grid_line = grid_line,
+        };
     }
 
     pub fn getT(self: GridIntersection) f32 {
@@ -176,8 +187,8 @@ pub const CurveFragment = struct {
                 .t = grid_intersections[0].getT(),
                 // float component of the intersection points, range [0.0, 1.0]
                 .point = PointF32{
-                    .x = @abs(grid_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
-                    .y = @abs(grid_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
+                    .x = std.math.clamp(@abs(grid_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
                 },
             },
             Intersection{
@@ -185,8 +196,8 @@ pub const CurveFragment = struct {
                 .t = grid_intersections[1].getT(),
                 // float component of the intersection points, range [0.0, 1.0]
                 .point = PointF32{
-                    .x = @abs(grid_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))),
-                    .y = @abs(grid_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))),
+                    .x = std.math.clamp(@abs(grid_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
                 },
             },
         };
@@ -234,12 +245,12 @@ pub const CurveFragment = struct {
         }
 
         masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
-        // std.debug.print("VerticalSign({}), HorizontalSign({}), VMask({b:0>16}), HMask({b:0>16})\n", .{
-        //     masks.vertical_sign,
-        //     masks.horizontal_sign,
-        //     masks.vertical_mask,
-        //     masks.horizontal_mask,
-        // });
+        std.debug.print("VerticalSign({}), HorizontalSign({}), VMask({b:0>16}), HMask({b:0>16})\n", .{
+            masks.vertical_sign,
+            masks.horizontal_sign,
+            masks.vertical_mask,
+            masks.horizontal_mask,
+        });
 
         return masks;
     }
@@ -321,6 +332,7 @@ pub const Raster = struct {
                         .t = 0.0,
                         .point = scaled_curve.applyT(0.0),
                     },
+                    .virtual,
                 );
 
                 // scan x lines within bounds
@@ -352,14 +364,14 @@ pub const Raster = struct {
                 // insert monotonic cuts, which ensure curves are monotonic within a pixel
                 for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
                     const ao = try raster_data.addGridIntersection();
-                    ao.* = GridIntersection.create(intersection);
+                    ao.* = GridIntersection.create(intersection, .virtual);
                 }
 
                 // last virtual intersection
                 (try raster_data.addGridIntersection()).* = GridIntersection.create(Intersection{
                     .t = 1.0,
                     .point = scaled_curve.applyT(1.0),
-                });
+                }, .virtual);
 
                 grid_intersection_offsets.end = @intCast(raster_data.getGridIntersections().len);
 
@@ -398,6 +410,24 @@ pub const Raster = struct {
 
                 var previous_grid_intersection: *GridIntersection = &grid_intersections[0];
                 for (grid_intersections) |*grid_intersection| {
+                    if (previous_grid_intersection.getT() == grid_intersection.getT()) {
+                        if (previous_grid_intersection.grid_line == .x) {
+                            grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
+                        } else if (previous_grid_intersection.grid_line == .y) {
+                            grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
+                        }
+
+                        if (grid_intersection.grid_line == .x) {
+                            previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
+                        } else if (grid_intersection.grid_line == .y) {
+                            previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
+                        } else if (grid_intersection.grid_line == .virtual) {
+                            std.mem.swap(GridIntersection, grid_intersection, previous_grid_intersection);
+                        }
+
+                        continue;
+                    }
+
                     if (std.meta.eql(previous_grid_intersection.getPoint(), grid_intersection.getPoint())) {
                         // skip if exactly the same point
                         previous_grid_intersection = grid_intersection;
@@ -456,7 +486,7 @@ pub const Raster = struct {
             const curve_fragments = raster_data.getCurveFragments();
             for (curve_fragments, 0..) |curve_fragment, curve_fragment_index| {
                 const y_changing = curve_fragment.pixel.y != boundary_fragment.pixel.y;
-                if (curve_fragment.pixel.x != boundary_fragment.pixel.x) {
+                if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
                     std.debug.assert(std.math.modf(main_ray_winding).fpart == 0.0);
                     curve_fragment_offsets.end = @intCast(curve_fragment_index);
                     boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
@@ -500,20 +530,29 @@ pub const Raster = struct {
 
                 for (0..16) |index| {
                     boundary_fragment.winding[index] += boundary_fragment.main_ray_winding;
-                    for (curve_fragments) |curve_fragment| {
-                        const masks = curve_fragment.calculateMasks(self.half_planes);
+                }
 
+                for (curve_fragments) |curve_fragment| {
+                    if (curve_fragment.pixel.x == 49 and curve_fragment.pixel.y == 100) {
+                        std.debug.print("HEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
+                    }
+                    const masks = curve_fragment.calculateMasks(self.half_planes);
+                    for (0..16) |index| {
                         const vertical_sign: i8 = @intCast(masks.vertical_sign);
                         const horizontal_sign: i8 = @intCast(masks.horizontal_sign);
                         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
                         const vertical_winding: i8 = vertical_sign * @as(i8, @intFromBool(masks.vertical_mask & bit_index != 0));
                         const horizontal_winding: i8 = horizontal_sign * @as(i8, @intFromBool(masks.horizontal_mask & bit_index != 0));
                         boundary_fragment.winding[index] += vertical_winding + horizontal_winding;
+                        boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
                     }
-
-                    const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-                    boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
                 }
+
+                std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
+                    boundary_fragment.pixel.x,
+                    boundary_fragment.pixel.y,
+                    boundary_fragment.stencil_mask,
+                });
 
                 if (previous_boundary_fragment) |pbf| {
                     if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1) {
@@ -555,7 +594,7 @@ pub const Raster = struct {
 
         for (scaled_intersections) |intersection| {
             const ao = try raster_data.addGridIntersection();
-            ao.* = GridIntersection.create(intersection);
+            ao.* = GridIntersection.create(intersection, .x);
         }
     }
 
@@ -580,7 +619,7 @@ pub const Raster = struct {
 
         for (scaled_intersections) |intersection| {
             const ao = try raster_data.addGridIntersection();
-            ao.* = GridIntersection.create(intersection);
+            ao.* = GridIntersection.create(intersection, .y);
         }
     }
 };
