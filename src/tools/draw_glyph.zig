@@ -24,31 +24,9 @@ pub fn main() !void {
 
     var pen = try draw.Pen.init(allocator);
     defer pen.deinit();
-    // try pen.moveTo(core.PointF32{
-    //     .x = 0.0,
-    //     .y = 0.0,
-    // });
-    // try pen.lineTo(core.PointF32{
-    //     .x = 1.0,
-    //     .y = 0.0,
-    // });
-    // try pen.quadTo(core.PointF32{
-    //     .x = 0.0,
-    //     .y = 0.0,
-    // }, core.PointF32{
-    //     .x = 0.5,
-    //     .y = 0.5,
-    // });
-    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, text.TextOutliner.Debug.Instance);
-    std.debug.print("-------------------\n", .{});
     _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
-    std.debug.print("OFFSETS: {}\n", .{pen.subpaths.items[0].curve_offsets});
-    std.debug.print("OFFSETS..: {}\n", .{pen.subpaths.items[0].curve_offsets});
-    // pen.curves.items.len -= 5;
     var path = try pen.createPathAlloc(allocator);
     defer path.deinit();
-    path.unmanaged.subpaths.len -= 1;
-    std.debug.print("OFFSETS1: {}\n", .{pen.subpaths.items[0].curve_offsets});
 
     const dimensions = core.DimensionsU32{
         .width = size,
@@ -170,19 +148,19 @@ pub fn main() !void {
         }
     }
 
-    // for (raster_data.getSpans()) |span| {
-    //     for (0..span.x_range.size()) |x_offset| {
-    //         if (span.filled) {
-    //             const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
-    //             boundary_texture_view.getPixelUnsafe(core.PointU32{
-    //                 .x = @intCast(x),
-    //                 .y = @intCast(span.y),
-    //             }).* = draw.Monotone{
-    //                 .a = 1.0,
-    //             };
-    //         }
-    //     }
-    // }
+    for (raster_data.getSpans()) |span| {
+        for (0..span.x_range.size()) |x_offset| {
+            if (span.filled) {
+                const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
+                boundary_texture_view.getPixelUnsafe(core.PointU32{
+                    .x = @intCast(x),
+                    .y = @intCast(span.y),
+                }).* = draw.Monotone{
+                    .a = 1.0,
+                };
+            }
+        }
+    }
 
     for (0..boundary_texture_view.view.getHeight()) |y| {
         std.debug.print("{:0>4}: ", .{y});

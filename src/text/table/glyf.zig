@@ -532,10 +532,7 @@ pub const GlyphPoint = struct {
                     self.left -|= 1;
                 }
 
-                const add = @addWithOverflow(self.index, 1);
-                if (add[1] == 1) {
-                    self.index = add[0];
-                }
+                self.index += 1;
 
                 return true;
             } else {
