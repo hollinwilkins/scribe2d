@@ -394,6 +394,10 @@ pub const Raster = struct {
     fn pixelIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
         if (left.getT() < right.getT()) {
             return true;
+        } else if (left.getT() > right.getT()) {
+            return false;
+        } else if (left.grid_line != .virtual and right.grid_line == .virtual) {
+            return true;
         }
 
         return false;
@@ -421,8 +425,6 @@ pub const Raster = struct {
                             previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
                         } else if (grid_intersection.grid_line == .y) {
                             previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
-                        } else if (grid_intersection.grid_line == .virtual) {
-                            std.mem.swap(GridIntersection, grid_intersection, previous_grid_intersection);
                         }
 
                         continue;
