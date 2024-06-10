@@ -166,15 +166,18 @@ pub const CurveFragment = struct {
     });
 
     pub const Masks = struct {
-        vertical_mask: u16 = 0,
-        vertical_sign: f32 = 0.0,
+        vertical_mask0: u16 = 0,
+        vertical_sign0: f32 = 0.0,
+        vertical_mask1: u16 = 0,
+        vertical_sign1: f32 = 0.0,
         horizontal_mask: u16 = 0,
         horizontal_sign: f32 = 0.0,
 
         pub fn debugPrint(self: Masks) void {
             std.debug.print("-----------\n", .{});
-            std.debug.print("V: {b:0>16}\n", .{self.vertical_mask});
-            std.debug.print("H: {b:0>16}\n", .{self.horizontal_mask});
+            std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask0});
+            std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask1});
+            std.debug.print(" H: {b:0>16}\n", .{self.horizontal_mask});
             std.debug.print("-----------\n", .{});
         }
     };
@@ -228,25 +231,36 @@ pub const CurveFragment = struct {
     pub fn calculateMasks(self: CurveFragment, half_planes: HalfPlanesU16) Masks {
         var masks = Masks{};
         if (self.intersections[0].point.x == 0.0 and self.intersections[1].point.x != 0.0) {
-            masks.vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
+            const vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
 
             if (self.intersections[0].point.y < 0.5) {
-                masks.vertical_mask = ~masks.vertical_mask;
-                masks.vertical_sign = -1;
-            } else if (self.intersections[1].point.y > 0.5) {
-                masks.vertical_sign = 1;
-            } else {
-                // this is wrong, need to scan ahead for sign
-                masks.vertical_sign = 0.5;
+                masks.vertical_mask0 = ~vertical_mask;
+                masks.vertical_sign0 = -1;
+            } else if (self.intersections[0].point.y > 0.5) {
+                masks.vertical_mask0 = vertical_mask;
+                masks.vertical_sign0 = 1;
+            } else if (self.intersections[0].point.y == 0.5 and self.intersections[1].point.y == 0.5) {
+                // horizontal line, need two masks and two signs...
+                masks.vertical_mask0 = vertical_mask; // > 0.5
+                masks.vertical_sign0 = 0.5;
+                masks.vertical_mask1 = ~vertical_mask; // < 0.5
+                masks.vertical_sign1 = -0.5;
             }
         } else if (self.intersections[1].point.x == 0.0 and self.intersections[0].point.x != 0.0) {
-            masks.vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
+            const vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
 
             if (self.intersections[1].point.y < 0.5) {
-                masks.vertical_mask = ~masks.vertical_mask;
-                masks.vertical_sign = 1;
-            } else {
-                masks.vertical_sign = -1;
+                masks.vertical_mask0 = ~vertical_mask;
+                masks.vertical_sign0 = 1;
+            } else if (self.intersections[1].point.y > 0.5) {
+                masks.vertical_mask0 = vertical_mask;
+                masks.vertical_sign0 = -1;
+            } else if (self.intersections[0].point.y == 0.5 and self.intersections[1].point.y == 0.5) {
+                // horizontal line, need two masks and two signs...
+                masks.vertical_mask0 = vertical_mask; // > 0.5
+                masks.vertical_sign0 = 0.5;
+                masks.vertical_mask1 = ~vertical_mask; // < 0.5
+                masks.vertical_sign1 = -0.5;
             }
         }
 
@@ -259,14 +273,17 @@ pub const CurveFragment = struct {
 
         if (self.intersections[0].t > self.intersections[1].t) {
             masks.horizontal_sign *= -1;
-            masks.vertical_sign *= -1;
+            masks.vertical_sign0 *= -1;
+            masks.vertical_sign1 *= -1;
         }
 
         masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
-        std.debug.print("VerticalSign({}), HorizontalSign({}), VMask({b:0>16}), HMask({b:0>16})\n", .{
-            masks.vertical_sign,
+        std.debug.print("VerticalSign0({}), VerticalSign1({}), HorizontalSign({}), VMask0({b:0>16}), VMask1({b:0>16}), HMask({b:0>16})\n", .{
+            masks.vertical_sign0,
+            masks.vertical_sign1,
             masks.horizontal_sign,
-            masks.vertical_mask,
+            masks.vertical_mask0,
+            masks.vertical_mask1,
             masks.horizontal_mask,
         });
 
@@ -573,9 +590,10 @@ pub const Raster = struct {
                     const masks = curve_fragment.calculateMasks(self.half_planes);
                     for (0..16) |index| {
                         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-                        const vertical_winding = masks.vertical_sign * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask & bit_index != 0)));
+                        const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
+                        const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
                         const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
-                        boundary_fragment.winding[index] += vertical_winding + horizontal_winding;
+                        boundary_fragment.winding[index] += vertical_winding0 + vertical_winding1 + horizontal_winding;
                         boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
                     }
                 }
