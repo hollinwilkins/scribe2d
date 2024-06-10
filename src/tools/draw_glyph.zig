@@ -39,14 +39,15 @@ pub fn main() !void {
     //     .x = 0.5,
     //     .y = 0.5,
     // });
-    // _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, text.TextOutliner.Debug.Instance);
+    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, text.TextOutliner.Debug.Instance);
+    std.debug.print("-------------------\n", .{});
     _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
-    pen.subpaths.items.len -= 1;
     std.debug.print("OFFSETS: {}\n", .{pen.subpaths.items[0].curve_offsets});
     std.debug.print("OFFSETS..: {}\n", .{pen.subpaths.items[0].curve_offsets});
     // pen.curves.items.len -= 5;
-    const path = try pen.createPathAlloc(allocator);
+    var path = try pen.createPathAlloc(allocator);
     defer path.deinit();
+    path.unmanaged.subpaths.len -= 1;
     std.debug.print("OFFSETS1: {}\n", .{pen.subpaths.items[0].curve_offsets});
 
     const dimensions = core.DimensionsU32{
@@ -102,33 +103,33 @@ pub fn main() !void {
     //     }
     // }
 
-    std.debug.print("\n", .{});
-    std.debug.print("Curve Fragments:\n", .{});
-    for (raster_data.getCurveFragments()) |curve_fragment| {
-        std.debug.print("CurveFragment, Pixel({},{}), Intersection(({},{}),({},{}):({},{}))\n", .{
-            curve_fragment.pixel.x,
-            curve_fragment.pixel.y,
-            curve_fragment.intersections[0].t,
-            curve_fragment.intersections[1].t,
-            curve_fragment.intersections[0].point.x,
-            curve_fragment.intersections[0].point.y,
-            curve_fragment.intersections[1].point.x,
-            curve_fragment.intersections[1].point.y,
-        });
-    }
-    std.debug.print("-----------------------------\n", .{});
+    // std.debug.print("\n", .{});
+    // std.debug.print("Curve Fragments:\n", .{});
+    // for (raster_data.getCurveFragments()) |curve_fragment| {
+    //     std.debug.print("CurveFragment, Pixel({},{}), Intersection(({},{}),({},{}):({},{}))\n", .{
+    //         curve_fragment.pixel.x,
+    //         curve_fragment.pixel.y,
+    //         curve_fragment.intersections[0].t,
+    //         curve_fragment.intersections[1].t,
+    //         curve_fragment.intersections[0].point.x,
+    //         curve_fragment.intersections[0].point.y,
+    //         curve_fragment.intersections[1].point.x,
+    //         curve_fragment.intersections[1].point.y,
+    //     });
+    // }
+    // std.debug.print("-----------------------------\n", .{});
 
-    std.debug.print("\n", .{});
-    std.debug.print("Boundary Fragments:\n", .{});
-    for (raster_data.getBoundaryFragments(), 0..) |boundary_fragment, index| {
-        std.debug.print("BoundaryFragment({}), MainRayWinding({}), Pixel({},{}), StencilMask({b:0>16})\n", .{
-            index,
-            boundary_fragment.main_ray_winding,
-            boundary_fragment.pixel.x,
-            boundary_fragment.pixel.y,
-            boundary_fragment.stencil_mask,
-        });
-    }
+    // std.debug.print("\n", .{});
+    // std.debug.print("Boundary Fragments:\n", .{});
+    // for (raster_data.getBoundaryFragments(), 0..) |boundary_fragment, index| {
+    //     std.debug.print("BoundaryFragment({}), MainRayWinding({}), Pixel({},{}), StencilMask({b:0>16})\n", .{
+    //         index,
+    //         boundary_fragment.main_ray_winding,
+    //         boundary_fragment.pixel.x,
+    //         boundary_fragment.pixel.y,
+    //         boundary_fragment.stencil_mask,
+    //     });
+    // }
 
     // std.debug.print("\n", .{});
     // std.debug.print("Spans:\n", .{});
@@ -169,19 +170,19 @@ pub fn main() !void {
         }
     }
 
-    for (raster_data.getSpans()) |span| {
-        for (0..span.x_range.size()) |x_offset| {
-            if (span.filled) {
-                const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
-                boundary_texture_view.getPixelUnsafe(core.PointU32{
-                    .x = @intCast(x),
-                    .y = @intCast(span.y),
-                }).* = draw.Monotone{
-                    .a = 1.0,
-                };
-            }
-        }
-    }
+    // for (raster_data.getSpans()) |span| {
+    //     for (0..span.x_range.size()) |x_offset| {
+    //         if (span.filled) {
+    //             const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
+    //             boundary_texture_view.getPixelUnsafe(core.PointU32{
+    //                 .x = @intCast(x),
+    //                 .y = @intCast(span.y),
+    //             }).* = draw.Monotone{
+    //                 .a = 1.0,
+    //             };
+    //         }
+    //     }
+    // }
 
     for (0..boundary_texture_view.view.getHeight()) |y| {
         std.debug.print("{:0>4}: ", .{y});

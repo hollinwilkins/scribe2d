@@ -269,7 +269,7 @@ pub const Builder = struct {
         if (self.first_on_curve == null) {
             if (on_curve_point) {
                 self.first_on_curve = p;
-                self.moveTo(x, y);
+                self.moveTo(p.x, p.y);
             } else {
                 if (self.first_off_curve) |off_curve| {
                     const mid = off_curve.lerp(p, 0.5);
