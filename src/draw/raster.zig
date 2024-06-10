@@ -437,7 +437,11 @@ pub const Raster = struct {
     }
 
     fn pixelIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
-        if (left.getT() < right.getT()) {
+        if (left.curve_index < right.curve_index) {
+            return true;
+        } else if (left.curve_index > right.curve_index) {
+            return false;
+        } else if (left.getT() < right.getT()) {
             return true;
         } else if (left.getT() > right.getT()) {
             return false;
