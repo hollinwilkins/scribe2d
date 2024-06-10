@@ -239,8 +239,8 @@ pub const CurveFragment = struct {
             } else if (self.intersections[0].point.y > 0.5) {
                 masks.vertical_mask0 = vertical_mask;
                 masks.vertical_sign0 = 1;
-            } else if (self.intersections[0].point.y == 0.5 and self.intersections[1].point.y == 0.5) {
-                // horizontal line, need two masks and two signs...
+            } else {
+                // need two masks and two signs...
                 masks.vertical_mask0 = vertical_mask; // > 0.5
                 masks.vertical_sign0 = 0.5;
                 masks.vertical_mask1 = ~vertical_mask; // < 0.5
@@ -255,8 +255,8 @@ pub const CurveFragment = struct {
             } else if (self.intersections[1].point.y > 0.5) {
                 masks.vertical_mask0 = vertical_mask;
                 masks.vertical_sign0 = -1;
-            } else if (self.intersections[0].point.y == 0.5 and self.intersections[1].point.y == 0.5) {
-                // horizontal line, need two masks and two signs...
+            } else {
+                // need two masks and two signs...
                 masks.vertical_mask0 = vertical_mask; // > 0.5
                 masks.vertical_sign0 = 0.5;
                 masks.vertical_mask1 = ~vertical_mask; // < 0.5
@@ -584,7 +584,7 @@ pub const Raster = struct {
                 }
 
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 70 and curve_fragment.pixel.y == 154) {
+                    if (curve_fragment.pixel.x == 90 and curve_fragment.pixel.y == 150) {
                         std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
                     }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
