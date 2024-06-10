@@ -278,14 +278,14 @@ pub const CurveFragment = struct {
         }
 
         masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
-        std.debug.print("VerticalSign0({}), VerticalSign1({}), HorizontalSign({}), VMask0({b:0>16}), VMask1({b:0>16}), HMask({b:0>16})\n", .{
-            masks.vertical_sign0,
-            masks.vertical_sign1,
-            masks.horizontal_sign,
-            masks.vertical_mask0,
-            masks.vertical_mask1,
-            masks.horizontal_mask,
-        });
+        // std.debug.print("VerticalSign0({}), VerticalSign1({}), HorizontalSign({}), VMask0({b:0>16}), VMask1({b:0>16}), HMask({b:0>16})\n", .{
+        //     masks.vertical_sign0,
+        //     masks.vertical_sign1,
+        //     masks.horizontal_sign,
+        //     masks.vertical_mask0,
+        //     masks.vertical_mask1,
+        //     masks.horizontal_mask,
+        // });
 
         return masks;
     }
@@ -584,9 +584,9 @@ pub const Raster = struct {
                 }
 
                 for (curve_fragments) |curve_fragment| {
-                    if (curve_fragment.pixel.x == 193 and curve_fragment.pixel.y == 167) {
-                        std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
-                    }
+                    // if (curve_fragment.pixel.x == 193 and curve_fragment.pixel.y == 167) {
+                    //     std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
+                    // }
                     const masks = curve_fragment.calculateMasks(self.half_planes);
                     for (0..16) |index| {
                         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
@@ -602,11 +602,11 @@ pub const Raster = struct {
                     boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
                 }
 
-                std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
-                    boundary_fragment.pixel.x,
-                    boundary_fragment.pixel.y,
-                    boundary_fragment.stencil_mask,
-                });
+                // std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
+                //     boundary_fragment.pixel.x,
+                //     boundary_fragment.pixel.y,
+                //     boundary_fragment.stencil_mask,
+                // });
 
                 if (previous_boundary_fragment) |pbf| {
                     if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1) {

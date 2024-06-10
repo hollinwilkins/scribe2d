@@ -90,7 +90,6 @@ pub const Pen = struct {
     }
 
     pub fn createPathAlloc(self: *@This(), allocator: Allocator) Allocator.Error!Path {
-        try self.close();
         return Path{
             .allocator = allocator,
             .unmanaged = Path.Unmanaged.create(
@@ -113,6 +112,7 @@ pub const Pen = struct {
     }
 
     pub fn moveTo(self: *@This(), point: PointF32) !void {
+        text.TextOutliner.Debug.Instance.moveTo(point.x, point.y);
         self.start = null;
 
         if (self.curves.items.len > 0) {
@@ -123,6 +123,8 @@ pub const Pen = struct {
     }
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
+        text.TextOutliner.Debug.Instance.lineTo(point.x, point.y);
+
         if (self.start == null) {
             self.start = self.location;
             try self.nextSubpath();
@@ -145,6 +147,8 @@ pub const Pen = struct {
     }
 
     pub fn quadTo(self: *@This(), point: PointF32, control: PointF32) !void {
+        text.TextOutliner.Debug.Instance.quadTo(control.x, control.y, point.x, point.y);
+
         if (self.start == null) {
             self.start = self.location;
             try self.nextSubpath();
@@ -169,6 +173,8 @@ pub const Pen = struct {
 
     /// Closes the current subpath, if there is one
     pub fn close(self: *@This()) !void {
+        text.TextOutliner.Debug.Instance.close();
+
         if (self.start) |start| {
             if (!std.meta.eql(start, self.location)) {
                 try self.lineTo(start);

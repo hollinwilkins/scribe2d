@@ -39,9 +39,15 @@ pub fn main() !void {
     //     .x = 0.5,
     //     .y = 0.5,
     // });
+    // _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, text.TextOutliner.Debug.Instance);
     _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
+    pen.subpaths.items.len -= 1;
+    std.debug.print("OFFSETS: {}\n", .{pen.subpaths.items[0].curve_offsets});
+    std.debug.print("OFFSETS..: {}\n", .{pen.subpaths.items[0].curve_offsets});
+    // pen.curves.items.len -= 5;
     const path = try pen.createPathAlloc(allocator);
     defer path.deinit();
+    std.debug.print("OFFSETS1: {}\n", .{pen.subpaths.items[0].curve_offsets});
 
     const dimensions = core.DimensionsU32{
         .width = size,
@@ -70,30 +76,31 @@ pub fn main() !void {
     // output curves
     std.debug.print("\n", .{});
     std.debug.print("Curves:\n", .{});
+    std.debug.print("OFFSETS2: {}\n", .{pen.subpaths.items[0].curve_offsets});
     for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
         for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
             std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve.curve_fn });
         }
     }
 
-    std.debug.print("\n", .{});
-    std.debug.print("Grid Intersections:\n", .{});
-    for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
-        for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve_record, curve_index| {
-            for (raster_data.getGridIntersections()[curve_record.grid_intersection_offests.start..curve_record.grid_intersection_offests.end]) |grid_intersection| {
-                std.debug.print("GridIntersection({},{}): Pixel({},{}), T({}), Intersection({},{})\n", .{
-                    subpath_index,
-                    curve_index,
-                    grid_intersection.getPixel().x,
-                    grid_intersection.getPixel().y,
-                    grid_intersection.getT(),
-                    grid_intersection.getPoint().x,
-                    grid_intersection.getPoint().y,
-                });
-            }
-            std.debug.print("-----------------------------\n", .{});
-        }
-    }
+    // std.debug.print("\n", .{});
+    // std.debug.print("Grid Intersections:\n", .{});
+    // for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
+    //     for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve_record, curve_index| {
+    //         for (raster_data.getGridIntersections()[curve_record.grid_intersection_offests.start..curve_record.grid_intersection_offests.end]) |grid_intersection| {
+    //             std.debug.print("GridIntersection({},{}): Pixel({},{}), T({}), Intersection({},{})\n", .{
+    //                 subpath_index,
+    //                 curve_index,
+    //                 grid_intersection.getPixel().x,
+    //                 grid_intersection.getPixel().y,
+    //                 grid_intersection.getT(),
+    //                 grid_intersection.getPoint().x,
+    //                 grid_intersection.getPoint().y,
+    //             });
+    //         }
+    //         std.debug.print("-----------------------------\n", .{});
+    //     }
+    // }
 
     std.debug.print("\n", .{});
     std.debug.print("Curve Fragments:\n", .{});
@@ -123,16 +130,16 @@ pub fn main() !void {
         });
     }
 
-    std.debug.print("\n", .{});
-    std.debug.print("Spans:\n", .{});
-    for (raster_data.getSpans()) |span| {
-        std.debug.print("Span, Y({}), X({},{}), Winding({})\n", .{
-            span.y,
-            span.x_range.start,
-            span.x_range.end,
-            span.winding,
-        });
-    }
+    // std.debug.print("\n", .{});
+    // std.debug.print("Spans:\n", .{});
+    // for (raster_data.getSpans()) |span| {
+    //     std.debug.print("Span, Y({}), X({},{}), Winding({})\n", .{
+    //         span.y,
+    //         span.x_range.start,
+    //         span.x_range.end,
+    //         span.winding,
+    //     });
+    // }
 
     std.debug.print("\n============== Boundary Texture\n\n", .{});
     var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
@@ -212,16 +219,16 @@ pub fn main() !void {
                 std.debug.print("Intensity: {}\n", .{pixel.a});
             }
             const image_pixel = (y * image.bytes_per_row) + (x * image.num_components * image.bytes_per_component);
-            // const value = std.math.maxInt(u8) - std.math.clamp(
-            //     @as(u8, @intFromFloat(@round(std.math.pow(f32, pixel.a, 1.0 / 2.2) * std.math.maxInt(u8)))),
-            //     0,
-            //     std.math.maxInt(u8),
-            // );
             const value = std.math.maxInt(u8) - std.math.clamp(
-                @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
+                @as(u8, @intFromFloat(@round(std.math.pow(f32, pixel.a, 1.0 / 2.2) * std.math.maxInt(u8)))),
                 0,
                 std.math.maxInt(u8),
             );
+            // const value = std.math.maxInt(u8) - std.math.clamp(
+            //     @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
+            //     0,
+            //     std.math.maxInt(u8),
+            // );
             // const value: u8 = if (pixel.a > 0.0) 0 else std.math.maxInt(u8);
             image.data[image_pixel] = value;
             image.data[image_pixel + 1] = value;
