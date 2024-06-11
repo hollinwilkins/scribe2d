@@ -28,7 +28,7 @@ pub const Table = struct {
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!RectI16 {
+    pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!f32 {
         var builder = Builder.create(RectF32{}, Transform{}, outliner);
         const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
         return try self.outlineImpl(glyph_data, 0, &builder);
@@ -39,7 +39,7 @@ pub const Table = struct {
         return self.data[range.start..range.end];
     }
 
-    fn outlineImpl(self: Table, data: []const u8, depth: u8, builder: *Builder) Error!RectI16 {
+    fn outlineImpl(self: Table, data: []const u8, depth: u8, builder: *Builder) Error!f32 {
         if (depth >= MAX_COMPONENTS) {
             return error.MaxDepthExceeded;
         }
@@ -51,6 +51,8 @@ pub const Table = struct {
         const y_min: f64 = @floatFromInt(bbox.min.y);
         const x_scale = @as(f64, @floatFromInt(bbox.max.x)) - x_min;
         const y_scale = @as(f64, @floatFromInt(bbox.max.y)) - y_min;
+        const aspect_ratio = x_scale / y_scale;
+
 
         if (numberOfContours > 0) {
             // Simple glyph
@@ -65,7 +67,7 @@ pub const Table = struct {
                 var iter = &points_iterator_mut;
                 while (iter.next()) |point| {
                     builder.pushPoint(
-                        @as(f32, @floatCast((@as(f64, @floatFromInt(point.x)) - x_min) / x_scale)),
+                        @as(f32, @floatCast((@as(f64, @floatFromInt(point.x)) - x_min) / x_scale * aspect_ratio)),
                         @as(f32, @floatCast((@as(f64, @floatFromInt(point.y)) - y_min) / y_scale)),
                         point.on_curve_point,
                         point.last_point,
@@ -88,19 +90,10 @@ pub const Table = struct {
                 }
             }
 
-            return RectI16{
-                .min = PointI16{
-                    .x = @intFromFloat(builder.bbox.min.x),
-                    .y = @intFromFloat(builder.bbox.min.y),
-                },
-                .max = PointI16{
-                    .x = @intFromFloat(builder.bbox.max.x),
-                    .y = @intFromFloat(builder.bbox.max.y),
-                },
-            };
+            return @floatCast(aspect_ratio);
         }
 
-        return RectI16{};
+        return 0.0;
     }
 
     fn parseSimpleOutline(glyph_data: []const u8, numberOfContours: u16) Error!?GlyphPoint.Iterator {

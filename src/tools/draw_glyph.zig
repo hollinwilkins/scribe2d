@@ -24,7 +24,8 @@ pub fn main() !void {
 
     var pen = try draw.Pen.init(allocator);
     defer pen.deinit();
-    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
+    const bounds = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
+    std.debug.print("Bounds: {}\n", .{bounds});
     var path = try pen.createPathAlloc(allocator);
     defer path.deinit();
 
