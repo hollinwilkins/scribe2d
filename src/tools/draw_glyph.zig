@@ -11,7 +11,7 @@ pub fn main() !void {
     _ = args.skip();
     const font_file = args.next() orelse @panic("need to provide a font file");
     const codepoint_str = args.next() orelse @panic("need to provide a codepoint string");
-    const codepoint: u32 = @intCast(try std.unicode.utf8Decode(codepoint_str));
+    const codepoint: u32 = @intCast(codepoint_str[0]);
     const size_str = args.next() orelse "16";
     const size = try std.fmt.parseInt(u32, size_str, 10);
 
