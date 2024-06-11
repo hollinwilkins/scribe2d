@@ -30,7 +30,16 @@ pub const Table = struct {
     }
 
     pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!f64 {
-        var builder = Builder.create(RectF32{}, Transform{}, outliner);
+        var builder = Builder.create(RectF32{
+            .min = PointF32{
+                .x = std.math.floatMax(f32),
+                .y = std.math.floatMax(f32),
+            },
+            .max = PointF32{
+                .x = std.math.floatMin(f32),
+                .y = std.math.floatMin(f32),
+            },
+        }, Transform{}, outliner);
         const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
         return try self.outlineImpl(glyph_data, 0, &builder);
     }
@@ -47,7 +56,7 @@ pub const Table = struct {
 
         var reader = Reader.create(data);
         const numberOfContours = reader.readInt(i16) orelse return error.InvalidOutline;
-        _ = util.readRect(i16, &reader) orelse return error.InvalidOutline;
+        const bounds = util.readRect(i16, &reader) orelse return error.InvalidOutline;
 
         if (numberOfContours > 0) {
             // Simple glyph
@@ -88,6 +97,10 @@ pub const Table = struct {
             return 0.0;
         }
 
+        // important for left side bearing offsetting
+        // if this assertion ever breaks, we will need to return the original bounds.min.x
+        // along with aspect ratio for positioning glyphs in a string properly
+        std.debug.assert(builder.bounds.min.x == @as(f32, @floatFromInt(bounds.min.x)));
         builder.finish();
 
         return builder.bounds.getAspectRatio();
