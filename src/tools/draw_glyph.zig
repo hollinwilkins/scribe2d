@@ -11,7 +11,8 @@ pub fn main() !void {
     _ = args.skip();
     const font_file = args.next() orelse @panic("need to provide a font file");
     const codepoint_str = args.next() orelse @panic("need to provide a codepoint string");
-    const codepoint: u32 = @intCast(codepoint_str[0]);
+    // const codepoint: u32 = @intCast(codepoint_str[0]);
+    const glyph_id: u16 = try std.fmt.parseInt(u16, codepoint_str, 10);
     const size_str = args.next() orelse "16";
     const size = try std.fmt.parseInt(u32, size_str, 10);
 
@@ -25,14 +26,13 @@ pub fn main() !void {
     var pen = try draw.Pen.init(allocator);
     defer pen.deinit();
 
-    const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
-    const bounds = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
-    std.debug.print("Bounds: {}\n", .{bounds});
+    // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
+    const aspect_ratio = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
     var path = try pen.createPathAlloc(allocator);
     defer path.deinit();
 
     const dimensions = core.DimensionsU32{
-        .width = size,
+        .width = size * 3,
         .height = size,
     };
 
@@ -44,7 +44,7 @@ pub fn main() !void {
             .y = 0,
         },
         .max = core.PointU32{
-            .x = dimensions.width,
+            .x = @intFromFloat(@as(f64, @floatFromInt(dimensions.height)) * aspect_ratio),
             .y = dimensions.height,
         },
     }).?;

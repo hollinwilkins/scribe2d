@@ -67,7 +67,7 @@ pub const Table = struct {
                 var iter = &points_iterator_mut;
                 while (iter.next()) |point| {
                     builder.pushPoint(
-                        @as(f32, @floatCast((@as(f64, @floatFromInt(point.x)) - x_min) / x_scale * aspect_ratio)),
+                        @as(f32, @floatCast(((@as(f64, @floatFromInt(point.x)) * aspect_ratio) - (x_min * aspect_ratio)) * aspect_ratio / x_scale)),
                         @as(f32, @floatCast((@as(f64, @floatFromInt(point.y)) - y_min) / y_scale)),
                         point.on_curve_point,
                         point.last_point,
