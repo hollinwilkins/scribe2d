@@ -137,7 +137,7 @@ pub const F2DOT14 = struct {
     value: i16,
 
     pub fn toF32(self: F2DOT14) f32 {
-        return @as(f32, self.value) / 16384.0;
+        return @as(f32, @floatFromInt(self.value)) / 16384.0;
     }
 
     pub fn applyFloatDelta(self: F2DOT14, delta: f32) f32 {

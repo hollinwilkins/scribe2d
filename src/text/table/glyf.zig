@@ -53,7 +53,6 @@ pub const Table = struct {
         const y_scale = @as(f64, @floatFromInt(bbox.max.y)) - y_min;
         const aspect_ratio = x_scale / y_scale;
 
-
         if (numberOfContours > 0) {
             // Simple glyph
 
@@ -73,27 +72,27 @@ pub const Table = struct {
                         point.last_point,
                     );
                 }
-            } else if (nContours < 0) {
-                // Composite glyph
-                var iter = CompositeGlyphInfo.Iterator.create(reader.tail());
+            }
+        } else if (numberOfContours < 0) {
+            // Composite glyph
+            var iter = CompositeGlyphInfo.Iterator.create(reader.tail());
 
-                while (iter.next()) |info| {
-                    if (self.loca.glyphRange(info.glyph_id)) |range| {
-                        const glyph_data = self.data[range.start..range.end];
-                        const transform = builder.transform.combine(info.transform);
-                        var b = Builder.create(builder.bbox, transform, builder.outliner);
-                        self.outlineImpl(glyph_data, depth + 1, &b);
+            while (iter.next()) |info| {
+                if (self.loca.glyphRange(info.glyph_id)) |range| {
+                    const glyph_data = self.data[range.start..range.end];
+                    const transform = builder.transform.combine(info.transform);
+                    var b = Builder.create(builder.bbox, transform, builder.outliner);
+                    _ = try self.outlineImpl(glyph_data, depth + 1, &b);
 
-                        // Take updated bbox
-                        builder.bbox = b.bbox;
-                    }
+                    // Take updated bbox
+                    builder.bbox = b.bbox;
                 }
             }
-
-            return @floatCast(aspect_ratio);
+        } else {
+            return 0.0;
         }
 
-        return 0.0;
+        return @floatCast(aspect_ratio);
     }
 
     fn parseSimpleOutline(glyph_data: []const u8, numberOfContours: u16) Error!?GlyphPoint.Iterator {
@@ -401,7 +400,7 @@ pub const CompositeGlyphInfo = struct {
     flags: CompositeGlyphFlags,
 
     pub const Iterator = struct {
-        reader: *Reader,
+        reader: Reader,
 
         pub fn create(data: []const u8) Iterator {
             return Iterator{
@@ -410,7 +409,7 @@ pub const CompositeGlyphInfo = struct {
         }
 
         pub fn next(self: *Iterator) ?CompositeGlyphInfo {
-            return CompositeGlyphInfo.read(self.reader);
+            return CompositeGlyphInfo.read(&self.reader);
         }
     };
 
@@ -445,8 +444,8 @@ pub const CompositeGlyphInfo = struct {
         } else if (flags.we_have_an_x_and_y_scale()) {
             const a = F2DOT14.read(reader) orelse return null;
             const d = F2DOT14.read(reader) orelse return null;
-            ts.a = a;
-            ts.d = d;
+            ts.a = a.toF32();
+            ts.d = d.toF32();
         } else if (flags.we_have_a_scale()) {
             const a = F2DOT14.read(reader) orelse return null;
             ts.a = a.toF32();

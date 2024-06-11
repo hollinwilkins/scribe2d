@@ -77,16 +77,27 @@ pub const Table = union(enum) {
             return null;
         }
 
-        const range = switch (self) {
-            .short => |*short| Range{
-                .start = short.offsets.get(glyph_id).? * 2,
-                .end = short.offsets.get(glyph_id + 1).? * 2,
+        var range: Range = undefined;
+        switch (self) {
+            .short => |*short| {
+                const start: usize = @intCast(short.offsets.get(glyph_id).?);
+                const end: usize = @intCast(short.offsets.get(glyph_id + 1).?);
+
+                range = Range{
+                    .start = start * 2,
+                    .end = end * 2,
+                };
             },
-            .long => |*long| Range{
-                .start = long.offsets.get(glyph_id).?,
-                .end = long.offsets.get(glyph_id + 1).?,
+            .long => |*long| {
+                const start: usize = @intCast(long.offsets.get(glyph_id).?);
+                const end: usize = @intCast(long.offsets.get(glyph_id + 1).?);
+
+                range = Range{
+                    .start = start,
+                    .end = end,
+                };
             },
-        };
+        }
 
         if (range.start >= range.end) {
             return null;
