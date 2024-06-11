@@ -71,7 +71,7 @@ pub const Subtable4 = struct {
                     const id_delta = self.id_deltas.get(index) orelse return null;
 
                     if (id_range_offset == 0) {
-                        return codepoint + id_delta;
+                        return codepoint +% id_delta;
                     } else if (id_range_offset == 0xffff) {
                         // Some malformed fonts have 0xFFFF as the last offset,
                         // which is invalid and should be ignored.
