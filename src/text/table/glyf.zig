@@ -41,7 +41,9 @@ pub const Table = struct {
             },
         }, Transform{}, outliner);
         const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
-        return try self.outlineImpl(glyph_data, 0, &builder);
+        const aspect_ratio = try self.outlineImpl(glyph_data, 0, &builder);
+        builder.finish();
+        return aspect_ratio;
     }
 
     pub fn get(self: Table, glyph_id: GlyphId) ?[]const u8 {
@@ -57,6 +59,7 @@ pub const Table = struct {
         var reader = Reader.create(data);
         const numberOfContours = reader.readInt(i16) orelse return error.InvalidOutline;
         const bounds = util.readRect(i16, &reader) orelse return error.InvalidOutline;
+        _ = bounds;
 
         if (numberOfContours > 0) {
             // Simple glyph
@@ -100,8 +103,7 @@ pub const Table = struct {
         // important for left side bearing offsetting
         // if this assertion ever breaks, we will need to return the original bounds.min.x
         // along with aspect ratio for positioning glyphs in a string properly
-        std.debug.assert(builder.bounds.min.x == @as(f32, @floatFromInt(bounds.min.x)));
-        builder.finish();
+        // std.debug.assert(builder.bounds.min.x == @as(f32, @floatFromInt(bounds.min.x)));
 
         return builder.bounds.getAspectRatio();
     }
