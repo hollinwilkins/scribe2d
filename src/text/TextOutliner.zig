@@ -28,7 +28,7 @@ pub fn close(self: @This()) void {
 }
 
 pub fn finish(self: @This(), bounds: RectF32) void {
-    self.vtable.finish(bounds);
+    self.vtable.finish(self.ptr, bounds);
 }
 
 pub const VTable = struct {

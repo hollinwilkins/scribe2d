@@ -88,6 +88,8 @@ pub const Table = struct {
             return 0.0;
         }
 
+        builder.finish();
+
         return builder.bounds.getAspectRatio();
     }
 
@@ -246,6 +248,10 @@ pub const Builder = struct {
             .y = y_mut,
         });
         self.outliner.quadTo(x1_mut, y1_mut, x_mut, y_mut);
+    }
+
+    pub fn finish(self: *Builder) void {
+        self.outliner.finish(self.bounds);
     }
 
     pub fn pushPoint(self: *Builder, x: f32, y: f32, on_curve_point: bool, last_point: bool) void {

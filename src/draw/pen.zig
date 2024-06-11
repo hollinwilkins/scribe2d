@@ -192,8 +192,8 @@ pub const Pen = struct {
     pub fn finish(self: *@This(), bounds: RectF32) void {
         const transform = TransformF32{
             .scale = PointF32{
-                .x = bounds.getWidth(),
-                .y = bounds.getHeight(),
+                .x = 1.0 / bounds.getWidth(),
+                .y = 1.0 / bounds.getHeight(),
             },
             .translate = PointF32{
                 .y = -bounds.min.y,
