@@ -7,7 +7,7 @@ const Reader = util.Reader;
 const LazyIntArray = util.LazyIntArray;
 
 pub const Subtable10 = struct {
-    const GlyphsList = LazyIntArray(u32);
+    const GlyphsList = LazyIntArray(GlyphId);
 
     first_codepoint: u32,
     glyphs: GlyphsList,
@@ -21,7 +21,7 @@ pub const Subtable10 = struct {
 
         const first_codepoint = reader.readInt(u32) orelse return error.InvalidTable;
         const count = reader.readInt(u32) orelse return error.InvalidTable;
-        const glyphs = GlyphsList.read(reader, count) orelse return error.InvalidTable;
+        const glyphs = GlyphsList.read(&reader, count) orelse return error.InvalidTable;
 
         return Subtable10{
             .first_codepoint = first_codepoint,
@@ -29,7 +29,7 @@ pub const Subtable10 = struct {
         };
     }
 
-    pub fn getGllyphIndex(self: Subtable10, codepoint32: u32) ?GlyphId {
+    pub fn getGlyphIndex(self: Subtable10, codepoint32: u32) ?GlyphId {
         const index = codepoint32 - self.first_codepoint;
         return self.glyphs.get(index);
     }

@@ -13,16 +13,16 @@ pub const Subtable6 = struct {
     glyphs: GlyphsList,
 
     pub fn create(data: []const u8) Error!Subtable6 {
-        const reader = Reader.create(data);
+        var reader = Reader.create(data);
         reader.skip(u16); // format
         reader.skip(u16); // length
         reader.skip(u16); // language
-        const first_code_point = reader.readInt(u16) orelse return error.InvalidTable;
+        const first_codepoint = reader.readInt(u16) orelse return error.InvalidTable;
         const count = reader.readInt(u16) orelse return error.InvalidTable;
         const glyphs = GlyphsList.read(&reader, count) orelse return error.InvalidTable;
 
         return Subtable6{
-            .first_code_point = first_code_point,
+            .first_codepoint = first_codepoint,
             .glyphs = glyphs,
         };
     }

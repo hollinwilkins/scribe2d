@@ -10,8 +10,8 @@ pub fn main() !void {
 
     _ = args.skip();
     const font_file = args.next() orelse @panic("need to provide a font file");
-    const glyph_id_str = args.next() orelse @panic("need to provide a glyph_id");
-    const glyph_id = try std.fmt.parseInt(u16, glyph_id_str, 10);
+    const codepoint_str = args.next() orelse @panic("need to provide a codepoint string");
+    const codepoint: u32 = @intCast(try std.unicode.utf8Decode(codepoint_str));
     const size_str = args.next() orelse "16";
     const size = try std.fmt.parseInt(u32, size_str, 10);
 
@@ -24,6 +24,8 @@ pub fn main() !void {
 
     var pen = try draw.Pen.init(allocator);
     defer pen.deinit();
+
+    const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     const bounds = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
     std.debug.print("Bounds: {}\n", .{bounds});
     var path = try pen.createPathAlloc(allocator);

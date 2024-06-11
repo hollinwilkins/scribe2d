@@ -1,5 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
+const cmap = @import("./cmap.zig");
 const head = @import("./head.zig");
 const hhea = @import("./hhea.zig");
 const maxp = @import("./maxp.zig");
@@ -90,6 +91,7 @@ pub const Tables = struct {
     name: ?name.Table,
     loca: ?loca.Table,
     glyf: ?glyf.Table,
+    cmap: ?cmap.Table,
 
     // pub bdat: Option<cbdt::Table<'a>>,
     // pub cbdt: Option<cbdt::Table<'a>>,
@@ -170,6 +172,11 @@ pub const Tables = struct {
             }
         }
 
+        var cmap_table: ?cmap.Table = null;
+        if (raw.cmap) |data| {
+            cmap_table = try cmap.Table.create(data);
+        }
+
         return Tables{
             .head = head_table,
             .hhea = hhea_table,
@@ -178,6 +185,7 @@ pub const Tables = struct {
             .name = name_table,
             .loca = loca_table,
             .glyf = glyf_table,
+            .cmap = cmap_table,
         };
     }
 };

@@ -208,12 +208,14 @@ pub const Range = struct {
 
 pub fn LazyIntArray(comptime T: type) type {
     return struct {
+        const Self = @This();
+        
         pub const Iter = struct {
-            lazy_array: *const @This(),
+            lazy_array: *const Self,
             i: usize,
 
             pub fn next(self: *@This()) ?T {
-                if (self.i < self.lazy_array.len) {
+                if (self.i < self.lazy_array.data.len) {
                     self.i += 1;
                     return self.lazy_array.get(self.i - 1);
                 }
@@ -326,7 +328,7 @@ pub fn LazyArray(comptime T: type) type {
                 return null;
             }
 
-            var base = 0;
+            var base: usize = 0;
             while (size > 1) {
                 const half = size / 2;
                 const mid = base + half;

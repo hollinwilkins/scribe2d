@@ -21,21 +21,21 @@ pub const Subtable4 = struct {
 
     pub fn create(data: []const u8) Error!Subtable4 {
         var reader = Reader.create(data);
-        reader.skip(6); // format + length + language
+        reader.skipN(6); // format + length + language
         const seg_count_s2 = reader.readInt(u16) orelse return error.InvalidTable;
         if (seg_count_s2 < 2) {
             return error.InvalidTable;
         }
 
         const seg_count = seg_count_s2 / 2;
-        reader.skip(6); // searchRange + entrySelector + rangeShift
+        reader.skipN(6); // searchRange + entrySelector + rangeShift
 
-        const end_codes = EndCodesList.read(reader, seg_count) orelse return error.InvalidTable;
+        const end_codes = EndCodesList.read(&reader, seg_count) orelse return error.InvalidTable;
         reader.skip(u16); // reservedPad
-        const start_codes = StartCodesList.read(reader, seg_count) orelse return error.InvalidTable;
-        const id_deltas = IdDeltasList.read(reader, seg_count) orelse return error.InvalidTable;
+        const start_codes = StartCodesList.read(&reader, seg_count) orelse return error.InvalidTable;
+        const id_deltas = IdDeltasList.read(&reader, seg_count) orelse return error.InvalidTable;
         const id_range_offset_pos = reader.cursor;
-        const id_range_offsets = IdRangeOffsetsList.read(reader, seg_count) orelse return error.InvalidTable;
+        const id_range_offsets = IdRangeOffsetsList.read(&reader, seg_count) orelse return error.InvalidTable;
 
         return Subtable4{
             .start_codes = start_codes,
@@ -55,7 +55,7 @@ pub const Subtable4 = struct {
 
         // Binary search
         var start: usize = 0;
-        var end: usize = self.start_codes.len;
+        var end: usize = self.start_codes.data.len;
 
         while (end > start) {
             const index = (start + end) / 2;
@@ -91,7 +91,7 @@ pub const Subtable4 = struct {
                         return null;
                     }
 
-                    const glyph_id = @as(i16, @intCast(glyph_array_value)) + id_delta;
+                    const glyph_id = @as(u16, @intCast(glyph_array_value)) + id_delta;
                     return @intCast(glyph_id);
                 }
             } else {

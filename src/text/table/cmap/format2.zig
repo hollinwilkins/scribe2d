@@ -45,9 +45,9 @@ pub const Subtable2 = struct {
         reader.skip(u16); // length
         reader.skip(u16); // language
 
-        const sub_header_keys = SubHeaderKeysList.read(reader, 256) orelse return error.InvalidTable;
+        const sub_header_keys = SubHeaderKeysList.read(&reader, 256) orelse return error.InvalidTable;
         // The maximum index in a sub_header_keys is a sub_headers count.
-        var sub_headers_count = 0;
+        var sub_headers_count: usize = 0;
         var key_iterator = sub_header_keys.iterator();
         while (key_iterator.next()) |key| {
             sub_headers_count = @max(sub_headers_count, key / 8);
@@ -56,12 +56,13 @@ pub const Subtable2 = struct {
 
         // Remember sub_headers offset before reading. Will be used later.
         const sub_headers_offset = reader.cursor;
-        const sub_headers = SubHeadersList.read(reader, sub_headers_count) orelse return error.InvalidTable;
+        const sub_headers = SubHeadersList.read(&reader, sub_headers_count) orelse return error.InvalidTable;
 
         return Subtable2{
             .sub_header_keys = sub_header_keys,
             .sub_headers_offset = sub_headers_offset,
             .sub_headers = sub_headers,
+            .data = data,
         };
     }
 
@@ -74,7 +75,7 @@ pub const Subtable2 = struct {
         const high_byte = codepoint >> 8;
         const low_byte = codepoint & 0x00ff;
 
-        var i = 0;
+        var i: u16 = 0;
         if (codepoint < 0xff) {
             // 'SubHeader 0 is special: it is used for single-byte character codes.'
             i = 0;
@@ -99,7 +100,7 @@ pub const Subtable2 = struct {
 
         // 'The value of the idRangeOffset is the number of bytes
         // past the actual location of the idRangeOffset'.
-        const offset = self.sub_headers.offset
+        const offset = self.sub_headers_offset
         // Advance to required subheader.
         + @sizeOf(SubHeaderRecord) * @as(usize, @intCast(i + 1))
         // Move back to idRangeOffset start.
@@ -114,7 +115,7 @@ pub const Subtable2 = struct {
             return null;
         }
 
-        return @as(u16, @intCast(@as(i32, @intCast(glyph)) + @as(i32, @intCast(sub_header.id_delta)) % 65536));
+        return @as(u16, @intCast(@mod((@as(i32, @intCast(glyph)) + @as(i32, @intCast(sub_header.id_delta))), 65536)));
     }
 
     pub fn iterator(self: Subtable2) Iterator {

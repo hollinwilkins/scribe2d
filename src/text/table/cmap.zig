@@ -1,5 +1,5 @@
 const text = @import("../root.zig");
-const util = @import("../util..zig");
+const util = @import("../util.zig");
 const format0 = @import("./cmap/format0.zig");
 const format2 = @import("./cmap/format2.zig");
 const format4 = @import("./cmap/format4.zig");
@@ -15,7 +15,7 @@ const Offset32 = util.Offset32;
 const LazyArray = util.LazyArray;
 const Reader = util.Reader;
 
-pub const Format = union(u8) {
+pub const Format = union(enum) {
     byte_encoding: format0.Subtable0,
     high_byte_mapping: format2.Subtable2,
     segment_mapping_delta: format4.Subtable4,
@@ -149,19 +149,20 @@ pub const Subtables = struct {
 
     pub fn get(self: Subtables, index: usize) ?Subtable {
         const record = self.records.get(index) orelse return null;
-        const data = self.data[record.offset..];
+        const data = self.data[record.offset.offset..];
         var reader = Reader.create(data);
         const format_kind = reader.readInt(u16) orelse return null;
 
         const format: ?Format = switch (format_kind) {
-            0 => Format{ .byte_encoding = format0.Subtable0.create(data) orelse null },
-            2 => Format{ .high_byte_mapping = format2.Subtable2.create(data) orelse null },
-            4 => Format{ .segment_mapping_delta = format4.Subtable4.create(data) orelse null },
-            6 => Format{ .trimmed_table = format6.Subtable6.create(data) orelse null },
-            10 => Format{ .trimmed_array = format10.Subtable10.create(data) orelse null },
-            12 => Format{ .segmented_coverage = format12.Subtable12.create(data) orelse null },
-            13 => Format{ .many_to_one = format13.Subtable13.create(data) orelse null },
-            14 => Format{ .unicode_variation = format14.Subtable14.create(data) orelse null },
+            0 => Format{ .byte_encoding = format0.Subtable0.create(data) catch return null },
+            2 => Format{ .high_byte_mapping = format2.Subtable2.create(data) catch return null },
+            4 => Format{ .segment_mapping_delta = format4.Subtable4.create(data) catch return null },
+            6 => Format{ .trimmed_table = format6.Subtable6.create(data) catch return null },
+            10 => Format{ .trimmed_array = format10.Subtable10.create(data) catch return null },
+            12 => Format{ .segmented_coverage = format12.Subtable12.create(data) catch return null },
+            13 => Format{ .many_to_one = format13.Subtable13.create(data) catch return null },
+            14 => Format{ .unicode_variation = format14.Subtable14.create(data) catch return null },
+            else => null,
         };
 
         if (format) |f| {
@@ -175,12 +176,31 @@ pub const Subtables = struct {
         return null;
     }
 
+    pub fn getGlyphIndex(self: Subtables, codepoint32: u32) ?GlyphId {
+        var iter = self.iterator();
+
+        while (iter.next()) |table| {
+            if (table.getGlyphIndex(codepoint32)) |glyph_id| {
+                return glyph_id;
+            }
+        }
+
+        return null;
+    }
+
     pub fn len(self: Subtables) usize {
         return self.records.len;
     }
 
     pub fn isEmpty(self: Subtables) bool {
         return self.len() == 0;
+    }
+
+    pub fn iterator(self: Subtables) Iterator {
+        return Iterator {
+            .subtables = self,
+            .index = 0,
+        };
     }
 
     pub const Iterator = struct {

@@ -21,8 +21,13 @@ pub const Subtable0 = struct {
     }
 
     pub fn getGlyphIndex(self: Subtable0, code_point: u32) ?GlyphId {
-        const glyph_id = self.glyph_ids.get(@intCast(code_point)) orelse return null;
+        const index: usize = @intCast(code_point);
 
+        if (index >= self.glyph_ids.len) {
+            return null;
+        }
+        
+        const glyph_id = self.glyph_ids[index];
         if (glyph_id != 0) {
             return @intCast(glyph_id);
         }
