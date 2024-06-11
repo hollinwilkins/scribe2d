@@ -182,6 +182,10 @@ pub fn Rect(comptime T: type) type {
             return self.max.y - self.min.y;
         }
 
+        pub fn getAspectRatio(self: *const @This()) f64 {
+            return @as(f64, self.getWidth()) / @as(f64, self.getHeight());
+        }
+
         pub fn getDimensions(self: *const @This()) Dimensions(T) {
             return Dimensions(T){
                 .width = self.max.x - self.min.x,
@@ -209,3 +213,26 @@ pub fn Rect(comptime T: type) type {
 pub const RectF32 = Rect(f32);
 pub const RectI16 = Rect(i16);
 pub const RectU32 = Rect(u32);
+
+pub fn Transform(comptime T: type) type {
+    return struct {
+        const P = Point(T);
+        const Translation = Point(T);
+        const Scale = Point(T);
+
+        translate: Translation = Translation{},
+        scale: Scale = Scale{
+            .x = 1.0,
+            .y = 1.0,
+        },
+
+        pub fn apply(self: @This(), point: P) P {
+            return P{
+                .x = (self.scale.x * (point.x + self.translate.x)),
+                .y = (self.scale.y * (point.y + self.translate.y)),
+            };
+        }
+    };
+}
+
+pub const TransformF32 = Transform(f32);

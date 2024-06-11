@@ -5,6 +5,7 @@ const PointI32 = core.PointI32;
 const RectF32 = core.RectF32;
 const RangeU32 = core.RangeU32;
 const DimensionsF32 = core.DimensionsF32;
+const TransformF32 = core.TransformF32;
 
 pub const Intersection = struct {
     t: f32,
@@ -42,6 +43,13 @@ pub const Curve = struct {
         return Curve{
             .end_curve = self.end_curve,
             .curve_fn = self.curve_fn.scale(dimensions),
+        };
+    }
+
+    pub fn transform(self: Curve, t: TransformF32) Curve {
+        return Curve{
+            .end_curve = self.end_curve,
+            .curve_fn = self.curve_fn.transform(t),
         };
     }
 
@@ -94,6 +102,17 @@ pub const CurveFn = union(enum) {
             },
             .quadratic_bezier => |*qb| return CurveFn{
                 .quadratic_bezier = qb.scale(dimensions),
+            },
+        }
+    }
+
+    pub fn transform(self: CurveFn, t: TransformF32) CurveFn {
+        switch (self) {
+            .line => |*l| return CurveFn{
+                .line = l.transform(t),
+            },
+            .quadratic_bezier => |*qb| return CurveFn{
+                .quadratic_bezier = qb.transform(t),
             },
         }
     }
@@ -196,6 +215,13 @@ pub const Line = struct {
                 .x = dimensions.width,
                 .y = dimensions.height,
             }),
+        };
+    }
+
+    pub fn transform(self: Line, t: TransformF32) Line {
+        return Line{
+            .start = t.apply(self.start),
+            .end = t.apply(self.end),
         };
     }
 
@@ -344,6 +370,14 @@ pub const QuadraticBezier = struct {
                 .x = dimensions.width,
                 .y = dimensions.height,
             }),
+        };
+    }
+
+    pub fn transform(self: QuadraticBezier, t: TransformF32) QuadraticBezier {
+        return QuadraticBezier{
+            .start = t.apply(self.start),
+            .control = t.apply(self.control),
+            .end = t.apply(self.end),
         };
     }
 

@@ -9,6 +9,7 @@ const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 const RangeF32 = core.RangeF32;
 const RangeU32 = core.RangeU32;
+const TransformF32 = core.TransformF32;
 const Subpath = curve_module.Subpath;
 const Curve = curve_module.Curve;
 const CurveFn = curve_module.CurveFn;
@@ -53,6 +54,11 @@ pub const Pen = struct {
                 po.is_error = true;
             };
         }
+
+        fn finish(ctx: *anyopaque, bounds: RectF32) void {
+            var po = @as(*Pen, @alignCast(@ptrCast(ctx)));
+            po.finish(bounds);
+        }
     };
 
     pub const TextOutlinerVTable = .{
@@ -61,6 +67,7 @@ pub const Pen = struct {
         .quadTo = TextOutlinerFunctions.quadTo,
         .curveTo = TextOutlinerFunctions.curveTo,
         .close = TextOutlinerFunctions.close,
+        .finish = TextOutlinerFunctions.finish,
     };
 
     subpaths: SubpathsList,
@@ -112,7 +119,6 @@ pub const Pen = struct {
     }
 
     pub fn moveTo(self: *@This(), point: PointF32) !void {
-        text.TextOutliner.Debug.Instance.moveTo(point.x, point.y);
         self.start = null;
 
         if (self.curves.items.len > 0) {
@@ -123,8 +129,6 @@ pub const Pen = struct {
     }
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
-        text.TextOutliner.Debug.Instance.lineTo(point.x, point.y);
-
         if (self.start == null) {
             self.start = self.location;
             try self.nextSubpath();
@@ -147,8 +151,6 @@ pub const Pen = struct {
     }
 
     pub fn quadTo(self: *@This(), point: PointF32, control: PointF32) !void {
-        text.TextOutliner.Debug.Instance.quadTo(control.x, control.y, point.x, point.y);
-
         if (self.start == null) {
             self.start = self.location;
             try self.nextSubpath();
@@ -173,8 +175,6 @@ pub const Pen = struct {
 
     /// Closes the current subpath, if there is one
     pub fn close(self: *@This()) !void {
-        text.TextOutliner.Debug.Instance.close();
-
         if (self.start) |start| {
             if (!std.meta.eql(start, self.location)) {
                 try self.lineTo(start);
@@ -186,6 +186,23 @@ pub const Pen = struct {
 
         if (self.curves.items.len > 0) {
             self.curves.items[self.curves.items.len - 1].end_curve = true;
+        }
+    }
+
+    pub fn finish(self: *@This(), bounds: RectF32) void {
+        const transform = TransformF32{
+            .scale = PointF32{
+                .x = bounds.getWidth(),
+                .y = bounds.getHeight(),
+            },
+            .translate = PointF32{
+                .y = -bounds.min.y,
+                .x = -bounds.min.x,
+            },
+        };
+
+        for (self.curves.items) |*curve| {
+            curve.* = curve.transform(transform);
         }
     }
 };

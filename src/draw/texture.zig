@@ -1,12 +1,12 @@
 const std = @import("std");
+const color = @import("./color.zig");
+const core = @import("../core/root.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const core = @import("../core/root.zig");
 const DimensionsU32 = core.DimensionsU32;
 const RectU32 = core.RectU32;
 const PointU32 = core.PointU32;
 const RangeU32 = core.RangeU32;
-const color = @import("./color.zig");
 
 pub fn TextureView(comptime T: type) type {
     const Self = @This();

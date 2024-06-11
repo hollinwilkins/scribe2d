@@ -11,6 +11,7 @@ const RectI16 = core.RectI16;
 const PointI16 = core.PointI16;
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
+const DimensionsF32 = core.DimensionsF32;
 const Transform = util.Transform;
 const F2DOT14 = util.F2DOT14;
 const Reader = util.Reader;
@@ -28,7 +29,7 @@ pub const Table = struct {
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!f32 {
+    pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!f64 {
         var builder = Builder.create(RectF32{}, Transform{}, outliner);
         const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
         return try self.outlineImpl(glyph_data, 0, &builder);
@@ -39,19 +40,14 @@ pub const Table = struct {
         return self.data[range.start..range.end];
     }
 
-    fn outlineImpl(self: Table, data: []const u8, depth: u8, builder: *Builder) Error!f32 {
+    fn outlineImpl(self: Table, data: []const u8, depth: u8, builder: *Builder) Error!f64 {
         if (depth >= MAX_COMPONENTS) {
             return error.MaxDepthExceeded;
         }
 
         var reader = Reader.create(data);
         const numberOfContours = reader.readInt(i16) orelse return error.InvalidOutline;
-        const bbox = util.readRect(i16, &reader) orelse return error.InvalidOutline;
-        const x_min: f64 = @floatFromInt(bbox.min.x);
-        const y_min: f64 = @floatFromInt(bbox.min.y);
-        const x_scale = @as(f64, @floatFromInt(bbox.max.x)) - x_min;
-        const y_scale = @as(f64, @floatFromInt(bbox.max.y)) - y_min;
-        const aspect_ratio = x_scale / y_scale;
+        _ = util.readRect(i16, &reader) orelse return error.InvalidOutline;
 
         if (numberOfContours > 0) {
             // Simple glyph
@@ -66,8 +62,8 @@ pub const Table = struct {
                 var iter = &points_iterator_mut;
                 while (iter.next()) |point| {
                     builder.pushPoint(
-                        @as(f32, @floatCast((@as(f64, @floatFromInt(point.x)) - x_min) / x_scale)),
-                        @as(f32, @floatCast((@as(f64, @floatFromInt(point.y)) - y_min) / y_scale)),
+                        @as(f32, @floatFromInt(point.x)),
+                        @as(f32, @floatFromInt(point.y)),
                         point.on_curve_point,
                         point.last_point,
                     );
@@ -81,18 +77,18 @@ pub const Table = struct {
                 if (self.loca.glyphRange(info.glyph_id)) |range| {
                     const glyph_data = self.data[range.start..range.end];
                     const transform = builder.transform.combine(info.transform);
-                    var b = Builder.create(builder.bbox, transform, builder.outliner);
+                    var b = Builder.create(builder.bounds, transform, builder.outliner);
                     _ = try self.outlineImpl(glyph_data, depth + 1, &b);
 
-                    // Take updated bbox
-                    builder.bbox = b.bbox;
+                    // Take updated bounds
+                    builder.bounds = b.bounds;
                 }
             }
         } else {
             return 0.0;
         }
 
-        return @floatCast(aspect_ratio);
+        return builder.bounds.getAspectRatio();
     }
 
     fn parseSimpleOutline(glyph_data: []const u8, numberOfContours: u16) Error!?GlyphPoint.Iterator {
@@ -185,17 +181,17 @@ pub const CoordinatesLength = struct {
 
 pub const Builder = struct {
     outliner: TextOutliner,
-    bbox: RectF32,
+    bounds: RectF32,
     transform: Transform,
     is_default_transform: bool,
     first_on_curve: ?PointF32,
     first_off_curve: ?PointF32,
     last_off_curve: ?PointF32,
 
-    pub fn create(bbox: RectF32, transform: Transform, outliner: TextOutliner) Builder {
+    pub fn create(bounds: RectF32, transform: Transform, outliner: TextOutliner) Builder {
         return Builder{
             .outliner = outliner,
-            .bbox = bbox,
+            .bounds = bounds,
             .transform = transform,
             .is_default_transform = transform.isDefault(),
             .first_on_curve = null,
@@ -211,7 +207,7 @@ pub const Builder = struct {
             self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox = self.bbox.extendBy(PointF32{
+        self.bounds = self.bounds.extendBy(PointF32{
             .x = x_mut,
             .y = y_mut,
         });
@@ -225,7 +221,7 @@ pub const Builder = struct {
             self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox = self.bbox.extendBy(PointF32{
+        self.bounds = self.bounds.extendBy(PointF32{
             .x = x_mut,
             .y = y_mut,
         });
@@ -242,7 +238,7 @@ pub const Builder = struct {
             self.transform.applyTo(&x_mut, &y_mut);
         }
 
-        self.bbox = self.bbox.extendBy(PointF32{
+        self.bounds = self.bounds.extendBy(PointF32{
             .x = x1_mut,
             .y = y1_mut,
         }).extendBy(PointF32{

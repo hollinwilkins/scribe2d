@@ -1,4 +1,6 @@
 const std = @import("std");
+const core = @import("../core/root.zig");
+const RectF32 = core.RectF32;
 
 const TextOutliner = @This();
 
@@ -25,12 +27,17 @@ pub fn close(self: @This()) void {
     self.vtable.close(self.ptr);
 }
 
+pub fn finish(self: @This(), bounds: RectF32) void {
+    self.vtable.finish(bounds);
+}
+
 pub const VTable = struct {
     moveTo: *const fn (ctx: *anyopaque, x: f32, y: f32) void,
     lineTo: *const fn (ctx: *anyopaque, x: f32, y: f32) void,
     quadTo: *const fn (ctx: *anyopaque, x1: f32, y1: f32, x: f32, y: f32) void,
     curveTo: *const fn (ctx: *anyopaque, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void,
     close: *const fn (ctx: *anyopaque) void,
+    finish: *const fn (ctx: *anyopaque, bounds: RectF32) void,
 };
 
 pub const Debug = struct {
@@ -40,6 +47,7 @@ pub const Debug = struct {
         .quadTo = Debug.quadTo,
         .curveTo = Debug.curveTo,
         .close = Debug.close,
+        .finish = Debug.finish,
     };
 
     pub const Instance = TextOutliner{
@@ -65,5 +73,9 @@ pub const Debug = struct {
 
     pub fn close(_: *anyopaque) void {
         std.debug.print("Outliner.Debug.close()\n", .{});
+    }
+
+    pub fn finish(_: *anyopaque, bounds: RectF32) void {
+        std.debug.print("Outliner.Debug.finish({})\n", .{bounds});
     }
 };
