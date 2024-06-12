@@ -23,6 +23,12 @@ pub fn main() !void {
     var face = try text.Face.initFile(allocator, font_file);
     defer face.deinit();
 
+    std.debug.print("Font Info: {s}\n", .{font_file});
+    var rt_iter = face.unmanaged.raw_tables.table_records.iterator();
+    while (rt_iter.next()) |table| {
+        std.debug.print("Table: {s}\n", .{table.tag.toBytes()});
+    }
+
     var pen = try draw.Pen.init(allocator);
     defer pen.deinit();
 

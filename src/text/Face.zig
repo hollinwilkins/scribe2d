@@ -14,6 +14,7 @@ const VariableCoordinates = struct {};
 const Unmanaged = struct {
     data: []const u8,
     tables: Tables,
+    raw_tables: RawTables,
     coordinates: VariableCoordinates,
 
     pub fn deinit(self: *Unmanaged, allocator: Allocator) void {
@@ -36,6 +37,7 @@ pub const Face = struct {
             .unmanaged = Unmanaged{
                 .data = data,
                 .tables = try Tables.create(raw_tables),
+                .raw_tables = raw_face,
                 .coordinates = VariableCoordinates{},
             },
         };
