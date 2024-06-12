@@ -469,8 +469,8 @@ pub const CompositeGlyphInfo = struct {
             ts.d = ts.a;
         }
 
-        if (flags.more_components()) {
-            // do nothing
+        if (!flags.more_components()) {
+            reader.skipToEnd();
         }
 
         return CompositeGlyphInfo{

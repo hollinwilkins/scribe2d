@@ -38,6 +38,10 @@ pub const Reader = struct {
         self.cursor += n;
     }
 
+    pub fn skipToEnd(self: *Reader) void {
+        self.cursor = self.data.len;
+    }
+
     pub fn skipChecked(self: *Reader, comptime T: type) bool {
         return self.skipCheckedN(@sizeOf(T));
     }

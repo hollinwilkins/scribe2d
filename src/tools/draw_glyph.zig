@@ -27,8 +27,10 @@ pub fn main() !void {
     defer pen.deinit();
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
+    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, text.TextOutliner.Debug.Instance);
     const aspect_ratio = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
     var path = try pen.createPathAlloc(allocator);
+    path.unmanaged.subpaths.len -= 0;
     defer path.deinit();
 
     const dimensions = core.DimensionsU32{
