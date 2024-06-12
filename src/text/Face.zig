@@ -2,6 +2,7 @@ const std = @import("std");
 const table = @import("./table/table.zig");
 const util = @import("./util.zig");
 const text = @import("./root.zig");
+const core = @import("../core/root.zig");
 const GlyphPen = @import("./GlyphPen.zig");
 const GlyphBuilder = @import("./GlyphBuilder.zig");
 const mem = std.mem;
@@ -14,6 +15,9 @@ const Offset32 = util.Offset32;
 const Transform = util.Transform;
 const Tables = table.Tables;
 const RawTables = table.RawTables;
+const RectF32 = core.RectF32;
+const TransformF32 = core.TransformF32;
+const PointF32 = core.PointF32;
 
 const VariableCoordinates = struct {};
 const Unmanaged = struct {
@@ -66,16 +70,28 @@ pub const Face = struct {
         return try file.readToEndAlloc(allocator, stat.size);
     }
 
-    pub fn outline(self: Face, glyph_id: GlyphId, pen: GlyphPen) !void {
+    pub fn outline(self: Face, glyph_id: GlyphId, points: f32, pen: GlyphPen) !RectF32 {
         var builder = GlyphBuilder.create(
             null,
-            self.unmanaged.tables.head.units_per_em,
             Transform{},
             pen,
         );
 
         if (self.unmanaged.tables.glyf) |glyf| {
-            try glyf.outline(glyph_id, &builder);
+            const units_per_em: f32 = @floatFromInt(self.unmanaged.tables.head.units_per_em);
+            const bounds = try glyf.outline(glyph_id, points, &builder);
+            const transform = TransformF32{
+                .scale = PointF32{
+                    .x = points / units_per_em,
+                    .y = points / units_per_em,
+                },
+                .translate = PointF32{
+                    .x = -bounds.min.x,
+                    .y = -bounds.min.y,
+                },
+            };
+            builder.pen.transform(transform);
+            return bounds.transform(transform);
         } else {
             return error.InvalidFace;
         }
@@ -83,8 +99,6 @@ pub const Face = struct {
 };
 
 test "parsing roboto medium" {
-    const TextOutliner = @import("./TextOutliner.zig");
-
     var rm_face = try Face.initFile(std.testing.allocator, "fixtures/fonts/roboto-medium.ttf");
     defer rm_face.deinit();
 
@@ -92,7 +106,7 @@ test "parsing roboto medium" {
     const family = (try name_table.getNameAlloc(std.testing.allocator, .family)).?;
     defer std.testing.allocator.free(family);
 
-    const outliner = TextOutliner.Debug.Instance;
+    const outliner = GlyphPen.Debug.Instance;
     const bounds = try rm_face.unmanaged.tables.glyf.?.outline(48, outliner);
     _ = bounds;
 

@@ -3,8 +3,10 @@ const core = @import("../core/root.zig");
 const util = @import("./util.zig");
 const GlyphPen = @import("./GlyphPen.zig");
 const RectF32 = core.RectF32;
+const DimensionsF32 = core.DimensionsF32;
 const PointF32 = core.PointF32;
 const Transform = util.Transform;
+const TransformF32 = core.TransformF32;
 
 const EMPTY_BOUNDS: RectF32 = RectF32{
     .min = PointF32{
@@ -18,7 +20,6 @@ const EMPTY_BOUNDS: RectF32 = RectF32{
 };
 
 pen: GlyphPen,
-ppem: f32,
 bounds: RectF32,
 transform: Transform,
 is_default_transform: bool,
@@ -26,12 +27,11 @@ first_on_curve: ?PointF32,
 first_off_curve: ?PointF32,
 last_off_curve: ?PointF32,
 
-pub fn create(bounds: ?RectF32, ppem: f32, transform: Transform, pen: GlyphPen) @This() {
+pub fn create(bounds: ?RectF32, transform: Transform, pen: GlyphPen) @This() {
     const bounds2 = bounds orelse EMPTY_BOUNDS;
 
     return @This(){
         .pen = pen,
-        .ppem = ppem,
         .bounds = bounds2,
         .transform = transform,
         .is_default_transform = transform.isDefault(),
@@ -48,7 +48,7 @@ pub fn moveTo(self: *@This(), point: PointF32) void {
     }
 
     self.bounds = self.bounds.extendBy(point2);
-    self.outliner.moveTo(point2);
+    self.pen.moveTo(point2);
 }
 
 pub fn lineTo(self: *@This(), end: PointF32) void {
@@ -58,7 +58,7 @@ pub fn lineTo(self: *@This(), end: PointF32) void {
     }
 
     self.bounds = self.bounds.extendBy(end2);
-    self.outliner.lineTo(end2);
+    self.pen.lineTo(end2);
 }
 
 pub fn quadTo(self: *@This(), end: PointF32, control: PointF32) void {
@@ -70,11 +70,7 @@ pub fn quadTo(self: *@This(), end: PointF32, control: PointF32) void {
     }
 
     self.bounds = self.bounds.extendBy(end2).extendBy(control2);
-    self.outliner.quadTo(end2, control2);
-}
-
-pub fn finish(self: *@This()) void {
-    self.outliner.finish(self.bounds);
+    self.pen.quadTo(end2, control2);
 }
 
 pub fn getBounds(self: @This()) RectF32 {
@@ -89,7 +85,7 @@ pub fn pushPoint(self: *@This(), point: PointF32, on_curve_point: bool, last_poi
     if (self.first_on_curve == null) {
         if (on_curve_point) {
             self.first_on_curve = point;
-            self.moveTo(point.x, point.y);
+            self.moveTo(point);
         } else {
             if (self.first_off_curve) |off_curve| {
                 const mid = off_curve.lerp(point, 0.5);

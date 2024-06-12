@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
+const TransformF32 = core.TransformF32;
 
 const GlyphPen = @This();
 
@@ -28,8 +29,8 @@ pub fn close(self: @This()) void {
     self.vtable.close(self.ptr);
 }
 
-pub fn finish(self: @This(), bounds: RectF32) void {
-    self.vtable.finish(self.ptr, bounds);
+pub fn transform(self: @This(), t: TransformF32) void {
+    self.vtable.transform(self.ptr, t);
 }
 
 pub const VTable = struct {
@@ -38,7 +39,7 @@ pub const VTable = struct {
     quadTo: *const fn (ctx: *anyopaque, end: PointF32, control: PointF32) void,
     curveTo: *const fn (ctx: *anyopaque, end: PointF32, control1: PointF32, control2: PointF32) void,
     close: *const fn (ctx: *anyopaque) void,
-    finish: *const fn (ctx: *anyopaque, bounds: RectF32) void,
+    transform: *const fn (ctx: *anyopaque, t: TransformF32) void,
 };
 
 pub const Debug = struct {
@@ -48,7 +49,7 @@ pub const Debug = struct {
         .quadTo = Debug.quadTo,
         .curveTo = Debug.curveTo,
         .close = Debug.close,
-        .finish = Debug.finish,
+        .transform = Debug.transform,
     };
 
     pub const Instance = GlyphPen{
@@ -76,7 +77,7 @@ pub const Debug = struct {
         std.debug.print("Outliner.Debug.close()\n", .{});
     }
 
-    pub fn finish(_: *anyopaque, bounds: RectF32) void {
-        std.debug.print("Outliner.Debug.finish({})\n", .{bounds});
+    pub fn transform(_: *anyopaque, t: TransformF32) void {
+        std.debug.print("Outliner.Debug.transform({})\n", .{t});
     }
 };

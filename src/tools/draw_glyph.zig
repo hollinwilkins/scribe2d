@@ -33,8 +33,8 @@ pub fn main() !void {
     defer pen.deinit();
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
-    _ = try face.unmanaged.tables.glyf.?.outline(glyph_id, text.TextOutliner.Debug.Instance);
-    const aspect_ratio = try face.unmanaged.tables.glyf.?.outline(glyph_id, pen.textOutliner());
+    _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
+    const bounds = try face.outline(glyph_id, @floatFromInt(size), pen.glyphPen());
     var path = try pen.createPathAlloc(allocator);
     path.unmanaged.subpaths.len -= 0;
     defer path.deinit();
@@ -52,8 +52,8 @@ pub fn main() !void {
             .y = 0,
         },
         .max = core.PointU32{
-            .x = @intFromFloat(@as(f64, @floatFromInt(dimensions.height)) * aspect_ratio),
-            .y = dimensions.height,
+            .x = @intFromFloat(@ceil(bounds.getWidth())),
+            .y = @intFromFloat(@ceil(bounds.getHeight())),
         },
     }).?;
 

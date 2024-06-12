@@ -193,6 +193,13 @@ pub fn Rect(comptime T: type) type {
             };
         }
 
+        pub fn transform(self: @This(), t: Transform(T)) @This() {
+            return @This(){
+                .min = t.apply(self.min),
+                .max = t.apply(self.max),
+            };
+        }
+
         pub fn fitsInside(self: @This(), other: @This()) bool {
             return self.getDimensions().fitsInside(other.getDimensions());
         }

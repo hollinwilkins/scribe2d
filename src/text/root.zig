@@ -1,6 +1,6 @@
 const language = @import("./language.zig");
 const face = @import("./face.zig");
-pub const TextOutliner = @import("./TextOutliner.zig");
+pub const GlyphPen = @import("./GlyphPen.zig");
 
 pub const Face = face.Face;
 pub const Language = language.Language;

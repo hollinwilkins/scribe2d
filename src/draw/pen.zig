@@ -55,9 +55,11 @@ pub const Pen = struct {
             };
         }
 
-        fn finish(ctx: *anyopaque, bounds: RectF32) void {
-            var po = @as(*Pen, @alignCast(@ptrCast(ctx)));
-            po.finish(bounds);
+        fn transform(ctx: *anyopaque, t: TransformF32) void {
+            const po = @as(*Pen, @alignCast(@ptrCast(ctx)));
+            for (po.curves.items) |*curve| {
+                curve.* = curve.transform(t);
+            }
         }
     };
 
@@ -67,7 +69,7 @@ pub const Pen = struct {
         .quadTo = GlyphPenFunctions.quadTo,
         .curveTo = GlyphPenFunctions.curveTo,
         .close = GlyphPenFunctions.close,
-        .finish = GlyphPenFunctions.finish,
+        .transform = GlyphPenFunctions.transform,
     };
 
     subpaths: SubpathsList,
@@ -89,10 +91,10 @@ pub const Pen = struct {
         self.curves.deinit();
     }
 
-    pub fn textOutliner(self: *@This()) text.TextOutliner {
-        return text.TextOutliner{
+    pub fn glyphPen(self: *@This()) text.GlyphPen {
+        return text.GlyphPen{
             .ptr = self,
-            .vtable = &GlyphPenFunctions,
+            .vtable = &GlyphPenVTable,
         };
     }
 
@@ -112,10 +114,12 @@ pub const Pen = struct {
 
     pub fn nextSubpath(self: *@This()) !void {
         const ao = try self.subpaths.addOne();
-        ao.* = Subpath{ .curve_offsets = RangeU32{
-            .start = @intCast(self.curves.items.len),
-            .end = @intCast(self.curves.items.len),
-        } };
+        ao.* = Subpath{
+            .curve_offsets = RangeU32{
+                .start = @intCast(self.curves.items.len),
+                .end = @intCast(self.curves.items.len),
+            },
+        };
     }
 
     pub fn moveTo(self: *@This(), point: PointF32) !void {
@@ -186,23 +190,6 @@ pub const Pen = struct {
 
         if (self.curves.items.len > 0) {
             self.curves.items[self.curves.items.len - 1].end_curve = true;
-        }
-    }
-
-    pub fn finish(self: *@This(), bounds: RectF32) void {
-        const transform = TransformF32{
-            .scale = PointF32{
-                .x = 1.0 / bounds.getWidth(),
-                .y = 1.0 / bounds.getHeight(),
-            },
-            .translate = PointF32{
-                .y = -bounds.min.y,
-                .x = -bounds.min.x,
-            },
-        };
-
-        for (self.curves.items) |*curve| {
-            curve.* = curve.transform(transform);
         }
     }
 };

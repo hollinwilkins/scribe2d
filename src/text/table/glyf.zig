@@ -29,11 +29,11 @@ pub const Table = struct {
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, builder: *GlyphBuilder) Error!void {
+    pub fn outline(self: Table, glyph_id: GlyphId, points: f32, builder: *GlyphBuilder) Error!RectF32 {
+        _ = points;
         const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
-        const aspect_ratio = try self.outlineImpl(glyph_data, 0, &builder);
-        builder.finish();
-        return aspect_ratio;
+        try self.outlineImpl(glyph_data, 0, builder);
+        return builder.getBounds();
     }
 
     pub fn get(self: Table, glyph_id: GlyphId) ?[]const u8 {
@@ -81,7 +81,7 @@ pub const Table = struct {
                 if (self.loca.glyphRange(info.glyph_id)) |range| {
                     const glyph_data = self.data[range.start..range.end];
                     const transform = builder.transform.combine(info.transform);
-                    var b = GlyphBuilder.create(builder.bounds, builder.ppem, transform, builder.pen);
+                    var b = GlyphBuilder.create(builder.bounds, transform, builder.pen);
                     _ = try self.outlineImpl(glyph_data, depth + 1, &b);
 
                     // Take updated bounds
