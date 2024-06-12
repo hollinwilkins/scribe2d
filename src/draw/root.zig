@@ -17,6 +17,7 @@ pub const Rasterizer = raster.Rasterizer;
 
 pub const Color = texture.Color;
 pub const Texture = texture.Texture;
+pub const TextureUnmanaged = texture.TextureUnmanaged;
 pub const TextureFormat = texture.TextureFormat;
 pub const TextureCodec = texture.TextureCodec;
 pub const ColorCodec = texture.ColorCodec;
