@@ -90,8 +90,30 @@ pub const Face = struct {
                     .y = -bounds.min.y,
                 },
             };
+            const bounds2 = bounds.transform(transform);
+
             builder.pen.transform(transform);
-            return bounds.transform(transform);
+            builder.pen.transform(TransformF32{
+                .scale = PointF32{
+                    .x = 1.0,
+                    .y = -1.0,
+                },
+                .translate = PointF32{
+                    .x = 0.0,
+                    .y = -(bounds2.getHeight() / 2.0),
+                }
+            });
+            builder.pen.transform(TransformF32{
+                .scale = PointF32{
+                    .x = 1.0,
+                    .y = 1.0,
+                },
+                .translate = PointF32{
+                    .x = 0.0,
+                    .y = bounds2.getHeight() / 2.0,
+                }
+            });
+            return bounds2;
         } else {
             return error.InvalidFace;
         }

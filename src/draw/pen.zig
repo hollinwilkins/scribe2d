@@ -154,7 +154,7 @@ pub const Pen = struct {
         self.location = point;
     }
 
-    pub fn quadTo(self: *@This(), point: PointF32, control: PointF32) !void {
+    pub fn quadTo(self: *@This(), end: PointF32, control: PointF32) !void {
         if (self.start == null) {
             self.start = self.location;
             try self.nextSubpath();
@@ -167,14 +167,14 @@ pub const Pen = struct {
             .curve_fn = CurveFn{
                 .quadratic_bezier = QuadraticBezier{
                     .start = self.location,
-                    .end = point,
+                    .end = end,
                     .control = control,
                 },
             },
         };
 
         (try self.currentSubpath()).curve_offsets.end += 1;
-        self.location = point;
+        self.location = end;
     }
 
     /// Closes the current subpath, if there is one

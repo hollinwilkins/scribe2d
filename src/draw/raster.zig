@@ -368,12 +368,6 @@ pub const Raster = struct {
         _ = self;
         var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
-        const pixel_view_dimensions = raster_data.getView().getDimensions();
-        const scaled_pixel_dimensions = DimensionsF32{
-            .width = @floatFromInt(pixel_view_dimensions.width),
-            .height = @floatFromInt(pixel_view_dimensions.height),
-        };
-
         for (raster_data.getSubpaths()) |subpath| {
             for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index_offset| {
                 const curve_index: u32 = @intCast(subpath.curve_offsets.start + curve_index_offset);
@@ -381,7 +375,7 @@ pub const Raster = struct {
                     .start = @intCast(raster_data.getGridIntersections().len),
                     .end = @intCast(raster_data.getGridIntersections().len),
                 };
-                const scaled_curve = curve.invertY().scale(scaled_pixel_dimensions);
+                const scaled_curve = curve; //.invertY().scale(scaled_pixel_dimensions);
                 const scaled_curve_bounds = scaled_curve.getBounds();
 
                 // first virtual intersection
@@ -441,12 +435,18 @@ pub const Raster = struct {
                 grid_intersection_offsets.end = @intCast(raster_data.getGridIntersections().len);
 
                 // sort by t within a curve
+                const grid_intersections = raster_data.getGridIntersections()[grid_intersection_offsets.start..grid_intersection_offsets.end];
                 std.mem.sort(
                     GridIntersection,
-                    raster_data.getGridIntersections()[grid_intersection_offsets.start..grid_intersection_offsets.end],
+                    grid_intersections,
                     @as(u32, 0),
                     pixelIntersectionLessThan,
                 );
+
+                for (grid_intersections) |grid_intersection| {
+                    std.debug.assert(grid_intersection.pixel.x >= 0);
+                    std.debug.assert(grid_intersection.pixel.y >= 0);
+                }
 
                 // add curve record with offsets
                 (try raster_data.addCurveRecord()).* = CurveRecord{
@@ -516,6 +516,11 @@ pub const Raster = struct {
             }
         }
 
+        for (raster_data.getCurveFragments()) |curve_fragment| {
+            std.debug.assert(curve_fragment.pixel.x >= 0);
+            std.debug.assert(curve_fragment.pixel.y >= 0);
+        }
+
         // sort all curve fragments of all the subpaths by y ascending, x ascending
         std.mem.sort(
             CurveFragment,
@@ -562,6 +567,8 @@ pub const Raster = struct {
                     boundary_fragment.* = BoundaryFragment{
                         .pixel = curve_fragment.pixel,
                     };
+                    std.debug.assert(boundary_fragment.pixel.x >= 0);
+                    std.debug.assert(boundary_fragment.pixel.y >= 0);
                     boundary_fragment.main_ray_winding = main_ray_winding;
 
                     if (y_changing) {
@@ -610,7 +617,8 @@ pub const Raster = struct {
 
                 if (previous_boundary_fragment) |pbf| {
                     if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1) {
-                        (try raster_data.addSpan()).* = Span{
+                        const ao = try raster_data.addSpan();
+                        ao.* = Span{
                             .y = boundary_fragment.pixel.y,
                             .x_range = RangeI32{
                                 .start = pbf.pixel.x + 1,
@@ -619,6 +627,8 @@ pub const Raster = struct {
                             .winding = boundary_fragment.main_ray_winding,
                             .filled = boundary_fragment.main_ray_winding != 0,
                         };
+
+                        std.debug.assert(ao.y >= 0);
                     }
                 }
 
