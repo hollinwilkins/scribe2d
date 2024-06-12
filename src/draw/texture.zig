@@ -147,6 +147,7 @@ pub const SrgbaColorCodec = struct {
 
 pub const TextureCodec = struct {
     pub const RgbaU8: TextureCodec = RgbaU8TextureCodec.INSTANCE.textureCodec();
+    pub const RgbU8: TextureCodec = RgbU8TextureCodec.INSTANCE.textureCodec();
 
     ctx: *const anyopaque,
     vtable: *const VTable,
@@ -212,7 +213,62 @@ pub const RgbaU8TextureCodec = struct {
     };
 };
 
+pub const RgbU8TextureCodec = struct {
+    pub const INSTANCE: *const RgbU8TextureCodec = &RgbU8TextureCodec{};
+    const COLOR_BYTES: u32 = 3;
+    const TextureCodecVTable: *const TextureCodec.VTable = &TextureCodec.VTable{
+        .read = TextureCodecFunctions.read,
+        .write = TextureCodecFunctions.write,
+    };
+
+    pub fn write(color: Color, bytes: []u8) void {
+        std.debug.assert(bytes.len == COLOR_BYTES);
+
+        bytes[0] = @intFromFloat(color.r * @as(f32, @floatFromInt(std.math.maxInt(u8))));
+        bytes[1] = @intFromFloat(color.g * @as(f32, @floatFromInt(std.math.maxInt(u8))));
+        bytes[2] = @intFromFloat(color.b * @as(f32, @floatFromInt(std.math.maxInt(u8))));
+    }
+
+    pub fn read(bytes: []const u8) Color {
+        std.debug.assert(bytes.len == COLOR_BYTES);
+
+        return Color {
+            .r = @as(f32, @floatFromInt(bytes[0])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
+            .g = @as(f32, @floatFromInt(bytes[1])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
+            .b = @as(f32, @floatFromInt(bytes[2])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
+            .a = 1.0,
+        };
+    }
+
+    pub fn textureCodec(self: *const @This()) TextureCodec {
+        return TextureCodec{
+            .ctx = @ptrCast(self),
+            .vtable = TextureCodecVTable,
+        };
+    }
+
+    const TextureCodecFunctions = struct {
+        fn write(_: *const anyopaque, color: Color, bytes: []u8) void {
+            RgbU8TextureCodec.write(color, bytes);
+        }
+
+        fn read(_: *const anyopaque, bytes: []const u8) Color {
+            return RgbU8TextureCodec.read(bytes);
+        }
+    };
+};
+
 pub const TextureFormat = struct {
+    pub const RgbU8: *const @This() = &@This() {
+        .color_bytes = 3,
+        .codec = TextureCodec.RgbU8,
+        .color_codec = ColorCodec.Rgba,
+    };
+    pub const SrgbU8: *const @This() = &@This() {
+        .color_bytes = 3,
+        .codec = TextureCodec.RgbU8,
+        .color_codec = ColorCodec.Srgba,
+    };
     pub const RgbaU8: *const @This() = &@This() {
         .color_bytes = 4,
         .codec = TextureCodec.RgbaU8,

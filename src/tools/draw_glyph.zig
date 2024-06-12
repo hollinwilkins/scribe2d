@@ -125,14 +125,14 @@ pub fn main() !void {
     var image = try zstbi.Image.createEmpty(
         dimensions.width,
         dimensions.height,
-        4,
+        3,
         .{},
     );
     defer image.deinit();
 
     var texture = draw.TextureUnmanaged{
         .dimensions = dimensions,
-        .format = draw.TextureFormat.SrgbaU8,
+        .format = draw.TextureFormat.SrgbU8,
         .bytes = image.data,
     };
 
