@@ -11,9 +11,10 @@ const color = @import("./color.zig");
 
 pub const Pen = pen.Pen;
 pub const Path = path.Path;
+pub const PathBuilder = path.PathBuilder;
 pub const Segment = path.Segment;
 
-pub const Raster = raster.Raster;
+pub const Rasterizer = raster.Rasterizer;
 
 pub const UnmanagedTextureRgba = texture.UnmanagedTextureRgba;
 pub const UnmanagedTextureMonotone = texture.UnmanagedTextureMonotone;

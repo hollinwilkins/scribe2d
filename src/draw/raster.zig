@@ -336,24 +336,24 @@ pub const Span = struct {
     filled: bool = false,
 };
 
-pub const Raster = struct {
+pub const Rasterizer = struct {
     const BitmaskTexture = UnmanagedTexture(u16);
 
     allocator: Allocator,
     half_planes: HalfPlanesU16,
 
-    pub fn init(allocator: Allocator) !Raster {
-        return Raster{
+    pub fn init(allocator: Allocator) !Rasterizer {
+        return Rasterizer{
             .allocator = allocator,
             .half_planes = try HalfPlanesU16.create(allocator, &msaa.UV_SAMPLE_COUNT_16),
         };
     }
 
-    pub fn deinit(self: *Raster) void {
+    pub fn deinit(self: *Rasterizer) void {
         self.half_planes.deinit();
     }
 
-    pub fn rasterizeDebug(self: *Raster, path: *const Path, view: *TextureViewRgba) !RasterData {
+    pub fn rasterizeDebug(self: *Rasterizer, path: *const Path, view: *TextureViewRgba) !RasterData {
         var raster_data = RasterData.init(self.allocator, path, view);
         errdefer raster_data.deinit();
 
@@ -364,7 +364,7 @@ pub const Raster = struct {
         return raster_data;
     }
 
-    pub fn populateGridIntersections(self: *Raster, raster_data: *RasterData) !void {
+    pub fn populateGridIntersections(self: *Rasterizer, raster_data: *RasterData) !void {
         _ = self;
         var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
@@ -546,7 +546,7 @@ pub const Raster = struct {
         }
     }
 
-    pub fn populateBoundaryFragments(self: *Raster, raster_data: *RasterData) !void {
+    pub fn populateBoundaryFragments(self: *Rasterizer, raster_data: *RasterData) !void {
         {
             const first_curve_fragment = &raster_data.getCurveFragments()[0];
             var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();

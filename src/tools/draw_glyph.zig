@@ -29,13 +29,13 @@ pub fn main() !void {
         std.debug.print("Table: {s}\n", .{table.tag.toBytes()});
     }
 
-    var pen = try draw.Pen.init(allocator);
-    defer pen.deinit();
+    var builder = try draw.PathBuilder.init(allocator);
+    defer builder.deinit();
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
-    const bounds = try face.outline(glyph_id, @floatFromInt(size), pen.glyphPen());
-    var path = try pen.createPathAlloc(allocator);
+    const bounds = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
+    var path = try builder.createPathAlloc(allocator);
     path.unmanaged.subpaths.len -= 0;
     defer path.deinit();
 
@@ -57,16 +57,16 @@ pub fn main() !void {
         },
     }).?;
 
-    var raster = try draw.Raster.init(allocator);
-    defer raster.deinit();
+    var rasterizer = try draw.Rasterizer.init(allocator);
+    defer rasterizer.deinit();
 
-    var raster_data = try raster.rasterizeDebug(&path, &texture_view);
+    var raster_data = try rasterizer.rasterizeDebug(&path, &texture_view);
     defer raster_data.deinit();
 
     // output curves
     std.debug.print("\n", .{});
     std.debug.print("Curves:\n", .{});
-    std.debug.print("OFFSETS2: {}\n", .{pen.subpaths.items[0].curve_offsets});
+    std.debug.print("OFFSETS2: {}\n", .{builder.subpaths.items[0].curve_offsets});
     for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
         for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
             std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve.curve_fn });
