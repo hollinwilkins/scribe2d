@@ -100,11 +100,6 @@ pub const Table = struct {
             return 0.0;
         }
 
-        // important for left side bearing offsetting
-        // if this assertion ever breaks, we will need to return the original bounds.min.x
-        // along with aspect ratio for positioning glyphs in a string properly
-        // std.debug.assert(builder.bounds.min.x == @as(f32, @floatFromInt(bounds.min.x)));
-
         return builder.bounds.getAspectRatio();
     }
 
