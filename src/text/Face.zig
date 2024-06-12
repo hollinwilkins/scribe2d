@@ -1,12 +1,17 @@
 const std = @import("std");
 const table = @import("./table/table.zig");
 const util = @import("./util.zig");
+const text = @import("./root.zig");
+const GlyphPen = @import("./GlyphPen.zig");
+const GlyphBuilder = @import("./GlyphBuilder.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const GlyphId = text.GlyphId;
 const Rect = util.RectI16;
 const Magic = util.Magic;
 const Reader = util.Reader;
 const Offset32 = util.Offset32;
+const Transform = util.Transform;
 const Tables = table.Tables;
 const RawTables = table.RawTables;
 
@@ -59,6 +64,21 @@ pub const Face = struct {
         // Read the file into a buffer.
         const stat = try file.stat();
         return try file.readToEndAlloc(allocator, stat.size);
+    }
+
+    pub fn outline(self: Face, glyph_id: GlyphId, pen: GlyphPen) !void {
+        var builder = GlyphBuilder.create(
+            null,
+            self.unmanaged.tables.head.units_per_em,
+            Transform{},
+            pen,
+        );
+
+        if (self.unmanaged.tables.glyf) |glyf| {
+            try glyf.outline(glyph_id, &builder);
+        } else {
+            return error.InvalidFace;
+        }
     }
 };
 

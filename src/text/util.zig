@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const mem = std.mem;
+const PointF32 = core.PointF32;
 
 pub const Reader = struct {
     cursor: usize,
@@ -118,11 +119,11 @@ pub const Transform = struct {
         return std.meta.eql(self, Transform{});
     }
 
-    pub fn applyTo(self: Transform, x: *f32, y: *f32) void {
-        const tx = x.*;
-        const ty = y.*;
-        x.* = self.a * tx + self.c * ty + self.e;
-        y.* = self.b * tx + self.d * ty + self.f;
+    pub fn apply(self: Transform, point: PointF32) PointF32 {
+        return PointF32{
+            .x = self.a * point.x + self.c * point.y + self.e,
+            .y = self.b * point.x + self.d * point.y + self.f,
+        };
     }
 
     pub fn combine(self: Transform, other: Transform) Transform {

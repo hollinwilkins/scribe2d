@@ -3,7 +3,7 @@ const text = @import("../root.zig");
 const util = @import("../util.zig");
 const core = @import("../../core/root.zig");
 const loca = @import("./loca.zig");
-const TextOutliner = @import("../TextOutliner.zig");
+const GlyphBuilder = @import("../GlyphBuilder.zig");
 const Error = text.Error;
 const GlyphId = text.GlyphId;
 const LazyIntArray = util.LazyIntArray;
@@ -29,17 +29,7 @@ pub const Table = struct {
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, outliner: TextOutliner) Error!f64 {
-        var builder = Builder.create(RectF32{
-            .min = PointF32{
-                .x = std.math.floatMax(f32),
-                .y = std.math.floatMax(f32),
-            },
-            .max = PointF32{
-                .x = std.math.floatMin(f32),
-                .y = std.math.floatMin(f32),
-            },
-        }, Transform{}, outliner);
+    pub fn outline(self: Table, glyph_id: GlyphId, builder: *GlyphBuilder) Error!void {
         const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
         const aspect_ratio = try self.outlineImpl(glyph_data, 0, &builder);
         builder.finish();
@@ -51,7 +41,7 @@ pub const Table = struct {
         return self.data[range.start..range.end];
     }
 
-    fn outlineImpl(self: Table, data: []const u8, depth: u8, builder: *Builder) Error!f64 {
+    fn outlineImpl(self: Table, data: []const u8, depth: u8, builder: *GlyphBuilder) Error!void {
         if (depth >= MAX_COMPONENTS) {
             return error.MaxDepthExceeded;
         }
@@ -74,8 +64,10 @@ pub const Table = struct {
                 var iter = &points_iterator_mut;
                 while (iter.next()) |point| {
                     builder.pushPoint(
-                        @as(f32, @floatFromInt(point.x)),
-                        @as(f32, @floatFromInt(point.y)),
+                        PointF32{
+                            .x = @as(f32, @floatFromInt(point.x)),
+                            .y = @as(f32, @floatFromInt(point.y)),
+                        },
                         point.on_curve_point,
                         point.last_point,
                     );
@@ -89,18 +81,14 @@ pub const Table = struct {
                 if (self.loca.glyphRange(info.glyph_id)) |range| {
                     const glyph_data = self.data[range.start..range.end];
                     const transform = builder.transform.combine(info.transform);
-                    var b = Builder.create(builder.bounds, transform, builder.outliner);
+                    var b = GlyphBuilder.create(builder.bounds, builder.ppem, transform, builder.pen);
                     _ = try self.outlineImpl(glyph_data, depth + 1, &b);
 
                     // Take updated bounds
                     builder.bounds = b.bounds;
                 }
             }
-        } else {
-            return 0.0;
         }
-
-        return builder.bounds.getAspectRatio();
     }
 
     fn parseSimpleOutline(glyph_data: []const u8, numberOfContours: u16) Error!?GlyphPoint.Iterator {
@@ -191,147 +179,38 @@ pub const CoordinatesLength = struct {
     y: u32,
 };
 
-pub const Builder = struct {
-    outliner: TextOutliner,
-    bounds: RectF32,
-    transform: Transform,
-    is_default_transform: bool,
-    first_on_curve: ?PointF32,
-    first_off_curve: ?PointF32,
-    last_off_curve: ?PointF32,
+pub const SimpleGlyphFlags = struct {
+    value: u8,
 
-    pub fn create(bounds: RectF32, transform: Transform, outliner: TextOutliner) Builder {
-        return Builder{
-            .outliner = outliner,
-            .bounds = bounds,
-            .transform = transform,
-            .is_default_transform = transform.isDefault(),
-            .first_on_curve = null,
-            .first_off_curve = null,
-            .last_off_curve = null,
+    pub fn onCurvePoint(self: SimpleGlyphFlags) bool {
+        return self.value & 0x01 != 0;
+    }
+
+    pub fn xShort(self: SimpleGlyphFlags) bool {
+        return self.value & 0x02 != 0;
+    }
+
+    pub fn yShort(self: SimpleGlyphFlags) bool {
+        return self.value & 0x04 != 0;
+    }
+
+    pub fn repeatFlag(self: SimpleGlyphFlags) bool {
+        return self.value & 0x08 != 0;
+    }
+
+    pub fn xIsSameOrPositiveShort(self: SimpleGlyphFlags) bool {
+        return self.value & 0x10 != 0;
+    }
+
+    pub fn yIsSameOrPositiveShort(self: SimpleGlyphFlags) bool {
+        return self.value & 0x20 != 0;
+    }
+
+    pub fn read(reader: *Reader) ?SimpleGlyphFlags {
+        const value = reader.read(u8) orelse return null;
+        return SimpleGlyphFlags{
+            .value = value,
         };
-    }
-
-    pub fn moveTo(self: *Builder, x: f32, y: f32) void {
-        var x_mut = x;
-        var y_mut = y;
-        if (!self.is_default_transform) {
-            self.transform.applyTo(&x_mut, &y_mut);
-        }
-
-        self.bounds = self.bounds.extendBy(PointF32{
-            .x = x_mut,
-            .y = y_mut,
-        });
-        self.outliner.moveTo(x_mut, y_mut);
-    }
-
-    pub fn lineTo(self: *Builder, x: f32, y: f32) void {
-        var x_mut = x;
-        var y_mut = y;
-        if (!self.is_default_transform) {
-            self.transform.applyTo(&x_mut, &y_mut);
-        }
-
-        self.bounds = self.bounds.extendBy(PointF32{
-            .x = x_mut,
-            .y = y_mut,
-        });
-        self.outliner.lineTo(x_mut, y_mut);
-    }
-
-    pub fn quadTo(self: *Builder, x1: f32, y1: f32, x: f32, y: f32) void {
-        var x1_mut = x1;
-        var y1_mut = y1;
-        var x_mut = x;
-        var y_mut = y;
-        if (!self.is_default_transform) {
-            self.transform.applyTo(&x1_mut, &y1_mut);
-            self.transform.applyTo(&x_mut, &y_mut);
-        }
-
-        self.bounds = self.bounds.extendBy(PointF32{
-            .x = x1_mut,
-            .y = y1_mut,
-        }).extendBy(PointF32{
-            .x = x_mut,
-            .y = y_mut,
-        });
-        self.outliner.quadTo(x1_mut, y1_mut, x_mut, y_mut);
-    }
-
-    pub fn finish(self: *Builder) void {
-        self.outliner.finish(self.bounds);
-    }
-
-    pub fn pushPoint(self: *Builder, x: f32, y: f32, on_curve_point: bool, last_point: bool) void {
-        const p = PointF32{
-            .x = x,
-            .y = y,
-        };
-
-        if (self.first_on_curve == null) {
-            if (on_curve_point) {
-                self.first_on_curve = p;
-                self.moveTo(p.x, p.y);
-            } else {
-                if (self.first_off_curve) |off_curve| {
-                    const mid = off_curve.lerp(p, 0.5);
-                    self.first_on_curve = mid;
-                    self.last_off_curve = p;
-                    self.moveTo(mid.x, mid.y);
-                } else {
-                    self.first_off_curve = p;
-                }
-            }
-        } else {
-            if (self.last_off_curve) |off_curve| {
-                if (on_curve_point) {
-                    self.last_off_curve = null;
-                    self.quadTo(off_curve.x, off_curve.y, p.x, p.y);
-                } else {
-                    self.last_off_curve = p;
-                    const mid = off_curve.lerp(p, 0.5);
-                    self.quadTo(off_curve.x, off_curve.y, mid.x, mid.y);
-                }
-            } else {
-                if (on_curve_point) {
-                    self.lineTo(p.x, p.y);
-                } else {
-                    self.last_off_curve = p;
-                }
-            }
-        }
-
-        if (last_point) {
-            self.finishContour();
-        }
-    }
-
-    fn finishContour(self: *Builder) void {
-        if (self.first_off_curve) |off_curve1| {
-            if (self.last_off_curve) |off_curve2| {
-                self.last_off_curve = null;
-                const mid = off_curve2.lerp(off_curve1, 0.5);
-                self.quadTo(off_curve2.x, off_curve2.y, mid.x, mid.y);
-            }
-        }
-
-        if (self.first_on_curve) |p| {
-            if (self.first_off_curve) |off_curve1| {
-                self.quadTo(off_curve1.x, off_curve1.y, p.x, p.y);
-            } else if (self.last_off_curve) |off_curve2| {
-                self.quadTo(off_curve2.x, off_curve2.y, p.x, p.y);
-            } else {
-                self.lineTo(p.x, p.y);
-            }
-
-            self.first_on_curve = null;
-            self.first_off_curve = null;
-            self.last_off_curve = null;
-
-            self.outliner.close();
-        }
     }
 };
 
@@ -366,41 +245,6 @@ pub const CompositeGlyphFlags = struct {
         const value = reader.readInt(u16) orelse return null;
 
         return CompositeGlyphFlags{
-            .value = value,
-        };
-    }
-};
-
-pub const SimpleGlyphFlags = struct {
-    value: u8,
-
-    pub fn onCurvePoint(self: SimpleGlyphFlags) bool {
-        return self.value & 0x01 != 0;
-    }
-
-    pub fn xShort(self: SimpleGlyphFlags) bool {
-        return self.value & 0x02 != 0;
-    }
-
-    pub fn yShort(self: SimpleGlyphFlags) bool {
-        return self.value & 0x04 != 0;
-    }
-
-    pub fn repeatFlag(self: SimpleGlyphFlags) bool {
-        return self.value & 0x08 != 0;
-    }
-
-    pub fn xIsSameOrPositiveShort(self: SimpleGlyphFlags) bool {
-        return self.value & 0x10 != 0;
-    }
-
-    pub fn yIsSameOrPositiveShort(self: SimpleGlyphFlags) bool {
-        return self.value & 0x20 != 0;
-    }
-
-    pub fn read(reader: *Reader) ?SimpleGlyphFlags {
-        const value = reader.read(u8) orelse return null;
-        return SimpleGlyphFlags{
             .value = value,
         };
     }

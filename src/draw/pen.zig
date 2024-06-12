@@ -22,29 +22,29 @@ pub const Pen = struct {
     const SubpathsList = std.ArrayList(Subpath);
     const CurvesList = std.ArrayList(Curve);
 
-    const TextOutlinerFunctions = struct {
-        fn moveTo(ctx: *anyopaque, x: f32, y: f32) void {
+    const GlyphPenFunctions = struct {
+        fn moveTo(ctx: *anyopaque, point: PointF32) void {
             var po = @as(*Pen, @alignCast(@ptrCast(ctx)));
-            po.moveTo(PointF32{ .x = x, .y = y }) catch {
+            po.moveTo(point) catch {
                 po.is_error = true;
             };
         }
 
-        fn lineTo(ctx: *anyopaque, x: f32, y: f32) void {
+        fn lineTo(ctx: *anyopaque, end: PointF32) void {
             var po = @as(*Pen, @alignCast(@ptrCast(ctx)));
-            po.lineTo(PointF32{ .x = x, .y = y }) catch {
+            po.lineTo(end) catch {
                 po.is_error = true;
             };
         }
 
-        fn quadTo(ctx: *anyopaque, x1: f32, y1: f32, x: f32, y: f32) void {
+        fn quadTo(ctx: *anyopaque, end: PointF32, control: PointF32) void {
             var po = @as(*Pen, @alignCast(@ptrCast(ctx)));
-            po.quadTo(PointF32{ .x = x, .y = y }, PointF32{ .x = x1, .y = y1 }) catch {
+            po.quadTo(end, control) catch {
                 po.is_error = true;
             };
         }
 
-        fn curveTo(_: *anyopaque, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {
+        fn curveTo(_: *anyopaque, _: PointF32, _: PointF32, _: PointF32) void {
             @panic("PathOutliner does not support curveTo\n");
         }
 
@@ -61,13 +61,13 @@ pub const Pen = struct {
         }
     };
 
-    pub const TextOutlinerVTable = .{
-        .moveTo = TextOutlinerFunctions.moveTo,
-        .lineTo = TextOutlinerFunctions.lineTo,
-        .quadTo = TextOutlinerFunctions.quadTo,
-        .curveTo = TextOutlinerFunctions.curveTo,
-        .close = TextOutlinerFunctions.close,
-        .finish = TextOutlinerFunctions.finish,
+    pub const GlyphPenVTable = .{
+        .moveTo = GlyphPenFunctions.moveTo,
+        .lineTo = GlyphPenFunctions.lineTo,
+        .quadTo = GlyphPenFunctions.quadTo,
+        .curveTo = GlyphPenFunctions.curveTo,
+        .close = GlyphPenFunctions.close,
+        .finish = GlyphPenFunctions.finish,
     };
 
     subpaths: SubpathsList,
@@ -92,7 +92,7 @@ pub const Pen = struct {
     pub fn textOutliner(self: *@This()) text.TextOutliner {
         return text.TextOutliner{
             .ptr = self,
-            .vtable = &TextOutlinerVTable,
+            .vtable = &GlyphPenFunctions,
         };
     }
 
