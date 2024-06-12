@@ -1,25 +1,21 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
-const texture_module = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
 const DimensionsU32 = core.DimensionsU32;
-const UnmanagedTexture = texture_module.UnmanagedTexture;
 const Line = curve.Line;
 
 const DEGREE_45: f32 = (2 * std.math.pi) / 8.0;
 
 pub fn HalfPlanes(comptime T: type) type {
-    const BitmaskTexture = UnmanagedTexture(T);
-
     return struct {
         allocator: Allocator,
-        half_planes: BitmaskTexture,
+        half_planes: []T,
         half_planes_mid_point: PointU32,
-        vertical_masks: []u16,
+        vertical_masks: []T,
 
         pub fn create(allocator: Allocator, points: []const PointF32) !@This() {
             const bit_size = @sizeOf(T) * 8;
@@ -154,8 +150,8 @@ pub fn createHalfPlanes(
     allocator: Allocator,
     points: []const PointF32,
     dimensions: DimensionsU32,
-) !UnmanagedTexture(T) {
-    var texture = try UnmanagedTexture(T).create(allocator, dimensions);
+) ![]T {
+    var texture = try allocator.alloc(T, dimensions.size());
     const origin = PointF32{
         .x = 0.5,
         .y = 0.5,
@@ -177,10 +173,8 @@ pub fn createHalfPlanes(
             mask = calculateHalfPlaneBitmask(T, n, c, points);
         }
 
-        texture.getPixel(PointU32{
-            .x = x,
-            .y = y,
-        }).?.* = mask;
+        const texture_index = y * dimensions.width + x;
+        texture[texture_index] = mask;
     }
 
     return texture;

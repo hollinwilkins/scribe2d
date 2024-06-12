@@ -2,11 +2,9 @@ const std = @import("std");
 const path_module = @import("./path.zig");
 const curve_module = @import("./curve.zig");
 const core = @import("../core/root.zig");
-const texture_module = @import("./texture.zig");
 const msaa = @import("./msaa.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const TextureViewRgba = texture_module.TextureViewRgba;
 const Path = path_module.Path;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
@@ -23,7 +21,6 @@ const Subpath = curve_module.Subpath;
 const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
-const UnmanagedTexture = texture_module.UnmanagedTexture;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
 pub const CurveRecord = struct {
@@ -39,18 +36,16 @@ pub const RasterData = struct {
 
     allocator: Allocator,
     path: *const Path,
-    view: *TextureViewRgba,
     curve_records: CurveRecordList = CurveRecordList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
     spans: SpanList = SpanList{},
 
-    pub fn init(allocator: Allocator, path: *const Path, view: *TextureViewRgba) RasterData {
+    pub fn init(allocator: Allocator, path: *const Path) RasterData {
         return RasterData{
             .allocator = allocator,
             .path = path,
-            .view = view,
         };
     }
 
@@ -64,10 +59,6 @@ pub const RasterData = struct {
 
     pub fn getPath(self: RasterData) *const Path {
         return self.path;
-    }
-
-    pub fn getView(self: *RasterData) *TextureViewRgba {
-        return self.view;
     }
 
     pub fn getSubpaths(self: RasterData) []const Subpath {
@@ -337,8 +328,6 @@ pub const Span = struct {
 };
 
 pub const Rasterizer = struct {
-    const BitmaskTexture = UnmanagedTexture(u16);
-
     allocator: Allocator,
     half_planes: HalfPlanesU16,
 
@@ -353,8 +342,8 @@ pub const Rasterizer = struct {
         self.half_planes.deinit();
     }
 
-    pub fn rasterizeDebug(self: *Rasterizer, path: *const Path, view: *TextureViewRgba) !RasterData {
-        var raster_data = RasterData.init(self.allocator, path, view);
+    pub fn rasterizeDebug(self: *Rasterizer, path: *const Path) !RasterData {
+        var raster_data = RasterData.init(self.allocator, path);
         errdefer raster_data.deinit();
 
         try self.populateGridIntersections(&raster_data);

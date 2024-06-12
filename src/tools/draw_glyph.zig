@@ -35,6 +35,7 @@ pub fn main() !void {
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     const bounds = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
+    _ = bounds;
     var path = try builder.createPathAlloc(allocator);
     path.unmanaged.subpaths.len -= 0;
     defer path.deinit();
@@ -44,23 +45,13 @@ pub fn main() !void {
         .height = size,
     };
 
-    var texture = try draw.UnmanagedTextureRgba.create(allocator, dimensions);
+    var texture = try draw.Texture.init(allocator, dimensions, draw.TextureFormat.SrgbaU8);
     defer texture.deinit(allocator);
-    var texture_view = texture.createView(core.RectU32{
-        .min = core.PointU32{
-            .x = 0,
-            .y = 0,
-        },
-        .max = core.PointU32{
-            .x = @intFromFloat(@ceil(bounds.getWidth())),
-            .y = @intFromFloat(@ceil(bounds.getHeight())),
-        },
-    }).?;
 
     var rasterizer = try draw.Rasterizer.init(allocator);
     defer rasterizer.deinit();
 
-    var raster_data = try rasterizer.rasterizeDebug(&path, &texture_view);
+    var raster_data = try rasterizer.rasterizeDebug(&path);
     defer raster_data.deinit();
 
     // output curves

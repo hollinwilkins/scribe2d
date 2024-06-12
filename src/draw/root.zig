@@ -16,8 +16,10 @@ pub const Segment = path.Segment;
 
 pub const Rasterizer = raster.Rasterizer;
 
-pub const UnmanagedTextureRgba = texture.UnmanagedTextureRgba;
-pub const UnmanagedTextureMonotone = texture.UnmanagedTextureMonotone;
+pub const Texture = texture.Texture;
+pub const TextureFormat = texture.TextureFormat;
+pub const TextureCodec = texture.TextureCodec;
+pub const ColorCodec = texture.ColorCodec;
 
 pub const Line = curve.Line;
 pub const QuadraticBezier = curve.QuadraticBezier;
