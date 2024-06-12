@@ -13,6 +13,7 @@ const DEGREE_45: f32 = (2 * std.math.pi) / 8.0;
 pub fn HalfPlanes(comptime T: type) type {
     return struct {
         allocator: Allocator,
+        half_planes_dimensions: DimensionsU32,
         half_planes: []T,
         half_planes_mid_point: PointU32,
         vertical_masks: []T,
@@ -20,12 +21,14 @@ pub fn HalfPlanes(comptime T: type) type {
         pub fn create(allocator: Allocator, points: []const PointF32) !@This() {
             const bit_size = @sizeOf(T) * 8;
 
+            const half_planes_dimensions = DimensionsU32{
+                .width = bit_size * 8 * 2,
+                .height = bit_size * 8 * 2,
+            };
             return @This(){
                 .allocator = allocator,
-                .half_planes = try createHalfPlanes(T, allocator, points, DimensionsU32{
-                    .width = bit_size * 8 * 2,
-                    .height = bit_size * 8 * 2,
-                }),
+                .half_planes_dimensions = half_planes_dimensions,
+                .half_planes = try createHalfPlanes(T, allocator, points, half_planes_dimensions),
                 .half_planes_mid_point = PointU32{
                     .x = bit_size * 8,
                     .y = bit_size * 8,
@@ -35,7 +38,7 @@ pub fn HalfPlanes(comptime T: type) type {
         }
 
         pub fn deinit(self: *@This()) void {
-            self.half_planes.deinit(self.allocator);
+            self.allocator.free(self.half_planes);
             self.allocator.free(self.vertical_masks);
         }
 
@@ -88,15 +91,16 @@ pub fn HalfPlanes(comptime T: type) type {
                     texel_coord = self.getTexelCoords(uv2);
                 }
 
-                return self.half_planes.getPixel(texel_coord).?.*;
+                const half_plane_index = texel_coord.y * self.half_planes_dimensions.width + texel_coord.x;
+                return self.half_planes[half_plane_index];
             } else {
                 return 0;
             }
         }
 
         pub fn getTexelCoords(self: @This(), uv: PointF32) PointU32 {
-            const float_width: f32 = @floatFromInt(self.half_planes.dimensions.width);
-            const float_height: f32 = @floatFromInt(self.half_planes.dimensions.height);
+            const float_width: f32 = @floatFromInt(self.half_planes_dimensions.width);
+            const float_height: f32 = @floatFromInt(self.half_planes_dimensions.height);
             const texel_x = std.math.clamp(
                 @round(uv.x * float_width),
                 0.0,
@@ -157,7 +161,7 @@ pub fn createHalfPlanes(
         .y = 0.5,
     };
 
-    for (0..texture.pixels.len) |index| {
+    for (0..texture.len) |index| {
         // x,y in middle of texel
         const x: u32 = @intCast(index % dimensions.width);
         const y: u32 = @intCast(index / dimensions.width);

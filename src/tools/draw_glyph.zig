@@ -46,7 +46,7 @@ pub fn main() !void {
     };
 
     var texture = try draw.Texture.init(allocator, dimensions, draw.TextureFormat.SrgbaU8);
-    defer texture.deinit(allocator);
+    defer texture.deinit();
 
     var rasterizer = try draw.Rasterizer.init(allocator);
     defer rasterizer.deinit();
@@ -123,30 +123,22 @@ pub fn main() !void {
     // }
 
     std.debug.print("\n============== Boundary Texture\n\n", .{});
-    var boundary_texture = try draw.UnmanagedTextureMonotone.create(allocator, core.DimensionsU32{
-        .width = dimensions.width + 2,
-        .height = dimensions.height + 2,
-    });
-    defer boundary_texture.deinit(allocator);
-    boundary_texture.clear(draw.Monotone{ .a = 0.0 });
-    var boundary_texture_view = boundary_texture.createView(core.RectU32.create(core.PointU32{
-        .x = 1,
-        .y = 1,
-    }, core.PointU32{
-        .x = dimensions.width + 1,
-        .y = dimensions.height + 1,
-    })).?;
+    var boundary_texture = try draw.Texture.init(allocator, dimensions, draw.TextureFormat.RgbaU8);
+    defer boundary_texture.deinit();
+
+    boundary_texture.clear(draw.Color{});
 
     for (raster_data.getBoundaryFragments()) |fragment| {
         // const pixel = fragment.getPixel();
         const pixel = fragment.pixel;
         if (pixel.x >= 0 and pixel.y >= 0) {
-            boundary_texture_view.getPixelUnsafe(core.PointU32{
+            const is_set = boundary_texture.setPixel(core.PointU32{
                 .x = @intCast(pixel.x),
                 .y = @intCast(pixel.y),
-            }).* = draw.Monotone{
+            }, draw.Color{
                 .a = fragment.getIntensity(),
-            };
+            });
+            std.debug.assert(is_set);
         }
     }
 
@@ -154,19 +146,26 @@ pub fn main() !void {
         for (0..span.x_range.size()) |x_offset| {
             if (span.filled) {
                 const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
-                boundary_texture_view.getPixelUnsafe(core.PointU32{
+                const is_set = boundary_texture.setPixel(core.PointU32{
                     .x = @intCast(x),
                     .y = @intCast(span.y),
-                }).* = draw.Monotone{
+                }, draw.Color{
                     .a = 1.0,
-                };
+                });
+
+                std.debug.assert(is_set);
             }
         }
     }
 
-    for (0..boundary_texture_view.view.getHeight()) |y| {
+    for (0..boundary_texture.dimensions.height) |y| {
         std.debug.print("{:0>4}: ", .{y});
-        for (boundary_texture_view.getRow(@intCast(y)).?) |pixel| {
+        for (0..boundary_texture.dimensions.height) |x| {
+            const pixel = boundary_texture.getPixelUnsafe(core.PointU32{
+                .x = @intCast(x),
+                .y = @intCast(y),
+            });
+
             if (pixel.a > 0.0) {
                 std.debug.print("#", .{});
             } else {
@@ -179,43 +178,43 @@ pub fn main() !void {
 
     std.debug.print("==============\n", .{});
 
-    zstbi.init(allocator);
-    defer zstbi.deinit();
+    // zstbi.init(allocator);
+    // defer zstbi.deinit();
 
-    var image = try zstbi.Image.createEmpty(
-        dimensions.width,
-        dimensions.height,
-        3,
-        .{},
-    );
-    defer image.deinit();
+    // var image = try zstbi.Image.createEmpty(
+    //     dimensions.width,
+    //     dimensions.height,
+    //     3,
+    //     .{},
+    // );
+    // defer image.deinit();
 
-    for (image.data) |*v| {
-        v.* = std.math.maxInt(u8);
-    }
+    // for (image.data) |*v| {
+    //     v.* = std.math.maxInt(u8);
+    // }
 
-    for (0..boundary_texture_view.getDimensions().height) |y| {
-        for (boundary_texture_view.getRow(@intCast(y)).?, 0..) |pixel, x| {
-            if (x == 127 and y == 64) {
-                std.debug.print("Intensity: {}\n", .{pixel.a});
-            }
-            const image_pixel = (y * image.bytes_per_row) + (x * image.num_components * image.bytes_per_component);
-            const value = std.math.maxInt(u8) - std.math.clamp(
-                @as(u8, @intFromFloat(@round(std.math.pow(f32, pixel.a, 1.0 / 2.2) * std.math.maxInt(u8)))),
-                0,
-                std.math.maxInt(u8),
-            );
-            // const value = std.math.maxInt(u8) - std.math.clamp(
-            //     @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
-            //     0,
-            //     std.math.maxInt(u8),
-            // );
-            // const value: u8 = if (pixel.a > 0.0) 0 else std.math.maxInt(u8);
-            image.data[image_pixel] = value;
-            image.data[image_pixel + 1] = value;
-            image.data[image_pixel + 2] = value;
-        }
-    }
+    // for (0..boundary_texture_view.getDimensions().height) |y| {
+    //     for (boundary_texture_view.getRow(@intCast(y)).?, 0..) |pixel, x| {
+    //         if (x == 127 and y == 64) {
+    //             std.debug.print("Intensity: {}\n", .{pixel.a});
+    //         }
+    //         const image_pixel = (y * image.bytes_per_row) + (x * image.num_components * image.bytes_per_component);
+    //         const value = std.math.maxInt(u8) - std.math.clamp(
+    //             @as(u8, @intFromFloat(@round(std.math.pow(f32, pixel.a, 1.0 / 2.2) * std.math.maxInt(u8)))),
+    //             0,
+    //             std.math.maxInt(u8),
+    //         );
+    //         // const value = std.math.maxInt(u8) - std.math.clamp(
+    //         //     @as(u8, @intFromFloat(@round(pixel.a * std.math.maxInt(u8)))),
+    //         //     0,
+    //         //     std.math.maxInt(u8),
+    //         // );
+    //         // const value: u8 = if (pixel.a > 0.0) 0 else std.math.maxInt(u8);
+    //         image.data[image_pixel] = value;
+    //         image.data[image_pixel + 1] = value;
+    //         image.data[image_pixel + 2] = value;
+    //     }
+    // }
 
-    try image.writeToFile("/tmp/output.png", .png);
+    // try image.writeToFile("/tmp/output.png", .png);
 }

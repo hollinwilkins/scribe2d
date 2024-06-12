@@ -6,10 +6,10 @@ const DimensionsU32 = core.DimensionsU32;
 const PointU32 = core.PointU32;
 
 pub const Color = struct {
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
+    r: f32 = 0.0,
+    g: f32 = 0.0,
+    b: f32 = 0.0,
+    a: f32 = 0.0,
 
     pub fn lerp(self: @This(), other: @This(), t: f32) @This() {
         return @This(){
@@ -49,7 +49,10 @@ pub const ColorCodec = struct {
 
 pub const RgbaColorCodec = struct {
     pub const INSTANCE: *const RgbaColorCodec = &RgbaColorCodec{};
-    pub const ColorCodecVTable: *const ColorCodec.VTable = &ColorCodecFunctions{};
+    pub const ColorCodecVTable: *const ColorCodec.VTable = &ColorCodec.VTable{
+        .fromRgba = ColorCodecFunctions.fromRgba,
+        .toRgba = ColorCodecFunctions.toRgba,
+    };
 
     pub fn toRgba(color: Color) Color {
         return color;
@@ -81,7 +84,10 @@ pub const SrgbaColorCodec = struct {
     pub const INSTANCE: *const SrgbaColorCodec = &SrgbaColorCodec.create(DEFAULT_GAMMA);
     pub const DEFAULT_GAMMA: f32 = 2.4;
     pub const DEFAULT: SrgbaColorCodec = SrgbaColorCodec.create(DEFAULT_GAMMA);
-    pub const ColorCodecVTable: *const ColorCodec.VTable = &ColorCodecFunctions{};
+    pub const ColorCodecVTable: *const ColorCodec.VTable = &ColorCodec.VTable{
+        .fromRgba = ColorCodecFunctions.fromRgba,
+        .toRgba = ColorCodecFunctions.toRgba,
+    };
 
     gamma: f32,
     inverse_gamma: f32,
@@ -111,12 +117,12 @@ pub const SrgbaColorCodec = struct {
         };
     }
 
-    pub fn toLinear(self: *const @This(), component: f32) u8 {
-        return std.math.pow(component, self.gamma);
+    pub fn toLinear(self: *const @This(), component: f32) f32 {
+        return std.math.pow(f32, component, self.gamma);
     }
 
-    pub fn fromLinear(self: *const @This(), component: f32) u8 {
-        return std.math.pow(component, self.inverse_gamma);
+    pub fn fromLinear(self: *const @This(), component: f32) f32 {
+        return std.math.pow(f32, component, self.inverse_gamma);
     }
 
     pub fn colorCodec(self: *const @This()) ColorCodec {
@@ -163,7 +169,10 @@ pub const TextureCodec = struct {
 pub const RgbaU8TextureCodec = struct {
     pub const INSTANCE: *const RgbaU8TextureCodec = &RgbaU8TextureCodec{};
     const COLOR_BYTES: u32 = 4;
-    const TextureCodecVTable: *const TextureCodec.VTable = &TextureCodecFunctions{};
+    const TextureCodecVTable: *const TextureCodec.VTable = &TextureCodec.VTable{
+        .read = TextureCodecFunctions.read,
+        .write = TextureCodecFunctions.write,
+    };
 
     pub fn write(color: Color, bytes: []u8) void {
         std.debug.assert(bytes.len == COLOR_BYTES);
@@ -249,6 +258,62 @@ pub const Texture = struct {
         self.allocator.free(self.bytes);
     }
 
+    pub fn toUnmanaged(self: Texture) TextureUnmanaged {
+        return TextureUnmanaged{
+            .dimensions = self.dimensions,
+            .format = self.format,
+            .bytes = self.bytes,
+        };
+    }
+
+    pub fn clear(self: *@This(), color: Color) void {
+        var unmanaged = self.toUnmanaged();
+        unmanaged.clear(color);
+    }
+
+    pub fn getDimensions(self: @This()) DimensionsU32 {
+        return self.dimensions;
+    }
+
+    pub fn getBytes(self: @This()) []u8 {
+        return self.bytes;
+    }
+
+    pub fn getPixel(self: @This(), point: PointU32) ?Color {
+        return self.toUnmanaged().getPixel(point);
+    }
+
+    pub fn getPixelUnsafe(self: @This(), point: PointU32) Color {
+        return self.toUnmanaged().getPixelUnsafe(point);
+    }
+
+    pub fn setPixel(self: *@This(), point: PointU32, color: Color) bool {
+        var unmanaged = self.toUnmanaged();
+        return unmanaged.setPixel(point, color);
+    }
+};
+
+pub const TextureUnmanaged = struct {
+    dimensions: DimensionsU32,
+    format: *const TextureFormat,
+    bytes: []u8,
+
+    pub fn deinit(self: @This(), allocator: Allocator) void {
+        allocator.free(self.bytes);
+    }
+
+    pub fn clear(self: *@This(), color: Color) void {
+        for (0..self.dimensions.height) |y| {
+            for (0..self.dimensions.width) |x| {
+                const is_set = self.setPixel(PointU32{
+                    .x = @intCast(x),
+                    .y = @intCast(y),
+                }, color);
+                std.debug.assert(is_set);
+            }
+        }
+    }
+
     pub fn getDimensions(self: @This()) DimensionsU32 {
         return self.dimensions;
     }
@@ -259,11 +324,15 @@ pub const Texture = struct {
 
     pub fn getPixel(self: @This(), point: PointU32) ?Color {
         if (point.x < self.dimensions.width and point.y < self.dimensions.height) {
-            const index = (point.x * self.format.color_bytes) + (self.dimensions.width * self.format.color_bytes * point.y);
-            return self.format.read(self.bytes[index..index + self.format.color_bytes]);
+            return self.getPixelUnsafe(point);
         }
 
         return null;
+    }
+
+    pub fn getPixelUnsafe(self: @This(), point: PointU32) Color {
+        const index = (point.x * self.format.color_bytes) + (self.dimensions.width * self.format.color_bytes * point.y);
+        return self.format.read(self.bytes[index..index + self.format.color_bytes]);
     }
 
     pub fn setPixel(self: *@This(), point: PointU32, color: Color) bool {
