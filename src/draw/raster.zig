@@ -49,7 +49,7 @@ pub const RasterData = struct {
         };
     }
 
-    pub fn deinit(self: *RasterData) void {
+    pub fn deinit(self: *@This()) void {
         self.curve_records.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
         self.curve_fragments.deinit(self.allocator);
@@ -81,11 +81,11 @@ pub const RasterData = struct {
         return self.curve_fragments.items;
     }
 
-    pub fn getBoundaryFragments(self: *RasterData) []BoundaryFragment {
+    pub fn getBoundaryFragments(self: @This()) []BoundaryFragment {
         return self.boundary_fragments.items;
     }
 
-    pub fn getSpans(self: *RasterData) []Span {
+    pub fn getSpans(self: @This()) []Span {
         return self.spans.items;
     }
 
@@ -328,6 +328,10 @@ pub const Span = struct {
 };
 
 pub const Rasterizer = struct {
+    pub const Options = struct {
+        fill: bool,
+    };
+
     allocator: Allocator,
     half_planes: HalfPlanesU16,
 
@@ -342,18 +346,20 @@ pub const Rasterizer = struct {
         self.half_planes.deinit();
     }
 
-    pub fn rasterizeDebug(self: *Rasterizer, path: *const Path) !RasterData {
-        var raster_data = RasterData.init(self.allocator, path);
+    pub fn rasterize(self: @This(), path: Path, options: Options) !RasterData {
+        var raster_data = RasterData.init(self.allocator, &path);
         errdefer raster_data.deinit();
 
-        try self.populateGridIntersections(&raster_data);
-        try self.populateCurveFragments(&raster_data);
-        try self.populateBoundaryFragments(&raster_data);
+        if (options.fill) {
+            try self.populateGridIntersections(&raster_data);
+            try self.populateCurveFragments(&raster_data);
+            try self.populateBoundaryFragments(&raster_data);
+        }
 
         return raster_data;
     }
 
-    pub fn populateGridIntersections(self: *Rasterizer, raster_data: *RasterData) !void {
+    pub fn populateGridIntersections(self: @This(), raster_data: *RasterData) !void {
         _ = self;
         var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
@@ -461,7 +467,7 @@ pub const Rasterizer = struct {
         return false;
     }
 
-    pub fn populateCurveFragments(self: *@This(), raster_data: *RasterData) !void {
+    pub fn populateCurveFragments(self: @This(), raster_data: *RasterData) !void {
         _ = self;
 
         for (raster_data.getSubpaths()) |subpath| {
@@ -535,7 +541,7 @@ pub const Rasterizer = struct {
         }
     }
 
-    pub fn populateBoundaryFragments(self: *Rasterizer, raster_data: *RasterData) !void {
+    pub fn populateBoundaryFragments(self: @This(), raster_data: *RasterData) !void {
         {
             const first_curve_fragment = &raster_data.getCurveFragments()[0];
             var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();

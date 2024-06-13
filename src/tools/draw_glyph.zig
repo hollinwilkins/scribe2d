@@ -48,19 +48,6 @@ pub fn main() !void {
     var rasterizer = try draw.Rasterizer.init(allocator);
     defer rasterizer.deinit();
 
-    var raster_data = try rasterizer.rasterizeDebug(&path);
-    defer raster_data.deinit();
-
-    // output curves
-    std.debug.print("\n", .{});
-    std.debug.print("Curves:\n", .{});
-    std.debug.print("OFFSETS2: {}\n", .{builder.subpaths.items[0].curve_offsets});
-    for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
-        for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
-            std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve.curve_fn });
-        }
-    }
-
     // std.debug.print("\n", .{});
     // std.debug.print("Grid Intersections:\n", .{});
     // for (raster_data.getSubpaths(), 0..) |subpath, subpath_index| {
@@ -144,42 +131,14 @@ pub fn main() !void {
         .a = 1.0,
     });
 
-    for (raster_data.getBoundaryFragments()) |fragment| {
-        // const pixel = fragment.getPixel();
-        const pixel = fragment.pixel;
-        if (pixel.x >= 0 and pixel.y >= 0) {
-            const intensity = 1.0 - fragment.getIntensity();
-            const is_set = texture.setPixel(core.PointU32{
-                .x = @intCast(pixel.x),
-                .y = @intCast(pixel.y),
-            }, draw.Color{
-                .r = intensity,
-                .g = intensity,
-                .b = intensity,
-                .a = 1.0,
-            });
-            std.debug.assert(is_set);
-        }
-    }
-
-    for (raster_data.getSpans()) |span| {
-        for (0..span.x_range.size()) |x_offset| {
-            if (span.filled) {
-                const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
-                const is_set = texture.setPixel(core.PointU32{
-                    .x = @intCast(x),
-                    .y = @intCast(span.y),
-                }, draw.Color{
-                    .r = 0.0,
-                    .g = 0.0,
-                    .b = 0.0,
-                    .a = 1.0,
-                });
-
-                std.debug.assert(is_set);
-            }
-        }
-    }
+    var pen = draw.Pen.create(&rasterizer);
+    pen.setFillColor(draw.Color{
+        .r = 0.0,
+        .g = 0.0,
+        .b = 0.0,
+        .a = 1.0,
+    });
+    try pen.draw(path, &texture);
 
     for (0..texture.dimensions.height) |y| {
         std.debug.print("{:0>4}: ", .{y});
