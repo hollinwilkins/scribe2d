@@ -323,8 +323,6 @@ pub const BoundaryFragment = struct {
 pub const Span = struct {
     y: i32 = 0,
     x_range: RangeI32 = RangeI32{},
-    winding: f32 = 0.0,
-    filled: bool = false,
 };
 
 pub const Rasterizer = struct {
@@ -611,7 +609,7 @@ pub const Rasterizer = struct {
                 // });
 
                 if (previous_boundary_fragment) |pbf| {
-                    if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1) {
+                    if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1 and boundary_fragment.main_ray_winding != 0) {
                         const ao = try raster_data.addSpan();
                         ao.* = Span{
                             .y = boundary_fragment.pixel.y,
@@ -619,8 +617,6 @@ pub const Rasterizer = struct {
                                 .start = pbf.pixel.x + 1,
                                 .end = boundary_fragment.pixel.x,
                             },
-                            .winding = boundary_fragment.main_ray_winding,
-                            .filled = boundary_fragment.main_ray_winding != 0,
                         };
 
                         std.debug.assert(ao.y >= 0);

@@ -58,21 +58,17 @@ pub const Pen = struct {
                     };
                     const texture_color = texture.getPixelUnsafe(texture_pixel);
                     const blend_color = blend.blend(fragment_color, texture_color);
-                    const is_set = texture.setPixel(texture_pixel, blend_color);
-                    std.debug.assert(is_set);
+                    texture.setPixelUnsafe(texture_pixel, blend_color);
                 }
             }
 
             for (raster_data.getSpans()) |span| {
                 for (0..span.x_range.size()) |x_offset| {
-                    if (span.filled) {
                         const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
-                        const is_set = texture.setPixel(core.PointU32{
+                        texture.setPixelUnsafe(core.PointU32{
                             .x = @intCast(x),
                             .y = @intCast(span.y),
                         }, color);
-                        std.debug.assert(is_set);
-                    }
                 }
             }
         }

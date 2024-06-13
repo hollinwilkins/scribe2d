@@ -421,6 +421,11 @@ pub const Texture = struct {
         var unmanaged = self.toUnmanaged();
         return unmanaged.setPixel(point, color);
     }
+
+    pub fn setPixelUnsafe(self: *@This(), point: PointU32, color: Color) bool {
+        var unmanaged = self.toUnmanaged();
+        return unmanaged.setPixelUnsafe(point, color);
+    }
 };
 
 pub const TextureUnmanaged = struct {
@@ -467,11 +472,15 @@ pub const TextureUnmanaged = struct {
 
     pub fn setPixel(self: *@This(), point: PointU32, color: Color) bool {
         if (point.x < self.dimensions.width and point.y < self.dimensions.height) {
-            const index = (point.x * self.format.color_bytes) + (self.dimensions.width * self.format.color_bytes * point.y);
-            self.format.write(color, self.bytes[index..index + self.format.color_bytes]);
+            self.setPixelUnsafe(point, color);
             return true;
         }
 
         return false;
+    }
+
+    pub fn setPixelUnsafe(self: *@This(), point: PointU32, color: Color) void {
+        const index = (point.x * self.format.color_bytes) + (self.dimensions.width * self.format.color_bytes * point.y);
+        self.format.write(color, self.bytes[index..index + self.format.color_bytes]);
     }
 };
