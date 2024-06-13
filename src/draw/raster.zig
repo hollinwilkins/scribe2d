@@ -327,7 +327,26 @@ pub const Span = struct {
 
 pub const Rasterizer = struct {
     pub const Options = struct {
-        fill: bool,
+        grid_intersections: bool = false,
+        curve_fragments: bool = false,
+        boundary_fragments: bool = false,
+        spans: bool = false,
+
+        pub fn isGridIntersectionsEnabled(self: @This()) bool {
+            return self.grid_intersections or self.curve_fragments or self.boundary_fragments or self.spans;
+        }
+
+        pub fn isCurveFragmentsEnabled(self: @This()) bool {
+            return self.curve_fragments or self.boundary_fragments or self.spans;
+        }
+
+        pub fn isBoundaryFragmentsEnabled(self: @This()) bool {
+            return self.boundary_fragments or self.spans;
+        }
+
+        pub fn isSpansEnabled(self: @This()) bool {
+            return self.spans;
+        }
     };
 
     allocator: Allocator,
@@ -348,10 +367,20 @@ pub const Rasterizer = struct {
         var raster_data = RasterData.init(self.allocator, &path);
         errdefer raster_data.deinit();
 
-        if (options.fill) {
+        if (options.isGridIntersectionsEnabled()) {
             try self.populateGridIntersections(&raster_data);
+        }
+
+        if (options.isCurveFragmentsEnabled()) {
             try self.populateCurveFragments(&raster_data);
+        }
+
+        if (options.isBoundaryFragmentsEnabled()) {
             try self.populateBoundaryFragments(&raster_data);
+        }
+
+        if (options.isSpansEnabled()) {
+            try self.populateSpans(&raster_data);
         }
 
         return raster_data;
@@ -575,7 +604,6 @@ pub const Rasterizer = struct {
 
         {
             const boundary_fragments = raster_data.getBoundaryFragments();
-            var previous_boundary_fragment: ?*BoundaryFragment = null;
             for (boundary_fragments) |*boundary_fragment| {
                 const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
 
@@ -607,24 +635,32 @@ pub const Rasterizer = struct {
                 //     boundary_fragment.pixel.y,
                 //     boundary_fragment.stencil_mask,
                 // });
-
-                if (previous_boundary_fragment) |pbf| {
-                    if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1 and boundary_fragment.main_ray_winding != 0) {
-                        const ao = try raster_data.addSpan();
-                        ao.* = Span{
-                            .y = boundary_fragment.pixel.y,
-                            .x_range = RangeI32{
-                                .start = pbf.pixel.x + 1,
-                                .end = boundary_fragment.pixel.x,
-                            },
-                        };
-
-                        std.debug.assert(ao.y >= 0);
-                    }
-                }
-
-                previous_boundary_fragment = boundary_fragment;
             }
+        }
+    }
+
+    pub fn populateSpans(self: @This(), raster_data: *RasterData) !void {
+        _ = self;
+        const boundary_fragments = raster_data.getBoundaryFragments();
+        var previous_boundary_fragment: ?*BoundaryFragment = null;
+
+        for (boundary_fragments) |*boundary_fragment| {
+            if (previous_boundary_fragment) |pbf| {
+                if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1 and boundary_fragment.main_ray_winding != 0) {
+                    const ao = try raster_data.addSpan();
+                    ao.* = Span{
+                        .y = boundary_fragment.pixel.y,
+                        .x_range = RangeI32{
+                            .start = pbf.pixel.x + 1,
+                            .end = boundary_fragment.pixel.x,
+                        },
+                    };
+
+                    std.debug.assert(ao.y >= 0);
+                }
+            }
+
+            previous_boundary_fragment = boundary_fragment;
         }
     }
 

@@ -12,14 +12,21 @@ const AlphaColorBlend = texture_module.AlphaColorBlend;
 const Path = path_module.Path;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
-
-pub const Style = struct {
-    fill_color: ?Color = null,
-    blend: ?ColorBlend = null,
-};
+const RasterData = raster.RasterData;
 
 pub const Pen = struct {
     pub const DEFAULT_BLEND: ColorBlend = ColorBlend.Alpha;
+
+    pub const Stroke = struct {
+        color: Color,
+        width: f32,
+    };
+
+    pub const Style = struct {
+        fill_color: ?Color = null,
+        stroke: ?Stroke = null,
+        blend: ?ColorBlend = null,
+    };
 
     rasterizer: *const Rasterizer,
     style: Style = Style{},
@@ -35,48 +42,64 @@ pub const Pen = struct {
     }
 
     pub fn draw(self: @This(), path: Path, texture: *TextureUnmanaged) !void {
-        const blend = self.style.blend orelse DEFAULT_BLEND;
         const options = self.rasterizerOptions();
         var raster_data = try self.rasterizer.rasterize(path, options);
         defer raster_data.deinit();
 
-        if (options.fill) {
-            const color = self.style.fill_color.?;
-            for (raster_data.getBoundaryFragments()) |boundary_fragment| {
-                const pixel = boundary_fragment.pixel;
-                if (pixel.x >= 0 and pixel.y >= 0) {
-                    const intensity = boundary_fragment.getIntensity();
-                    const texture_pixel = PointU32{
-                        .x = @intCast(pixel.x),
-                        .y = @intCast(pixel.y),
-                    };
-                    const fragment_color = Color{
-                        .r = color.r,
-                        .g = color.g,
-                        .b = color.b,
-                        .a = color.a * intensity,
-                    };
-                    const texture_color = texture.getPixelUnsafe(texture_pixel);
-                    const blend_color = blend.blend(fragment_color, texture_color);
-                    texture.setPixelUnsafe(texture_pixel, blend_color);
-                }
-            }
+        if (self.style.fill_color) |color| {
+            self.drawFill(raster_data, texture, color);
+        }
 
-            for (raster_data.getSpans()) |span| {
-                for (0..span.x_range.size()) |x_offset| {
-                        const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
-                        texture.setPixelUnsafe(core.PointU32{
-                            .x = @intCast(x),
-                            .y = @intCast(span.y),
-                        }, color);
-                }
+        if (self.style.stroke) |stroke| {
+            self.drawStroke(raster_data, texture, stroke);
+        }
+    }
+
+    fn drawFill(self: @This(), raster_data: RasterData, texture: *TextureUnmanaged, color: Color) void {
+        const blend = self.style.blend orelse DEFAULT_BLEND;
+        for (raster_data.getBoundaryFragments()) |boundary_fragment| {
+            const pixel = boundary_fragment.pixel;
+            if (pixel.x >= 0 and pixel.y >= 0) {
+                const intensity = boundary_fragment.getIntensity();
+                const texture_pixel = PointU32{
+                    .x = @intCast(pixel.x),
+                    .y = @intCast(pixel.y),
+                };
+                const fragment_color = Color{
+                    .r = color.r,
+                    .g = color.g,
+                    .b = color.b,
+                    .a = color.a * intensity,
+                };
+                const texture_color = texture.getPixelUnsafe(texture_pixel);
+                const blend_color = blend.blend(fragment_color, texture_color);
+                texture.setPixelUnsafe(texture_pixel, blend_color);
+            }
+        }
+
+        for (raster_data.getSpans()) |span| {
+            for (0..span.x_range.size()) |x_offset| {
+                const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
+                texture.setPixelUnsafe(core.PointU32{
+                    .x = @intCast(x),
+                    .y = @intCast(span.y),
+                }, color);
             }
         }
     }
 
+    pub fn drawStroke(self: @This(), raster_data: RasterData, texture: *TextureUnmanaged, stroke: Stroke) void {
+        _ = self;
+        _ = raster_data;
+        _ = texture;
+        _ = stroke;
+    }
+
     fn rasterizerOptions(self: @This()) Rasterizer.Options {
         return Rasterizer.Options{
-            .fill = self.style.fill_color != null,
+            .curve_fragments = self.style.stroke != null,
+            .boundary_fragments = self.style.fill_color != null,
+            .spans = self.style.fill_color != null,
         };
     }
 };
