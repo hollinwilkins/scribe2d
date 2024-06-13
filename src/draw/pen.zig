@@ -7,15 +7,20 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const Rasterizer = raster.Rasterizer;
 const Color = texture_module.Color;
+const ColorBlend = texture_module.ColorBlend;
+const AlphaColorBlend = texture_module.AlphaColorBlend;
 const Path = path_module.Path;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 
 pub const Style = struct {
     fill_color: ?Color = null,
+    blend: ?ColorBlend = null,
 };
 
 pub const Pen = struct {
+    pub const DEFAULT_BLEND: ColorBlend = ColorBlend.Alpha;
+
     rasterizer: *const Rasterizer,
     style: Style = Style{},
 
@@ -30,6 +35,7 @@ pub const Pen = struct {
     }
 
     pub fn draw(self: @This(), path: Path, texture: *TextureUnmanaged) !void {
+        const blend = self.style.blend orelse DEFAULT_BLEND;
         const options = self.rasterizerOptions();
         var raster_data = try self.rasterizer.rasterize(path, options);
         defer raster_data.deinit();
@@ -39,11 +45,20 @@ pub const Pen = struct {
             for (raster_data.getBoundaryFragments()) |boundary_fragment| {
                 const pixel = boundary_fragment.pixel;
                 if (pixel.x >= 0 and pixel.y >= 0) {
-                    // const intensity = 1.0 - boundary_fragment.getIntensity();
-                    const is_set = texture.setPixel(PointU32{
+                    const intensity = boundary_fragment.getIntensity();
+                    const texture_pixel = PointU32{
                         .x = @intCast(pixel.x),
                         .y = @intCast(pixel.y),
-                    }, color);
+                    };
+                    const fragment_color = Color{
+                        .r = color.r,
+                        .g = color.g,
+                        .b = color.b,
+                        .a = color.a * intensity,
+                    };
+                    const texture_color = texture.getPixelUnsafe(texture_pixel);
+                    const blend_color = blend.blend(fragment_color, texture_color);
+                    const is_set = texture.setPixel(texture_pixel, blend_color);
                     std.debug.assert(is_set);
                 }
             }

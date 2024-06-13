@@ -258,6 +258,80 @@ pub const RgbU8TextureCodec = struct {
     };
 };
 
+pub const ColorBlend = struct {
+    pub const Alpha: ColorBlend = AlphaColorBlend.INSTANCE.colorBlend();
+    pub const Replace: ColorBlend = ReplaceColorBlend.INSTANCE.colorBlend();
+
+    ctx: *const anyopaque,
+    vtable: *const VTable,
+
+    pub fn blend(self: ColorBlend, color1: Color, color2: Color) Color {
+        return self.vtable.blend(self.ctx, color1, color2);
+    }
+
+    pub const VTable = struct {
+        blend: *const fn (ctx: *const anyopaque, color1: Color, color2: Color) Color,
+    };
+};
+
+pub const ReplaceColorBlend = struct {
+    pub const INSTANCE: *const ReplaceColorBlend = &ReplaceColorBlend{};
+    const ColorBlendVTable: *const ColorBlend.VTable = &ColorBlend.VTable{
+        .blend = ColorBlendFunctions.blend,
+    };
+
+    pub fn blend(color1: Color, _: Color) Color {
+        return color1;
+    }
+
+    pub fn colorBlend(self: *const ReplaceColorBlend) ColorBlend {
+        return ColorBlend{
+            .ctx = @ptrCast(self),
+            .vtable = ColorBlendVTable,
+        };
+    }
+
+    const ColorBlendFunctions = struct {
+        fn blend(_: *const anyopaque, color1: Color, color2: Color) Color {
+            return ReplaceColorBlend.blend(color1, color2);
+        }
+    };
+};
+
+pub const AlphaColorBlend = struct {
+    pub const INSTANCE: *const AlphaColorBlend = &AlphaColorBlend{};
+    const ColorBlendVTable: *const ColorBlend.VTable = &ColorBlend.VTable{
+        .blend = ColorBlendFunctions.blend,
+    };
+
+    pub fn blend(color1: Color, color2: Color) Color {
+        const alpha = (1.0 - color1.a) * color2.a + color1.a;
+        const r = ((1.0 - color1.a) * color2.a * color2.r + color1.a * color1.r) / alpha;
+        const g = ((1.0 - color1.a) * color2.a * color2.g + color1.a * color1.g) / alpha;
+        const b = ((1.0 - color1.a) * color2.a * color2.b + color1.a * color1.b) / alpha;
+
+        return Color{
+            .r = r,
+            .g = g,
+            .b = b,
+            .a = alpha,
+        };
+    }
+
+    pub fn colorBlend(self: *const AlphaColorBlend) ColorBlend {
+        return ColorBlend{
+            .ctx = @ptrCast(self),
+            .vtable = ColorBlendVTable,
+        };
+    }
+
+    const ColorBlendFunctions = struct {
+        fn blend(_: *const anyopaque, color1: Color, color2: Color) Color {
+            return AlphaColorBlend.blend(color1, color2);
+        }
+    };
+};
+
 pub const TextureFormat = struct {
     pub const RgbU8: *const @This() = &@This() {
         .color_bytes = 3,
