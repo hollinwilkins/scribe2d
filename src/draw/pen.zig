@@ -42,20 +42,19 @@ pub const Pen = struct {
     }
 
     pub fn draw(self: @This(), path: Path, texture: *TextureUnmanaged) !void {
-        const options = self.rasterizerOptions();
-        var raster_data = try self.rasterizer.rasterize(path, options);
-        defer raster_data.deinit();
-
         if (self.style.fill_color) |color| {
-            self.drawFill(raster_data, texture, color);
+            try self.drawFill( path, texture, color);
         }
 
         if (self.style.stroke) |stroke| {
-            self.drawStroke(raster_data, texture, stroke);
+            try self.drawStroke(path, texture, stroke);
         }
     }
 
-    fn drawFill(self: @This(), raster_data: RasterData, texture: *TextureUnmanaged, color: Color) void {
+    fn drawFill(self: @This(), path: Path, texture: *TextureUnmanaged, color: Color) !void {
+        var raster_data = try self.rasterizer.rasterize(path);
+        defer raster_data.deinit();
+
         const blend = self.style.blend orelse DEFAULT_BLEND;
         for (raster_data.getBoundaryFragments()) |boundary_fragment| {
             const pixel = boundary_fragment.pixel;
@@ -88,18 +87,10 @@ pub const Pen = struct {
         }
     }
 
-    pub fn drawStroke(self: @This(), raster_data: RasterData, texture: *TextureUnmanaged, stroke: Stroke) void {
+    pub fn drawStroke(self: @This(), path: Path, texture: *TextureUnmanaged, stroke: Stroke) !void {
         _ = self;
-        _ = raster_data;
+        _ = path;
         _ = texture;
         _ = stroke;
-    }
-
-    fn rasterizerOptions(self: @This()) Rasterizer.Options {
-        return Rasterizer.Options{
-            .curve_fragments = self.style.stroke != null,
-            .boundary_fragments = self.style.fill_color != null,
-            .spans = self.style.fill_color != null,
-        };
     }
 };

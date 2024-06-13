@@ -326,29 +326,6 @@ pub const Span = struct {
 };
 
 pub const Rasterizer = struct {
-    pub const Options = struct {
-        grid_intersections: bool = false,
-        curve_fragments: bool = false,
-        boundary_fragments: bool = false,
-        spans: bool = false,
-
-        pub fn isGridIntersectionsEnabled(self: @This()) bool {
-            return self.grid_intersections or self.curve_fragments or self.boundary_fragments or self.spans;
-        }
-
-        pub fn isCurveFragmentsEnabled(self: @This()) bool {
-            return self.curve_fragments or self.boundary_fragments or self.spans;
-        }
-
-        pub fn isBoundaryFragmentsEnabled(self: @This()) bool {
-            return self.boundary_fragments or self.spans;
-        }
-
-        pub fn isSpansEnabled(self: @This()) bool {
-            return self.spans;
-        }
-    };
-
     allocator: Allocator,
     half_planes: HalfPlanesU16,
 
@@ -363,25 +340,14 @@ pub const Rasterizer = struct {
         self.half_planes.deinit();
     }
 
-    pub fn rasterize(self: @This(), path: Path, options: Options) !RasterData {
+    pub fn rasterize(self: @This(), path: Path) !RasterData {
         var raster_data = RasterData.init(self.allocator, &path);
         errdefer raster_data.deinit();
 
-        if (options.isGridIntersectionsEnabled()) {
-            try self.populateGridIntersections(&raster_data);
-        }
-
-        if (options.isCurveFragmentsEnabled()) {
-            try self.populateCurveFragments(&raster_data);
-        }
-
-        if (options.isBoundaryFragmentsEnabled()) {
-            try self.populateBoundaryFragments(&raster_data);
-        }
-
-        if (options.isSpansEnabled()) {
-            try self.populateSpans(&raster_data);
-        }
+        try self.populateGridIntersections(&raster_data);
+        try self.populateCurveFragments(&raster_data);
+        try self.populateBoundaryFragments(&raster_data);
+        try self.populateSpans(&raster_data);
 
         return raster_data;
     }
