@@ -147,7 +147,8 @@ pub const Paths = struct {
     pub fn closePath(self: *@This()) !void {
         try self.closeSubpath();
         if (self.currentPathRecord()) |path| {
-            if (path.is_closed or path.subpath_offsets.start == @as(u32, @intCast(self.subpath_records.items.len))) {
+            path.subpath_offsets.end = @intCast(self.subpath_records.items.len);
+            if (path.is_closed or path.subpath_offsets.size() == 0) {
                 // empty path, remove it from list
                 self.path_records.items.len -= 1;
                 return;
@@ -175,7 +176,6 @@ pub const Paths = struct {
 
             path.bounds = bounds;
             path.is_closed = true;
-            path.subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
     }
 
@@ -204,7 +204,8 @@ pub const Paths = struct {
 
     pub fn closeSubpath(self: *@This()) !void {
         if (self.currentSubpathRecord()) |subpath| {
-            if (subpath.is_closed or subpath.curve_offsets.start == @as(u32, @intCast(self.curve_records.items.len))) {
+            subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
+            if (subpath.is_closed or subpath.curve_offsets.size() == 0) {
                 // empty subpath, remove it from list
                 self.subpath_records.items.len -= 1;
                 return;
@@ -224,7 +225,6 @@ pub const Paths = struct {
 
             end_curve.is_end = true;
             subpath.is_closed = true;
-            subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
         }
     }
 

@@ -23,11 +23,16 @@ const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
-pub const GridIntersectionsRecord = struct {
-    offsets: RangeU32 = RangeU32{},
-};
-
 pub const RasterData = struct {
+    const SubpathRecord = struct {
+        offsets: RangeU32 = RangeU32{},
+    };
+
+    const GridIntersectionsRecord = struct {
+        offsets: RangeU32 = RangeU32{},
+    };
+
+    const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
     const GridIntersectionsRecordList = std.ArrayListUnmanaged(GridIntersectionsRecord);
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const CurveFragmentList = std.ArrayListUnmanaged(CurveFragment);
@@ -37,6 +42,7 @@ pub const RasterData = struct {
     allocator: Allocator,
     paths: *const Paths,
     path_index: u32,
+    subpath_records: SubpathRecordList = SubpathRecordList{},
     grid_intersections_records: GridIntersectionsRecordList = GridIntersectionsRecordList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
@@ -52,6 +58,7 @@ pub const RasterData = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        self.subpath_records.deinit(self.allocator);
         self.grid_intersections_records.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
         self.curve_fragments.deinit(self.allocator);
@@ -67,6 +74,10 @@ pub const RasterData = struct {
         return self.path_index;
     }
 
+    pub fn getSubpathRecords(self: *RasterData) []SubpathRecord {
+        return self.subpath_records.items;
+    }
+ 
     pub fn getGridIntersectionsRecords(self: *RasterData) []GridIntersectionsRecord {
         return self.grid_intersections_records.items;
     }
@@ -85,6 +96,10 @@ pub const RasterData = struct {
 
     pub fn getSpans(self: @This()) []Span {
         return self.spans.items;
+    }
+
+    pub fn addSubpathRecord(self: *RasterData) !*SubpathRecord {
+        return try self.subpath_records.addOne(self.allocator);
     }
 
     pub fn addGridIntersectionsRecords(self: *RasterData) !*GridIntersectionsRecord {
@@ -355,6 +370,11 @@ pub const Rasterizer = struct {
         const path = raster_data.paths.getPathRecords()[raster_data.path_index];
         const subpath_records = raster_data.paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
         for (subpath_records) |subpath_record| {
+            const rd_subpath_record = try raster_data.addSubpathRecord();
+            rd_subpath_record.offsets = RangeU32{
+                .start = @intCast(raster_data.getGridIntersectionsRecords().len),
+                .end = @intCast(raster_data.getGridIntersectionsRecords().len),
+            };
             const curve_records = raster_data.paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
             for (curve_records, 0..) |curve_record, curve_index_offset| {
                 const curve_index: u32 = @intCast(subpath_record.curve_offsets.start + curve_index_offset);
@@ -436,10 +456,11 @@ pub const Rasterizer = struct {
                 }
 
                 // add curve record with offsets
-                (try raster_data.addGridIntersectionsRecords()).* = GridIntersectionsRecord{
+                (try raster_data.addGridIntersectionsRecords()).* = RasterData.GridIntersectionsRecord{
                     .offsets = grid_intersection_offsets,
                 };
             }
+            rd_subpath_record.offsets.end = @intCast(raster_data.getGridIntersectionsRecords().len);
         }
     }
 
@@ -462,11 +483,10 @@ pub const Rasterizer = struct {
     pub fn populateCurveFragments(self: @This(), raster_data: *RasterData) !void {
         _ = self;
 
-        const path = raster_data.paths.getPathRecords()[raster_data.path_index];
-        const subpath_records = raster_data.paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
+        const subpath_records = raster_data.getSubpathRecords();
         for (subpath_records) |subpath_record| {
             // curve fragments are unique to curve
-            const grid_intersections_records = raster_data.getGridIntersectionsRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            const grid_intersections_records = raster_data.getGridIntersectionsRecords()[subpath_record.offsets.start..subpath_record.offsets.end];
             for (grid_intersections_records) |grid_intersections_record| {
                 const grid_intersections = raster_data.getGridIntersections()[grid_intersections_record.offsets.start..grid_intersections_record.offsets.end];
                 std.debug.assert(grid_intersections.len > 0);
