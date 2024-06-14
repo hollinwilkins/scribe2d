@@ -2,6 +2,7 @@ const std = @import("std");
 const text = @import("../text/root.zig");
 const core = @import("../core/root.zig");
 const curve_module = @import("./curve.zig");
+const euler = @import("./euler.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
@@ -14,6 +15,7 @@ const GlyphPen = text.GlyphPen;
 const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const QuadraticBezier = curve_module.QuadraticBezier;
+const CubicPoints = euler.CubicPoints;
 
 pub const SubpathRecord = struct {
     curve_offsets: RangeU32,
@@ -102,6 +104,26 @@ pub const Path = struct {
                 ),
             },
         };
+    }
+
+    pub fn getCubicPoints(self: @This(), curve_record: CurveRecord) CubicPoints {
+        var cubic_points = CubicPoints{};
+
+        cubic_points.point0 = self.points.items[curve_record.point_offsets.start];
+        cubic_points.point1 = self.points.items[curve_record.point_offsets.start + 1];
+
+        switch (curve_record.kind) {
+            .line => {
+                cubic_points.point3 = cubic_points.point1;
+                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
+                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
+            },
+            .quadratic_bezier => {
+                cubic_points.point3 = cubic_points.point2;
+                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
+                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
+            },
+        }
     }
 
     pub fn currentSubpathRecord(self: *@This()) ?*SubpathRecord {
