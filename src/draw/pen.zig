@@ -14,19 +14,19 @@ const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 const RasterData = raster.RasterData;
 
-pub const Pen = struct {
-    pub const DEFAULT_BLEND: ColorBlend = ColorBlend.Alpha;
-
+pub const Style = struct {
     pub const Stroke = struct {
         color: Color,
         width: f32,
-    };
+};
 
-    pub const Style = struct {
-        fill_color: ?Color = null,
-        stroke: ?Stroke = null,
-        blend: ?ColorBlend = null,
-    };
+    fill_color: ?Color = null,
+    stroke: ?Stroke = null,
+    blend: ?ColorBlend = null,
+};
+
+pub const Pen = struct {
+    pub const DEFAULT_BLEND: ColorBlend = ColorBlend.Alpha;
 
     rasterizer: *const Rasterizer,
     style: Style = Style{},
@@ -87,7 +87,7 @@ pub const Pen = struct {
         }
     }
 
-    pub fn drawStroke(self: @This(), path: Path, texture: *TextureUnmanaged, stroke: Stroke) !void {
+    pub fn drawStroke(self: @This(), path: Path, texture: *TextureUnmanaged, stroke: Style.Stroke) !void {
         _ = self;
         _ = path;
         _ = texture;
