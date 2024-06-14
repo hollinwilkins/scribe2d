@@ -148,7 +148,10 @@ pub const Paths = struct {
         try self.closeSubpath();
         if (self.currentPathRecord()) |path| {
             path.subpath_offsets.end = @intCast(self.subpath_records.items.len);
-            if (path.is_closed or path.subpath_offsets.size() == 0) {
+            if (path.is_closed) {
+                return;
+            }
+            if (path.subpath_offsets.size() == 0) {
                 // empty path, remove it from list
                 self.path_records.items.len -= 1;
                 return;
@@ -205,7 +208,10 @@ pub const Paths = struct {
     pub fn closeSubpath(self: *@This()) !void {
         if (self.currentSubpathRecord()) |subpath| {
             subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
-            if (subpath.is_closed or subpath.curve_offsets.size() == 0) {
+            if (subpath.is_closed) {
+                return;
+            }
+            if (subpath.curve_offsets.size() == 0) {
                 // empty subpath, remove it from list
                 self.subpath_records.items.len -= 1;
                 return;
@@ -301,6 +307,7 @@ pub const PathBuilder = struct {
 
     paths: *Paths,
     location: PointF32 = PointF32{},
+    is_subpath_initialized: bool = false,
     is_error: bool = false,
 
     pub fn create(paths: *Paths) @This() {
@@ -319,16 +326,14 @@ pub const PathBuilder = struct {
     pub fn moveTo(self: *@This(), point: PointF32) !void {
         try self.paths.closeSubpath();
         self.location = point;
+        self.is_subpath_initialized = false;
     }
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
-        if (self.paths.currentSubpathRecord()) |subpath| {
-            if (subpath.curve_offsets.size() == 0) {
-                (try self.paths.addPoint()).* = self.location;
-            }
-        } else {
+        if (!self.is_subpath_initialized) {
             try self.paths.openSubpath();
             (try self.paths.addPoint()).* = self.location;
+            self.is_subpath_initialized = true;
         }
 
         try self.paths.lineTo(point);
@@ -336,13 +341,10 @@ pub const PathBuilder = struct {
     }
 
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
-        if (self.paths.currentSubpathRecord()) |subpath| {
-            if (subpath.curve_offsets.size() == 0) {
-                (try self.paths.addPoint()).* = self.location;
-            }
-        } else {
+        if (!self.is_subpath_initialized) {
             try self.paths.openSubpath();
             (try self.paths.addPoint()).* = self.location;
+            self.is_subpath_initialized = true;
         }
 
         try self.paths.quadTo(control, point);
