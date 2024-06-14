@@ -165,7 +165,6 @@ pub const CurveFragment = struct {
         }
     };
 
-    order: u32,
     pixel: PointI32,
     intersections: [2]Intersection,
 
@@ -205,7 +204,6 @@ pub const CurveFragment = struct {
         std.debug.assert(intersections[1].point.y <= 1.0);
         std.debug.assert(grid_intersections[0].curve_index <= grid_intersections[1].curve_index);
         return CurveFragment{
-            .order = grid_intersections[0].curve_index,
             .pixel = pixel,
             .intersections = intersections,
         };
@@ -521,8 +519,6 @@ pub const Rasterizer = struct {
             return true;
         } else if (left.pixel.x > right.pixel.x) {
             return false;
-        } else if (left.order < right.order) {
-            return true;
         } else {
             return false;
         }
