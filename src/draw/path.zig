@@ -3,6 +3,7 @@ const text = @import("../text/root.zig");
 const core = @import("../core/root.zig");
 const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
+const pen = @import("./pen.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
@@ -16,43 +17,39 @@ const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const QuadraticBezier = curve_module.QuadraticBezier;
 const CubicPoints = euler.CubicPoints;
+const Style = pen.Style;
 
-pub const SubpathRecord = struct {
-    curve_offsets: RangeU32,
-};
-
-pub const CurveRecord = struct {
-    pub const Kind = enum(u8) {
-        line = 0,
-        quadratic_bezier = 1,
+pub const Scene = struct {
+    pub const PathRecord = struct {
+        subpath_offsets: RangeU32,
+        is_closed: bool = false,
     };
 
-    kind: Kind,
-    point_offsets: RangeU32,
-};
+    pub const SubpathRecord = struct {
+        curve_offsets: RangeU32,
+    };
 
-pub const PathUnmanaged = struct {
-    const SubpathList = std.ArrayListUnmanaged(SubpathRecord);
-    const CurveList = std.ArrayListUnmanaged(CurveRecord);
-    const PointList = std.ArrayListUnmanaged(PointF32);
+    pub const CurveRecord = struct {
+        pub const Kind = enum(u8) {
+            line = 0,
+            quadratic_bezier = 1,
+        };
 
-    subpath_records: SubpathList = SubpathList{},
-    curve_records: CurveList = CurveList{},
-    points: PointList = PointList{},
+        kind: Kind,
+        point_offsets: RangeU32,
+        is_end: bool = false,
+        is_open: bool = false,
+    };
 
-    pub fn deinit(self: *@This(), allocator: Allocator) void {
-        self.subpath_records.deinit(allocator);
-        self.curve_records.deinit(allocator);
-        self.points.deinit(allocator);
-    }
-};
-
-pub const Path = struct {
+    const PathRecordList = std.ArrayListUnmanaged(PathRecord);
+    const StyleList = std.ArrayListUnmanaged(Style);
     const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
     const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
     const PointList = std.ArrayListUnmanaged(PointF32);
 
     allocator: Allocator,
+    path_records: PathRecordList = PathRecordList{},
+    styles: StyleList = StyleList{}, // parallell with path_records
     subpath_records: SubpathRecordList = SubpathRecordList{},
     curve_records: CurveRecordList = CurveRecordList{},
     points: PointList = PointList{},
@@ -63,28 +60,31 @@ pub const Path = struct {
         };
     }
 
-    pub fn deinit(self: *Path) void {
-        var unmanaged = self.toUnmanaged();
-        unmanaged.deinit(self.allocator);
+    pub fn deinit(self: *@This()) void {
+        self.path_records.deinit(self.allocator);
+        self.styles.deinit(self.allocator);
+        self.subpath_records.deinit(self.allocator);
+        self.curve_records.deinit(self.allocator);
+        self.points.deinit(self.allocator);
     }
 
-    pub fn toUnmanaged(self: Path) PathUnmanaged {
-        return PathUnmanaged{
-            .subpath_records = self.subpath_records,
-            .curve_records = self.curve_records,
-            .points = self.points,
-        };
+    pub fn getPathRecords(self: @This()) []const PathRecord {
+        return self.path_records.items;
     }
 
-    pub fn getSubpathRecords(self: @This()) []SubpathRecord {
+    pub fn getStyles(self: @This()) []const Style {
+        return self.styles.items;
+    }
+
+    pub fn getSubpathRecords(self: @This()) []const SubpathRecord {
         return self.subpath_records.items;
     }
 
-    pub fn getCurveRecords(self: @This()) []CurveRecord {
+    pub fn getCurveRecords(self: @This()) []const CurveRecord {
         return self.curve_records.items;
     }
 
-    pub fn getPoints(self: @This()) []PointF32 {
+    pub fn getPoints(self: @This()) []const PointF32 {
         return self.points.items;
     }
 
@@ -126,6 +126,41 @@ pub const Path = struct {
         }
     }
 
+    pub fn currentPathRecord(self: *@This()) ?*PathRecord {
+        if (self.path_records.items.len > 0) {
+            return self.currentPathRecordUnsafe();
+        }
+
+        return null;
+    }
+
+    pub fn currentPathRecordUnsafe(self: *@This()) *PathRecord {
+        return &self.path_records.items[self.path_records.items.len - 1];
+    }
+
+    pub fn pushPathRecord(self: *@This()) !void {
+        self.closePath();
+        const path = try self.path_records.addOne(self.allocator);
+        path.curve_offsets = RangeU32{
+            .start = @intCast(self.curve_records.items.len),
+            .end = @intCast(self.curve_records.items.len),
+        };
+    }
+
+    pub fn closePath(self: *@This()) void {
+        self.closeSubpath();
+        if (self.currentPathRecord()) |path| {
+            if (path.subpath_offsets.size() == 0) {
+                // empty path, remove it from list
+                self.path_records.items.len -= 1;
+                return;
+            }
+
+            path.is_closed = true;
+            path.subpath_offsets.end = @intCast(self.subpath_records.items.len);
+        }
+    }
+
     pub fn currentSubpathRecord(self: *@This()) ?*SubpathRecord {
         if (self.subpath_records.items.len > 0) {
             return self.currentSubpathRecordUnsafe();
@@ -139,6 +174,7 @@ pub const Path = struct {
     }
 
     pub fn pushSubpathRecord(self: *@This()) !void {
+        self.closeSubpath();
         const subpath = try self.subpath_records.addOne(self.allocator);
         subpath.curve_offsets = RangeU32{
             .start = @intCast(self.curve_records.items.len),
@@ -146,15 +182,40 @@ pub const Path = struct {
         };
     }
 
+    pub fn closeSubpath(self: *@This()) !void {
+        if (self.currentSubpathRecord()) |subpath| {
+            if (subpath.curve_offsets.size() == 0) {
+                // empty subpath, remove it from list
+                self.subpath_records.items.len -= 1;
+                return;
+            }
+
+            const start_curve = self.curve_records.items[subpath.curve_offsets.start];
+            var end_curve = &self.curve_records.items[subpath.curve_offsets.start - 1];
+            const start_point = self.points.items[start_curve.curve_offsets.start];
+            const end_point = self.points.items[end_curve.curve_offsets.end];
+
+            if (start_point != end_point) {
+                // we need to close the subpath
+                try self.lineTo(start_point);
+                end_curve = &self.curve_records.items[self.curve_records.items.len - 1];
+                end_curve.is_open = true;
+            }
+
+            end_curve.is_end = true;
+            subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
+        }
+    }
+
     fn addCurveRecord(self: *@This()) !*CurveRecord {
         return try self.curve_records.addOne(self.allocator);
     }
 
-    pub fn addPoint(self: *@This()) !*PointF32 {
+    fn addPoint(self: *@This()) !*PointF32 {
         return try self.points.addOne(self.allocator);
     }
 
-    pub fn addPoints(self: *@This(), n: usize) ![]PointF32 {
+    fn addPoints(self: *@This(), n: usize) ![]PointF32 {
         return try self.points.addManyAsSlice(self.allocator, n);
     }
 
@@ -193,118 +254,112 @@ pub const Path = struct {
             .point_offsets = point_offsets,
         };
     }
-
-    pub fn close(self: *@This()) void {
-        if (self.currentSubpathRecord()) |subpath| {
-            subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
-        }
-    }
 };
 
-pub const PathBuilder = struct {
-    const GlyphPenVTable: *const GlyphPen.VTable = &.{
-        .moveTo = GlyphPenFunctions.moveTo,
-        .lineTo = GlyphPenFunctions.lineTo,
-        .quadTo = GlyphPenFunctions.quadTo,
-        .curveTo = GlyphPenFunctions.curveTo,
-        .close = GlyphPenFunctions.close,
-        .transform = GlyphPenFunctions.transform,
-    };
+// pub const PathBuilder = struct {
+//     const GlyphPenVTable: *const GlyphPen.VTable = &.{
+//         .moveTo = GlyphPenFunctions.moveTo,
+//         .lineTo = GlyphPenFunctions.lineTo,
+//         .quadTo = GlyphPenFunctions.quadTo,
+//         .curveTo = GlyphPenFunctions.curveTo,
+//         .close = GlyphPenFunctions.close,
+//         .transform = GlyphPenFunctions.transform,
+//     };
 
-    path: *Path,
-    start: ?PointF32 = null,
-    location: PointF32 = PointF32{},
-    is_error: bool = false,
+//     path: *Path,
+//     start: ?PointF32 = null,
+//     location: PointF32 = PointF32{},
+//     is_error: bool = false,
 
-    pub fn create(path: *Path) @This() {
-        return @This(){
-            .path = path,
-        };
-    }
+//     pub fn create(path: *Path) @This() {
+//         return @This(){
+//             .path = path,
+//         };
+//     }
 
-    pub fn glyphPen(self: *@This()) GlyphPen {
-        return GlyphPen{
-            .ptr = @ptrCast(self),
-            .vtable = GlyphPenVTable,
-        };
-    }
+//     pub fn glyphPen(self: *@This()) GlyphPen {
+//         return GlyphPen{
+//             .ptr = @ptrCast(self),
+//             .vtable = GlyphPenVTable,
+//         };
+//     }
 
-    pub fn moveTo(self: *@This(), point: PointF32) !void {
-        self.start = null;
-        self.location = point;
-    }
+//     pub fn moveTo(self: *@This(), point: PointF32) !void {
+//         self.start = null;
+//         self.location = point;
+//     }
 
-    pub fn lineTo(self: *@This(), point: PointF32) !void {
-        if (self.start == null) {
-            // start of a new subpath
-            try self.path.pushSubpathRecord();
-            (try self.path.addPoint()).* = self.location;
-            self.start = self.location;
-        }
+//     pub fn lineTo(self: *@This(), point: PointF32) !void {
+//         if (self.start == null) {
+//             // start of a new subpath
+//             try self.path.pushSubpathRecord();
+//             (try self.path.addPoint()).* = self.location;
+//             self.start = self.location;
+//         }
 
-        try self.path.lineTo(point);
-        self.location = point;
-    }
+//         try self.path.lineTo(point);
+//         self.location = point;
+//     }
 
-    pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
-        if (self.start == null) {
-            // start of a new subpath
-            try self.path.pushSubpathRecord();
-            (try self.path.addPoint()).* = self.location;
-            self.start = self.location;
-        }
+//     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
+//         if (self.start == null) {
+//             // start of a new subpath
+//             try self.path.pushSubpathRecord();
+//             (try self.path.addPoint()).* = self.location;
+//             self.start = self.location;
+//         }
 
-        try self.path.quadTo(control, point);
-        self.location = point;
-    }
+//         try self.path.quadTo(control, point);
+//         self.location = point;
+//     }
 
-    pub fn close(self: *@This()) !void {
-        if (self.start) |start| {
-            if (!std.meta.eql(start, self.location)) {
-                try self.lineTo(start);
-            }
-        }
+//     pub fn close(self: *@This()) !void {
+//         if (self.start) |start| {
+//             if (!std.meta.eql(start, self.location)) {
+//                 try self.lineTo(start);
+//             }
+//         }
 
-        self.path.close();
-        self.start = null;
-    }
+//         self.path.close();
+//         self.start = null;
+//     }
 
-    pub const GlyphPenFunctions = struct {
-        fn moveTo(ctx: *anyopaque, point: PointF32) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.moveTo(point) catch {
-                b.is_error = true;
-            };
-        }
+//     pub const GlyphPenFunctions = struct {
+//         fn moveTo(ctx: *anyopaque, point: PointF32) void {
+//             var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+//             b.moveTo(point) catch {
+//                 b.is_error = true;
+//             };
+//         }
 
-        fn lineTo(ctx: *anyopaque, point: PointF32) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.lineTo(point) catch {
-                b.is_error = true;
-            };
-        }
+//         fn lineTo(ctx: *anyopaque, point: PointF32) void {
+//             var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+//             b.lineTo(point) catch {
+//                 b.is_error = true;
+//             };
+//         }
 
-        fn quadTo(ctx: *anyopaque, control: PointF32, point: PointF32) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.quadTo(control, point) catch {
-                b.is_error = true;
-            };
-        }
+//         fn quadTo(ctx: *anyopaque, control: PointF32, point: PointF32) void {
+//             var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+//             b.quadTo(control, point) catch {
+//                 b.is_error = true;
+//             };
+//         }
 
-        fn curveTo(_: *anyopaque, _: PointF32, _: PointF32, _: PointF32) void {
-            @panic("PathBuilder does not support curveTo\n");
-        }
+//         fn curveTo(_: *anyopaque, _: PointF32, _: PointF32, _: PointF32) void {
+//             @panic("PathBuilder does not support curveTo\n");
+//         }
 
-        fn close(ctx: *anyopaque) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.close() catch {
-                b.is_error = true;
-            };
-        }
+//         fn close(ctx: *anyopaque) void {
+//             var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+//             b.close() catch {
+//                 b.is_error = true;
+//             };
+//         }
 
-        fn transform(ctx: *anyopaque, t: TransformF32) void {
-            const b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.path.transform(t);
-        }
-    };
-};
+//         fn transform(ctx: *anyopaque, t: TransformF32) void {
+//             const b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+//             b.path.transform(t);
+//         }
+//     };
+// };
