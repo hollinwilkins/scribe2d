@@ -136,9 +136,11 @@ pub const Paths = struct {
     pub fn openPath(self: *@This()) !void {
         try self.closePath();
         const path = try self.path_records.addOne(self.allocator);
-        path.subpath_offsets = RangeU32{
-            .start = @intCast(self.subpath_records.items.len),
-            .end = @intCast(self.subpath_records.items.len),
+        path.* = PathRecord{
+            .subpath_offsets = RangeU32{
+                .start = @intCast(self.subpath_records.items.len),
+                .end = @intCast(self.subpath_records.items.len),
+            },
         };
     }
 
@@ -192,9 +194,11 @@ pub const Paths = struct {
     pub fn openSubpath(self: *@This()) !void {
         try self.closeSubpath();
         const subpath = try self.subpath_records.addOne(self.allocator);
-        subpath.curve_offsets = RangeU32{
-            .start = @intCast(self.curve_records.items.len),
-            .end = @intCast(self.curve_records.items.len),
+        subpath.* = SubpathRecord{
+            .curve_offsets = RangeU32{
+                .start = @intCast(self.curve_records.items.len),
+                .end = @intCast(self.curve_records.items.len),
+            },
         };
     }
 
@@ -224,8 +228,16 @@ pub const Paths = struct {
         }
     }
 
-    fn addCurveRecord(self: *@This()) !*CurveRecord {
-        return try self.curve_records.addOne(self.allocator);
+    fn addCurveRecord(self: *@This(), kind: CurveRecord.Kind) !*CurveRecord {
+        const curve = try self.curve_records.addOne(self.allocator);
+        curve.* = CurveRecord{
+            .kind = kind,
+            .point_offsets = RangeU32{
+                .start = @intCast(self.points.items.len),
+                .end = @intCast(self.points.items.len),
+            },
+        };
+        return curve;
     }
 
     fn addPoint(self: *@This()) !*PointF32 {
@@ -258,11 +270,8 @@ pub const Paths = struct {
         };
 
         (try self.addPoint()).* = point;
-        const curve = try self.addCurveRecord();
-        curve.* = CurveRecord{
-            .kind = .line,
-            .point_offsets = point_offsets,
-        };
+        const curve = try self.addCurveRecord(.line);
+        curve.point_offsets = point_offsets;
     }
 
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
@@ -274,11 +283,8 @@ pub const Paths = struct {
         const points = try self.addPoints(2);
         points[0] = control;
         points[1] = point;
-        const curve = try self.addCurveRecord();
-        curve.* = CurveRecord{
-            .kind = .quadratic_bezier,
-            .point_offsets = point_offsets,
-        };
+        const curve = try self.addCurveRecord(.quadratic_bezier);
+        curve.point_offsets = point_offsets;
     }
 };
 
