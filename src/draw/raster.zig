@@ -5,7 +5,7 @@ const core = @import("../core/root.zig");
 const msaa = @import("./msaa.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const Path = path_module.Path;
+const Paths = path_module.Paths;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
 const PointI32 = core.PointI32;
@@ -35,17 +35,19 @@ pub const RasterData = struct {
     const SpanList = std.ArrayListUnmanaged(Span);
 
     allocator: Allocator,
-    path: *const Path,
+    paths: *const Paths,
+    path_index: u32,
     grid_intersections_records: GridIntersectionsRecordList = GridIntersectionsRecordList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
     spans: SpanList = SpanList{},
 
-    pub fn init(allocator: Allocator, path: *const Path) RasterData {
+    pub fn init(allocator: Allocator, paths: *const Paths, path_index: u32) RasterData {
         return RasterData{
             .allocator = allocator,
-            .path = path,
+            .paths = paths,
+            .path_index = path_index,
         };
     }
 
@@ -57,8 +59,12 @@ pub const RasterData = struct {
         self.spans.deinit(self.allocator);
     }
 
-    pub fn getPath(self: RasterData) *const Path {
-        return self.path;
+    pub fn getPaths(self: RasterData) *const Paths {
+        return self.paths;
+    }
+
+    pub fn getPathIndex(self: RasterData) u32 {
+        return self.path_index;
     }
 
     pub fn getGridIntersectionsRecords(self: *RasterData) []GridIntersectionsRecord {
@@ -330,8 +336,8 @@ pub const Rasterizer = struct {
         self.half_planes.deinit();
     }
 
-    pub fn rasterize(self: @This(), path: Path) !RasterData {
-        var raster_data = RasterData.init(self.allocator, &path);
+    pub fn rasterize(self: @This(), paths: Paths, path_index: u32) !RasterData {
+        var raster_data = RasterData.init(self.allocator, &paths, path_index);
         errdefer raster_data.deinit();
 
         try self.populateGridIntersections(&raster_data);
@@ -346,15 +352,17 @@ pub const Rasterizer = struct {
         _ = self;
         var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
-        for (raster_data.path.getSubpathRecords()) |subpath_record| {
-            const curve_records = raster_data.path.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+        const path = raster_data.paths.getPathRecords()[raster_data.path_index];
+        const subpath_records = raster_data.paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
+        for (subpath_records) |subpath_record| {
+            const curve_records = raster_data.paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
             for (curve_records, 0..) |curve_record, curve_index_offset| {
                 const curve_index: u32 = @intCast(subpath_record.curve_offsets.start + curve_index_offset);
                 var grid_intersection_offsets = RangeU32{
                     .start = @intCast(raster_data.getGridIntersections().len),
                     .end = @intCast(raster_data.getGridIntersections().len),
                 };
-                const curve = raster_data.path.getCurve(curve_record);
+                const curve = raster_data.paths.getCurve(curve_record);
                 const curve_bounds = curve.getBounds();
 
                 // first virtual intersection
@@ -454,7 +462,9 @@ pub const Rasterizer = struct {
     pub fn populateCurveFragments(self: @This(), raster_data: *RasterData) !void {
         _ = self;
 
-        for (raster_data.path.getSubpathRecords()) |subpath_record| {
+        const path = raster_data.paths.getPathRecords()[raster_data.path_index];
+        const subpath_records = raster_data.paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
+        for (subpath_records) |subpath_record| {
             // curve fragments are unique to curve
             const grid_intersections_records = raster_data.getGridIntersectionsRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
             for (grid_intersections_records) |grid_intersections_record| {

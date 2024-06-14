@@ -134,16 +134,16 @@ pub const Paths = struct {
     }
 
     pub fn openPath(self: *@This()) !void {
-        self.closePath();
+        try self.closePath();
         const path = try self.path_records.addOne(self.allocator);
-        path.curve_offsets = RangeU32{
-            .start = @intCast(self.curve_records.items.len),
-            .end = @intCast(self.curve_records.items.len),
+        path.subpath_offsets = RangeU32{
+            .start = @intCast(self.subpath_records.items.len),
+            .end = @intCast(self.subpath_records.items.len),
         };
     }
 
-    pub fn closePath(self: *@This()) void {
-        self.closeSubpath();
+    pub fn closePath(self: *@This()) !void {
+        try self.closeSubpath();
         if (self.currentPathRecord()) |path| {
             if (path.is_closed or path.subpath_offsets.size() == 0) {
                 // empty path, remove it from list
@@ -167,7 +167,7 @@ pub const Paths = struct {
                 const end_point_index = self.curve_records.items[subpath.curve_offsets.end - 1].point_offsets.end;
 
                 for (self.points.items[start_point_index..end_point_index]) |point| {
-                    bounds.extendBy(point);
+                    bounds = bounds.extendBy(point);
                 }
             }
 
@@ -190,7 +190,7 @@ pub const Paths = struct {
     }
 
     pub fn openSubpath(self: *@This()) !void {
-        self.closeSubpath();
+        try self.closeSubpath();
         const subpath = try self.subpath_records.addOne(self.allocator);
         subpath.curve_offsets = RangeU32{
             .start = @intCast(self.curve_records.items.len),
@@ -208,10 +208,10 @@ pub const Paths = struct {
 
             const start_curve = self.curve_records.items[subpath.curve_offsets.start];
             var end_curve = &self.curve_records.items[subpath.curve_offsets.start - 1];
-            const start_point = self.points.items[start_curve.curve_offsets.start];
-            const end_point = self.points.items[end_curve.curve_offsets.end];
+            const start_point = self.points.items[start_curve.point_offsets.start];
+            const end_point = self.points.items[end_curve.point_offsets.end];
 
-            if (start_point != end_point) {
+            if (std.meta.eql(start_point, end_point)) {
                 // we need to close the subpath
                 try self.lineTo(start_point);
                 end_curve = &self.curve_records.items[self.curve_records.items.len - 1];
@@ -288,6 +288,7 @@ pub const PathBuilder = struct {
         .lineTo = GlyphPenFunctions.lineTo,
         .quadTo = GlyphPenFunctions.quadTo,
         .curveTo = GlyphPenFunctions.curveTo,
+        .open = GlyphPenFunctions.open,
         .close = GlyphPenFunctions.close,
         .transform = GlyphPenFunctions.transform,
     };
@@ -310,40 +311,44 @@ pub const PathBuilder = struct {
     }
 
     pub fn moveTo(self: *@This(), point: PointF32) !void {
-        self.paths.closeSubpath();
+        try self.paths.closeSubpath();
         self.location = point;
     }
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
-        if (self.start == null) {
-            // start of a new subpath
-            try self.path.openSubpath();
-            (try self.path.addPoint()).* = self.location;
-            self.start = self.location;
+        if (self.paths.currentSubpathRecord()) |subpath| {
+            if (subpath.curve_offsets.size() == 0) {
+                (try self.paths.addPoint()).* = self.location;
+            }
+        } else {
+            try self.paths.openSubpath();
+            (try self.paths.addPoint()).* = self.location;
         }
 
-        try self.path.lineTo(point);
+        try self.paths.lineTo(point);
         self.location = point;
     }
 
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
-        if (self.start == null) {
-            // start of a new subpath
-            try self.path.openSubpath();
-            (try self.path.addPoint()).* = self.location;
-            self.start = self.location;
+        if (self.paths.currentSubpathRecord()) |subpath| {
+            if (subpath.curve_offsets.size() == 0) {
+                (try self.paths.addPoint()).* = self.location;
+            }
+        } else {
+            try self.paths.openSubpath();
+            (try self.paths.addPoint()).* = self.location;
         }
 
-        try self.path.quadTo(control, point);
+        try self.paths.quadTo(control, point);
         self.location = point;
     }
 
     pub fn open(self: *@This()) !void {
-        self.paths.openPath();
+        try self.paths.openPath();
     }
 
     pub fn close(self: *@This()) !void {
-        self.paths.closePath();
+        try self.paths.closePath();
     }
 
     pub const GlyphPenFunctions = struct {
@@ -388,7 +393,7 @@ pub const PathBuilder = struct {
 
         fn transform(ctx: *anyopaque, t: TransformF32) void {
             const b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.path.transformCurrentPath(t);
+            b.paths.transformCurrentPath(t);
         }
     };
 };

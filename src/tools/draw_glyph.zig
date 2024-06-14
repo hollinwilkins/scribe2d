@@ -29,9 +29,9 @@ pub fn main() !void {
         std.debug.print("Table: {s}\n", .{table.tag.toBytes()});
     }
 
-    var path = draw.Path.init(allocator);
-    defer path.deinit();
-    var builder = draw.PathBuilder.create(&path);
+    var paths = draw.Paths.init(allocator);
+    defer paths.deinit();
+    var builder = draw.PathBuilder.create(&paths);
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
@@ -41,10 +41,12 @@ pub fn main() !void {
     std.debug.print("\n", .{});
     std.debug.print("Curves:\n", .{});
     std.debug.print("-----------------------------\n", .{});
-    for (path.getSubpathRecords(), 0..) |subpath_record, subpath_index| {
-        const curve_records = path.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+    const path = paths.getPathRecords()[0];
+    const subpath_records = paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
+    for (subpath_records, 0..) |subpath_record, subpath_index| {
+        const curve_records = paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
         for (curve_records, 0..) |curve_record, curve_index| {
-            const curve = path.getCurve(curve_record);
+            const curve = paths.getCurve(curve_record);
             std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
         }
     }
@@ -148,7 +150,7 @@ pub fn main() !void {
         .b = 0.0,
         .a = 1.0,
     });
-    try pen.draw(path, &texture);
+    try pen.draw(paths, 0, &texture);
 
     for (0..texture.dimensions.height) |y| {
         std.debug.print("{:0>4}: ", .{y});

@@ -9,7 +9,7 @@ const Rasterizer = raster.Rasterizer;
 const Color = texture_module.Color;
 const ColorBlend = texture_module.ColorBlend;
 const AlphaColorBlend = texture_module.AlphaColorBlend;
-const Path = path_module.Path;
+const Paths = path_module.Paths;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 const RasterData = raster.RasterData;
@@ -41,18 +41,18 @@ pub const Pen = struct {
         self.style.fill_color = color;
     }
 
-    pub fn draw(self: @This(), path: Path, texture: *TextureUnmanaged) !void {
+    pub fn draw(self: @This(), paths: Paths, path_index: u32, texture: *TextureUnmanaged) !void {
         if (self.style.fill_color) |color| {
-            try self.drawFill( path, texture, color);
+            try self.drawFill( paths, path_index, texture, color);
         }
 
         if (self.style.stroke) |stroke| {
-            try self.drawStroke(path, texture, stroke);
+            try self.drawStroke(paths, path_index, texture, stroke);
         }
     }
 
-    fn drawFill(self: @This(), path: Path, texture: *TextureUnmanaged, color: Color) !void {
-        var raster_data = try self.rasterizer.rasterize(path);
+    fn drawFill(self: @This(), paths: Paths, path_index: u32, texture: *TextureUnmanaged, color: Color) !void {
+        var raster_data = try self.rasterizer.rasterize(paths, path_index);
         defer raster_data.deinit();
 
         const blend = self.style.blend orelse DEFAULT_BLEND;
@@ -87,9 +87,10 @@ pub const Pen = struct {
         }
     }
 
-    pub fn drawStroke(self: @This(), path: Path, texture: *TextureUnmanaged, stroke: Style.Stroke) !void {
+    pub fn drawStroke(self: @This(), paths: Paths, path_index: u32, texture: *TextureUnmanaged, stroke: Style.Stroke) !void {
         _ = self;
-        _ = path;
+        _ = paths;
+        _ = path_index;
         _ = texture;
         _ = stroke;
     }

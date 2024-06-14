@@ -79,7 +79,7 @@ pub const Face = struct {
 
         if (self.unmanaged.tables.glyf) |glyf| {
             const units_per_em: f32 = @floatFromInt(self.unmanaged.tables.head.units_per_em);
-            builder.open();
+            builder.pen.open();
             try glyf.outline(glyph_id, points, &builder);
             const bounds = builder.getBounds();
             const transform = TransformF32{
@@ -115,7 +115,7 @@ pub const Face = struct {
                     .y = bounds2.getHeight() / 2.0,
                 }
             });
-            builder.close();
+            builder.pen.close();
         } else {
             return error.InvalidFace;
         }

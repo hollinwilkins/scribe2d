@@ -9,7 +9,7 @@ const curve = @import("./curve.zig");
 const pen = @import("./pen.zig");
 
 pub const Pen = pen.Pen;
-pub const Path = path.Path;
+pub const Paths = path.Paths;
 pub const PathBuilder = path.PathBuilder;
 pub const Segment = path.Segment;
 
