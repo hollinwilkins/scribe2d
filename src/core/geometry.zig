@@ -22,12 +22,16 @@ pub fn Point(comptime T: type) type {
 
         pub fn normalizeUnsafe(self: @This()) @This() {
             std.debug.assert(!(self.x == 0 and self.y == 0));
-            const diagonal = std.math.sqrt(self.x * self.x + self.y * self.y);
+            const diagonal = self.length();
 
             return @This(){
                 .x = self.x / diagonal,
                 .y = self.y / diagonal,
             };
+        }
+
+        pub fn length(self: @This()) f32 {
+            return std.math.hypot(self.x, self.y);
         }
 
         pub fn negate(self: @This()) @This() {
@@ -112,6 +116,10 @@ pub fn Point(comptime T: type) type {
                 .x = (self.x * cos_theta) - (self.y * sin_theta),
                 .y = (self.y * cos_theta) + (self.x * sin_theta),
             };
+        }
+
+        pub fn atan2(self: @This()) f32 {
+            return std.math.atan2(self.y, self.x);
         }
     };
 }
