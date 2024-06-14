@@ -23,12 +23,12 @@ const Line = curve_module.Line;
 const Intersection = curve_module.Intersection;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
-pub const CurveRecord = struct {
-    grid_intersection_offests: RangeU32 = RangeU32{},
+pub const GridIntersectionsRecord = struct {
+    offsets: RangeU32 = RangeU32{},
 };
 
 pub const RasterData = struct {
-    const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
+    const GridIntersectionsRecordList = std.ArrayListUnmanaged(GridIntersectionsRecord);
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const CurveFragmentList = std.ArrayListUnmanaged(CurveFragment);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
@@ -36,7 +36,7 @@ pub const RasterData = struct {
 
     allocator: Allocator,
     path: *const Path,
-    curve_records: CurveRecordList = CurveRecordList{},
+    grid_intersections_records: GridIntersectionsRecordList = GridIntersectionsRecordList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     curve_fragments: CurveFragmentList = CurveFragmentList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
@@ -50,7 +50,7 @@ pub const RasterData = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        self.curve_records.deinit(self.allocator);
+        self.grid_intersections_records.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
         self.curve_fragments.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
@@ -61,16 +61,8 @@ pub const RasterData = struct {
         return self.path;
     }
 
-    pub fn getSubpaths(self: RasterData) []const Subpath {
-        return self.path.getSubpaths();
-    }
-
-    pub fn getCurves(self: RasterData) []const Curve {
-        return self.path.getCurves();
-    }
-
-    pub fn getCurveRecords(self: *RasterData) []CurveRecord {
-        return self.curve_records.items;
+    pub fn getGridIntersectionsRecords(self: *RasterData) []GridIntersectionsRecord {
+        return self.grid_intersections_records.items;
     }
 
     pub fn getGridIntersections(self: *RasterData) []GridIntersection {
@@ -89,8 +81,8 @@ pub const RasterData = struct {
         return self.spans.items;
     }
 
-    pub fn addCurveRecord(self: *RasterData) !*CurveRecord {
-        return try self.curve_records.addOne(self.allocator);
+    pub fn addGridIntersectionsRecords(self: *RasterData) !*GridIntersectionsRecord {
+        return try self.grid_intersections_records.addOne(self.allocator);
     }
 
     pub fn addGridIntersection(self: *RasterData) !*GridIntersection {
@@ -356,56 +348,57 @@ pub const Rasterizer = struct {
         _ = self;
         var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
-        for (raster_data.getSubpaths()) |subpath| {
-            for (raster_data.getCurves()[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index_offset| {
-                const curve_index: u32 = @intCast(subpath.curve_offsets.start + curve_index_offset);
+        for (raster_data.path.getSubpathRecords()) |subpath_record| {
+            const curve_records = raster_data.path.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            for (curve_records, 0..) |curve_record, curve_index_offset| {
+                const curve_index: u32 = @intCast(subpath_record.curve_offsets.start + curve_index_offset);
                 var grid_intersection_offsets = RangeU32{
                     .start = @intCast(raster_data.getGridIntersections().len),
                     .end = @intCast(raster_data.getGridIntersections().len),
                 };
-                const scaled_curve = curve; //.invertY().scale(scaled_pixel_dimensions);
-                const scaled_curve_bounds = scaled_curve.getBounds();
+                const curve = raster_data.path.getCurve(curve_record);
+                const curve_bounds = curve.getBounds();
 
                 // first virtual intersection
                 (try raster_data.addGridIntersection()).* = GridIntersection.create(
                     curve_index,
                     Intersection{
                         .t = 0.0,
-                        .point = scaled_curve.applyT(0.0),
+                        .point = curve.applyT(0.0),
                     },
                     .virtual,
                 );
 
                 // scan x lines within bounds
-                const grid_x_size: usize = @intFromFloat(@ceil(scaled_curve_bounds.getWidth()));
-                const grid_x_start: i32 = @intFromFloat(scaled_curve_bounds.min.x);
+                const grid_x_size: usize = @intFromFloat(@ceil(curve_bounds.getWidth()));
+                const grid_x_start: i32 = @intFromFloat(curve_bounds.min.x);
                 for (0..grid_x_size + 1) |x_offset| {
                     const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
                     try scanX(
                         curve_index,
                         raster_data,
                         @as(f32, @floatFromInt(grid_x)),
-                        scaled_curve,
-                        scaled_curve_bounds,
+                        curve,
+                        curve_bounds,
                     );
                 }
 
                 // scan y lines within bounds
-                const grid_y_size: usize = @intFromFloat(@ceil(scaled_curve_bounds.getHeight()));
-                const grid_y_start: i32 = @intFromFloat(scaled_curve_bounds.min.y);
+                const grid_y_size: usize = @intFromFloat(@ceil(curve_bounds.getHeight()));
+                const grid_y_start: i32 = @intFromFloat(curve_bounds.min.y);
                 for (0..grid_y_size + 1) |y_offset| {
                     const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
                     try scanY(
                         curve_index,
                         raster_data,
                         @as(f32, @floatFromInt(grid_y)),
-                        scaled_curve,
-                        scaled_curve_bounds,
+                        curve,
+                        curve_bounds,
                     );
                 }
 
                 // insert monotonic cuts, which ensure curves are monotonic within a pixel
-                for (scaled_curve.monotonicCuts(&monotonic_cuts)) |intersection| {
+                for (curve.monotonicCuts(&monotonic_cuts)) |intersection| {
                     const ao = try raster_data.addGridIntersection();
                     ao.* = GridIntersection.create(curve_index, intersection, .virtual);
                 }
@@ -415,7 +408,7 @@ pub const Rasterizer = struct {
                     curve_index,
                     Intersection{
                         .t = 1.0,
-                        .point = scaled_curve.applyT(1.0),
+                        .point = curve.applyT(1.0),
                     },
                     .virtual,
                 );
@@ -437,8 +430,8 @@ pub const Rasterizer = struct {
                 }
 
                 // add curve record with offsets
-                (try raster_data.addCurveRecord()).* = CurveRecord{
-                    .grid_intersection_offests = grid_intersection_offsets,
+                (try raster_data.addGridIntersectionsRecords()).* = GridIntersectionsRecord{
+                    .offsets = grid_intersection_offsets,
                 };
             }
         }
@@ -463,10 +456,11 @@ pub const Rasterizer = struct {
     pub fn populateCurveFragments(self: @This(), raster_data: *RasterData) !void {
         _ = self;
 
-        for (raster_data.getSubpaths()) |subpath| {
+        for (raster_data.path.getSubpathRecords()) |subpath_record| {
             // curve fragments are unique to curve
-            for (raster_data.getCurveRecords()[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve_record| {
-                const grid_intersections = raster_data.getGridIntersections()[curve_record.grid_intersection_offests.start..curve_record.grid_intersection_offests.end];
+            const grid_intersections_records = raster_data.getGridIntersectionsRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            for (grid_intersections_records) |grid_intersections_record| {
+                const grid_intersections = raster_data.getGridIntersections()[grid_intersections_record.offsets.start..grid_intersections_record.offsets.end];
                 std.debug.assert(grid_intersections.len > 0);
 
                 var previous_grid_intersection: *GridIntersection = &grid_intersections[0];
@@ -682,110 +676,3 @@ pub const Rasterizer = struct {
         }
     }
 };
-
-// test "raster intersections" {
-//     const test_util = @import("./test_util.zig");
-//     const pen_module = @import("./pen.zig");
-//     const UnmanagedTextureRgba = texture_module.UnmanagedTextureRgba;
-
-//     var pen = try pen_module.Pen.init(std.testing.allocator);
-//     defer pen.deinit();
-
-//     try pen.moveTo(PointF32{
-//         .x = 0.2,
-//         .y = 0.2,
-//     });
-//     try pen.lineTo(PointF32{
-//         .x = 0.2,
-//         .y = 0.8,
-//     });
-//     try pen.quadTo(PointF32{
-//         .x = 0.2,
-//         .y = 0.2,
-//     }, PointF32{
-//         .x = 0.6,
-//         .y = 0.5,
-//     });
-
-//     var path = try pen.createPathAlloc(std.testing.allocator);
-//     defer path.deinit();
-
-//     const size: u32 = 5;
-//     const dimensions = core.DimensionsU32{
-//         .width = size,
-//         .height = size,
-//     };
-
-//     var texture = try UnmanagedTextureRgba.create(std.testing.allocator, dimensions);
-//     defer texture.deinit(std.testing.allocator);
-//     var texture_view = texture.createView(core.RectU32{
-//         .min = core.PointU32{
-//             .x = 0,
-//             .y = 0,
-//         },
-//         .max = core.PointU32{
-//             .x = dimensions.width,
-//             .y = dimensions.height,
-//         },
-//     }).?;
-
-//     const path_intersections = try Raster.createIntersections(std.testing.allocator, path, &texture_view);
-//     defer path_intersections.deinit();
-
-//     // std.debug.print("Intersections:\n", .{});
-//     // for (path_intersections.items) |intersection| {
-//     //     std.debug.print("{}\n", .{intersection});
-//     // }
-
-//     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .subpath_index = 0,
-//         .curve_index = 0,
-//         .is_end = false,
-//         .intersection = Intersection{
-//             .t = 0.0,
-//             .point = PointF32{
-//                 .x = 1.0,
-//                 .y = 4.0,
-//             },
-//         },
-//     }, path_intersections.items, 0.0);
-
-//     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .subpath_index = 0,
-//         .curve_index = 0,
-//         .is_end = false,
-//         .intersection = Intersection{
-//             .t = 0.3333333,
-//             .point = PointF32{
-//                 .x = 1.0,
-//                 .y = 3.0,
-//             },
-//         },
-//     }, path_intersections.items, test_util.DEFAULT_TOLERANCE);
-
-//     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .subpath_index = 0,
-//         .curve_index = 0,
-//         .is_end = false,
-//         .intersection = Intersection{
-//             .t = 0.6666666,
-//             .point = PointF32{
-//                 .x = 1.0,
-//                 .y = 2.0,
-//             },
-//         },
-//     }, path_intersections.items, test_util.DEFAULT_TOLERANCE);
-
-//     try test_util.expectPathIntersectionsContains(PathIntersection{
-//         .subpath_index = 0,
-//         .curve_index = 0,
-//         .is_end = false,
-//         .intersection = Intersection{
-//             .t = 1.0,
-//             .point = PointF32{
-//                 .x = 1.0,
-//                 .y = 1.0,
-//             },
-//         },
-//     }, path_intersections.items, 0.0);
-// }

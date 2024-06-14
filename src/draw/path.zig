@@ -15,11 +15,11 @@ const Curve = curve_module.Curve;
 const Line = curve_module.Line;
 const QuadraticBezier = curve_module.QuadraticBezier;
 
-pub const SubpathRecord = extern struct {
+pub const SubpathRecord = struct {
     curve_offsets: RangeU32,
 };
 
-pub const CurveRecord = extern struct {
+pub const CurveRecord = struct {
     pub const Kind = enum(u8) {
         line = 0,
         quadratic_bezier = 1,
@@ -38,7 +38,7 @@ pub const PathUnmanaged = struct {
     curve_records: CurveList = CurveList{},
     points: PointList = PointList{},
 
-    pub fn deinit(self: @This(), allocator: Allocator) void {
+    pub fn deinit(self: *@This(), allocator: Allocator) void {
         self.subpath_records.deinit(allocator);
         self.curve_records.deinit(allocator);
         self.points.deinit(allocator);
@@ -62,7 +62,8 @@ pub const Path = struct {
     }
 
     pub fn deinit(self: *Path) void {
-        self.toUnmanaged().deinit(self.allocator);
+        var unmanaged = self.toUnmanaged();
+        unmanaged.deinit(self.allocator);
     }
 
     pub fn toUnmanaged(self: Path) PathUnmanaged {
@@ -117,13 +118,13 @@ pub const Path = struct {
 
     pub fn pushSubpathRecord(self: *@This()) !void {
         if (self.currentSubpathRecord()) |subpath| {
-            subpath.curve_offsets.end = self.curve_records.items.len;
+            subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
         }
 
         const subpath = try self.subpath_records.addOne(self.allocator);
         subpath.curve_offsets = RangeU32{
-            .start = self.curve_records.items.len,
-            .end = self.curve_records.items.len,
+            .start = @intCast(self.curve_records.items.len),
+            .end = @intCast(self.curve_records.items.len),
         };
     }
 
@@ -131,15 +132,15 @@ pub const Path = struct {
         return try self.curve_records.addOne(self.allocator);
     }
 
-    pub fn addPoint(self: *@This()) *PointF32 {
+    pub fn addPoint(self: *@This()) !*PointF32 {
         return try self.points.addOne(self.allocator);
     }
 
-    pub fn addPoints(self: *@This(), n: usize) []PointF32 {
+    pub fn addPoints(self: *@This(), n: usize) ![]PointF32 {
         return try self.points.addManyAsSlice(self.allocator, n);
     }
 
-    pub fn transform(self: *@This(), t: TransformF32) !void {
+    pub fn transform(self: *@This(), t: TransformF32) void {
         for (self.points.items) |*point| {
             point.* = t.apply(point.*);
         }
@@ -147,8 +148,8 @@ pub const Path = struct {
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
         const point_offsets = RangeU32{
-            .start = self.points.items.len,
-            .end = self.points.items.len + 1,
+            .start = @intCast(self.points.items.len),
+            .end = @intCast(self.points.items.len + 1),
         };
 
         (try self.addPoint()).* = point;
@@ -161,8 +162,8 @@ pub const Path = struct {
 
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
         const point_offsets = RangeU32{
-            .start = self.points.items.len,
-            .end = self.points.items.len + 2,
+            .start = @intCast(self.points.items.len),
+            .end = @intCast(self.points.items.len + 2),
         };
 
         const points = try self.addPoints(2);
@@ -186,12 +187,12 @@ pub const PathBuilder = struct {
         .transform = GlyphPenFunctions.transform,
     };
 
-    path: Path,
+    path: *Path,
     start: ?PointF32 = null,
-    location: ?PointF32 = null,
+    location: PointF32 = PointF32{},
     is_error: bool = false,
 
-    pub fn create(path: Path) @This() {
+    pub fn create(path: *Path) @This() {
         return @This(){
             .path = path,
         };
@@ -234,8 +235,10 @@ pub const PathBuilder = struct {
     }
 
     pub fn close(self: *@This()) !void {
-        if (self.start != self.location) {
-            try self.lineTo(self.start);
+        if (self.start) |start| {
+            if (!std.meta.eql(start, self.location)) {
+                try self.lineTo(start);
+            }
         }
 
         self.start = null;

@@ -29,16 +29,15 @@ pub fn main() !void {
         std.debug.print("Table: {s}\n", .{table.tag.toBytes()});
     }
 
-    var builder = try draw.PathBuilder.init(allocator);
-    defer builder.deinit();
+    var path = draw.Path.init(allocator);
+    defer path.deinit();
+
+    var builder = draw.PathBuilder.create(&path);
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     const bounds = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
     _ = bounds;
-    var path = try builder.createPathAlloc(allocator);
-    path.unmanaged.subpaths.len -= 0;
-    defer path.deinit();
 
     const dimensions = core.DimensionsU32{
         .width = size * 3,
