@@ -147,7 +147,7 @@ pub const Paths = struct {
     pub fn closePath(self: *@This()) !void {
         try self.closeSubpath();
         if (self.currentPathRecord()) |path| {
-            if (path.is_closed or path.subpath_offsets.size() == 0) {
+            if (path.is_closed or path.subpath_offsets.start == @as(u32, @intCast(self.subpath_records.items.len))) {
                 // empty path, remove it from list
                 self.path_records.items.len -= 1;
                 return;
@@ -204,16 +204,16 @@ pub const Paths = struct {
 
     pub fn closeSubpath(self: *@This()) !void {
         if (self.currentSubpathRecord()) |subpath| {
-            if (subpath.is_closed or subpath.curve_offsets.size() == 0) {
+            if (subpath.is_closed or subpath.curve_offsets.start == @as(u32, @intCast(self.curve_records.items.len))) {
                 // empty subpath, remove it from list
                 self.subpath_records.items.len -= 1;
                 return;
             }
 
             const start_curve = self.curve_records.items[subpath.curve_offsets.start];
-            var end_curve = &self.curve_records.items[subpath.curve_offsets.start - 1];
+            var end_curve = &self.curve_records.items[self.curve_records.items.len - 1];
             const start_point = self.points.items[start_curve.point_offsets.start];
-            const end_point = self.points.items[end_curve.point_offsets.end];
+            const end_point = self.points.items[end_curve.point_offsets.end - 1];
 
             if (std.meta.eql(start_point, end_point)) {
                 // we need to close the subpath
