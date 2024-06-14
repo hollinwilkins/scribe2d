@@ -70,7 +70,7 @@ pub const Face = struct {
         return try file.readToEndAlloc(allocator, stat.size);
     }
 
-    pub fn outline(self: Face, glyph_id: GlyphId, points: f32, pen: GlyphPen) !RectF32 {
+    pub fn outline(self: Face, glyph_id: GlyphId, points: f32, pen: GlyphPen) !void {
         var builder = GlyphBuilder.create(
             null,
             Transform{},
@@ -79,7 +79,9 @@ pub const Face = struct {
 
         if (self.unmanaged.tables.glyf) |glyf| {
             const units_per_em: f32 = @floatFromInt(self.unmanaged.tables.head.units_per_em);
-            const bounds = try glyf.outline(glyph_id, points, &builder);
+            builder.open();
+            try glyf.outline(glyph_id, points, &builder);
+            const bounds = builder.getBounds();
             const transform = TransformF32{
                 .scale = PointF32{
                     .x = points / units_per_em,
@@ -113,7 +115,7 @@ pub const Face = struct {
                     .y = bounds2.getHeight() / 2.0,
                 }
             });
-            return bounds2;
+            builder.close();
         } else {
             return error.InvalidFace;
         }

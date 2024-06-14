@@ -141,7 +141,5 @@ fn finishContour(self: *@This()) void {
         self.first_on_curve = null;
         self.first_off_curve = null;
         self.last_off_curve = null;
-
-        self.pen.close();
     }
 }

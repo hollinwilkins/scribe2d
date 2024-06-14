@@ -161,7 +161,7 @@ pub const Paths = struct {
                     .y = std.math.floatMin(f32),
                 },
             };
-            
+
             for (self.subpath_records.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
                 const start_point_index = self.curve_records.items[subpath.curve_offsets.start].point_offsets.start;
                 const end_point_index = self.curve_records.items[subpath.curve_offsets.end - 1].point_offsets.end;
@@ -236,9 +236,18 @@ pub const Paths = struct {
         return try self.points.addManyAsSlice(self.allocator, n);
     }
 
-    pub fn transform(self: *@This(), t: TransformF32) void {
-        for (self.points.items) |*point| {
-            point.* = t.apply(point.*);
+    pub fn transformCurrentPath(self: *@This(), t: TransformF32) void {
+        if (self.currentPathRecord()) |path| {
+            if (path.subpath_offsets.size() > 0) {
+                const start_curve_index = self.subpath_records.items[path.subpath_offsets.start].curve_offsets.start;
+                const end_curve_index = self.subpath_records.items[path.subpath_offsets.end - 1].curve_offsets.end;
+                const start_point_index = self.curve_records.items[start_curve_index].point_offsets.start;
+                const end_point_index = self.curve_records.items[end_curve_index].point_offsets.end;
+
+                for (self.points.items[start_point_index..end_point_index]) |*point| {
+                    point.* = t.apply(point.*);
+                }
+            }
         }
     }
 
@@ -379,7 +388,7 @@ pub const PathBuilder = struct {
 
         fn transform(ctx: *anyopaque, t: TransformF32) void {
             const b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.path.transform(t);
+            b.path.transformCurrentPath(t);
         }
     };
 };

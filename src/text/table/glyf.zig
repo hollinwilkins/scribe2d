@@ -29,11 +29,10 @@ pub const Table = struct {
         };
     }
 
-    pub fn outline(self: Table, glyph_id: GlyphId, points: f32, builder: *GlyphBuilder) Error!RectF32 {
+    pub fn outline(self: Table, glyph_id: GlyphId, points: f32, builder: *GlyphBuilder) Error!void {
         _ = points;
         const glyph_data = self.get(glyph_id) orelse return error.InvalidOutline;
         try self.outlineImpl(glyph_data, 0, builder);
-        return builder.getBounds();
     }
 
     pub fn get(self: Table, glyph_id: GlyphId) ?[]const u8 {
