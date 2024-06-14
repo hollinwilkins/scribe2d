@@ -100,11 +100,11 @@ pub fn pushPoint(self: *@This(), point: PointF32, on_curve_point: bool, last_poi
         if (self.last_off_curve) |off_curve| {
             if (on_curve_point) {
                 self.last_off_curve = null;
-                self.quadTo(point, off_curve);
+                self.quadTo(off_curve, point);
             } else {
                 self.last_off_curve = point;
                 const mid = off_curve.lerp(point, 0.5);
-                self.quadTo(mid, off_curve);
+                self.quadTo(off_curve, mid);
             }
         } else {
             if (on_curve_point) {
@@ -125,15 +125,15 @@ fn finishContour(self: *@This()) void {
         if (self.last_off_curve) |off_curve2| {
             self.last_off_curve = null;
             const mid = off_curve2.lerp(off_curve1, 0.5);
-            self.quadTo(mid, off_curve2);
+            self.quadTo(off_curve2, mid);
         }
     }
 
     if (self.first_on_curve) |point| {
         if (self.first_off_curve) |off_curve1| {
-            self.quadTo(point, off_curve1);
+            self.quadTo(off_curve1, point);
         } else if (self.last_off_curve) |off_curve2| {
-            self.quadTo(point, off_curve2);
+            self.quadTo(off_curve2, point);
         } else {
             self.lineTo(point);
         }
