@@ -1,7 +1,7 @@
 const std = @import("std");
 const text = @import("../text/root.zig");
 const core = @import("../core/root.zig");
-const curve_module = @import("./curve.zig");
+const curve_module = @import("./curve2.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
@@ -11,12 +11,15 @@ const RangeU32 = core.RangeU32;
 const TransformF32 = core.TransformF32;
 const SequenceU32 = core.SequenceU32;
 const GlyphPen = text.GlyphPen;
+const Curve = curve_module.Curve;
+const Line = curve_module.Line;
+const QuadraticBezier = curve_module.QuadraticBezier;
 
-pub const Subpath = extern struct {
+pub const SubpathRecord = extern struct {
     curve_offsets: RangeU32,
 };
 
-pub const Curve = extern struct {
+pub const CurveRecord = extern struct {
     pub const Kind = enum(u8) {
         line = 0,
         quadratic_bezier = 1,
@@ -27,33 +30,33 @@ pub const Curve = extern struct {
 };
 
 pub const PathUnmanaged = struct {
-    const SubpathList = std.ArrayListUnmanaged(Subpath);
-    const CurveList = std.ArrayListUnmanaged(Curve);
+    const SubpathList = std.ArrayListUnmanaged(SubpathRecord);
+    const CurveList = std.ArrayListUnmanaged(CurveRecord);
     const PointList = std.ArrayListUnmanaged(PointF32);
 
-    subpaths: SubpathList = SubpathList{},
-    curves: CurveList = CurveList{},
+    subpath_records: SubpathList = SubpathList{},
+    curve_records: CurveList = CurveList{},
     points: PointList = PointList{},
 
     pub fn deinit(self: @This(), allocator: Allocator) void {
-        self.subpaths.deinit(allocator);
-        self.curve.deinit(allocator);
+        self.subpath_records.deinit(allocator);
+        self.curve_records.deinit(allocator);
         self.points.deinit(allocator);
     }
 };
 
 pub const Path = struct {
-    const SubpathList = std.ArrayListUnmanaged(Subpath);
-    const CurveList = std.ArrayListUnmanaged(Curve);
+    const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
+    const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
     const PointList = std.ArrayListUnmanaged(PointF32);
 
     allocator: Allocator,
-    subpaths: SubpathList = SubpathList{},
-    curves: CurveList = CurveList{},
+    subpath_records: SubpathRecordList = SubpathRecordList{},
+    curve_records: CurveRecordList = CurveRecordList{},
     points: PointList = PointList{},
 
     pub fn init(allocator: Allocator) @This() {
-        return @This() {
+        return @This(){
             .allocator = allocator,
         };
     }
@@ -62,44 +65,70 @@ pub const Path = struct {
         self.toUnmanaged().deinit(self.allocator);
     }
 
-    pub fn getSubpaths(self: @This()) []Subpath {
-        return self.subpaths.items;
+    pub fn toUnmanaged(self: Path) PathUnmanaged {
+        return PathUnmanaged{
+            .subpath_records = self.subpath_records,
+            .curve_records = self.curve_records,
+            .points = self.points,
+        };
     }
 
-    pub fn getCurves(self: @This()) []Curve {
-        return self.curves.items;
+    pub fn getSubpathRecords(self: @This()) []SubpathRecord {
+        return self.subpath_records.items;
+    }
+
+    pub fn getCurveRecords(self: @This()) []CurveRecord {
+        return self.curve_records.items;
     }
 
     pub fn getPoints(self: @This()) []PointF32 {
         return self.points.items;
     }
 
-    pub fn currentSubpath(self: *@This()) ?*Subpath {
-        if (self.subpaths.items.len > 0) {
-            return self.currentSubpathUnsafe();
+    pub fn getCurve(self: @This(), curve_record: CurveRecord) Curve {
+        return switch (curve_record.kind) {
+            .line => Curve{
+                .line = Line.create(
+                    self.points.items[curve_record.point_offsets.start],
+                    self.points.items[curve_record.point_offsets.start + 1],
+                ),
+            },
+            .quadratic_bezier => Curve{
+                .quadratic_bezier = QuadraticBezier.create(
+                    self.points.items[curve_record.point_offsets.start],
+                    self.points.items[curve_record.point_offsets.start + 1],
+                    self.points.items[curve_record.point_offsets.start + 2],
+                ),
+            },
+        };
+    }
+
+    pub fn currentSubpathRecord(self: *@This()) ?*SubpathRecord {
+        if (self.subpath_records.items.len > 0) {
+            return self.currentSubpathRecordUnsafe();
         }
 
         return null;
     }
 
-    pub fn currentSubpathUnsafe(self: *@This()) *Subpath {
-        return &self.subpaths.items[self.subpaths.items.len - 1];
+    pub fn currentSubpathRecordUnsafe(self: *@This()) *SubpathRecord {
+        return &self.subpath_records.items[self.subpath_records.items.len - 1];
     }
 
-    pub fn pushSubpath(self: *@This()) !void {
-        if (self.currentSubpath()) |subpath| {
-            subpath.curve_offsets.end = self.curves.items.len;
+    pub fn pushSubpathRecord(self: *@This()) !void {
+        if (self.currentSubpathRecord()) |subpath| {
+            subpath.curve_offsets.end = self.curve_records.items.len;
         }
 
-        const subpath = try self.subpaths.addOne(self.allocator);
+        const subpath = try self.subpath_records.addOne(self.allocator);
         subpath.curve_offsets = RangeU32{
-            .start = self.curves.items.len,
-            .end = self.curves.items.len,
+            .start = self.curve_records.items.len,
+            .end = self.curve_records.items.len,
         };
     }
 
-    fn addCurve(self: *@This()) !*Curve {
-        return try self.curves.addOne(self.allocator);
+    fn addCurveRecord(self: *@This()) !*CurveRecord {
+        return try self.curve_records.addOne(self.allocator);
     }
 
     pub fn addPoint(self: *@This()) *PointF32 {
@@ -123,8 +152,8 @@ pub const Path = struct {
         };
 
         (try self.addPoint()).* = point;
-        const curve = try self.addCurve();
-        curve.* = Curve{
+        const curve = try self.addCurveRecord();
+        curve.* = CurveRecord{
             .kind = .line,
             .point_offsets = point_offsets,
         };
@@ -139,8 +168,8 @@ pub const Path = struct {
         const points = try self.addPoints(2);
         points[0] = control;
         points[1] = point;
-        const curve = try self.addCurve();
-        curve.* = Curve{
+        const curve = try self.addCurveRecord();
+        curve.* = CurveRecord{
             .kind = .quadratic_bezier,
             .point_offsets = point_offsets,
         };
@@ -183,7 +212,7 @@ pub const PathBuilder = struct {
     pub fn lineTo(self: *@This(), point: PointF32) !void {
         if (self.start == null) {
             // start of a new subpath
-            try self.path.pushSubpath();
+            try self.path.pushSubpathRecord();
             (try self.path.addPoint()).* = self.location;
             self.start = self.location;
         }
@@ -195,7 +224,7 @@ pub const PathBuilder = struct {
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
         if (self.start == null) {
             // start of a new subpath
-            try self.path.pushSubpath();
+            try self.path.pushSubpathRecord();
             (try self.path.addPoint()).* = self.location;
             self.start = self.location;
         }
