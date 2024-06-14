@@ -9,14 +9,9 @@ const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
 const Style = pen.Style;
 const PathsUnmanaged = path_module.PathsUnmanaged;
+const PathMetadata = path_module.PathMetadata;
 
 pub const Scene = struct {
-    pub const PathMetadata = struct {
-        style_index: u16,
-        transform_index: u16,
-        path_offsets: RangeU32 = RangeU32{},
-    };
-
     const StyleList = std.ArrayListUnmanaged(Style);
     const TransformList = std.ArrayListUnmanaged(TransformF32);
     const PathMetadataList = std.ArrayListUnmanaged(PathMetadata);

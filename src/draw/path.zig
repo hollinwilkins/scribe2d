@@ -19,6 +19,12 @@ const QuadraticBezier = curve_module.QuadraticBezier;
 const CubicPoints = euler.CubicPoints;
 const Style = pen.Style;
 
+pub const PathMetadata = struct {
+    style_index: u16,
+    transform_index: u16,
+    path_offsets: RangeU32 = RangeU32{},
+};
+
 pub const PathsUnmanaged = struct {
     path_records: Paths.PathRecordList = Paths.PathRecordList{},
     subpath_records: Paths.SubpathRecordList = Paths.SubpathRecordList{},
