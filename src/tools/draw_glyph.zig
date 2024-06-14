@@ -31,13 +31,24 @@ pub fn main() !void {
 
     var path = draw.Path.init(allocator);
     defer path.deinit();
-
     var builder = draw.PathBuilder.create(&path);
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     const bounds = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
     _ = bounds;
+
+    std.debug.print("\n", .{});
+    std.debug.print("Curves:\n", .{});
+    std.debug.print("-----------------------------\n", .{});
+    for (path.getSubpathRecords(), 0..) |subpath_record, subpath_index| {
+        const curve_records = path.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+        for (curve_records, 0..) |curve_record, curve_index| {
+            const curve = path.getCurve(curve_record);
+            std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
+        }
+    }
+    std.debug.print("-----------------------------\n", .{});
 
     const dimensions = core.DimensionsU32{
         .width = size * 3,

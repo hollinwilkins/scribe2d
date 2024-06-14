@@ -117,10 +117,6 @@ pub const Path = struct {
     }
 
     pub fn pushSubpathRecord(self: *@This()) !void {
-        if (self.currentSubpathRecord()) |subpath| {
-            subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
-        }
-
         const subpath = try self.subpath_records.addOne(self.allocator);
         subpath.curve_offsets = RangeU32{
             .start = @intCast(self.curve_records.items.len),
@@ -148,7 +144,7 @@ pub const Path = struct {
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
         const point_offsets = RangeU32{
-            .start = @intCast(self.points.items.len),
+            .start = @intCast(self.points.items.len - 1),
             .end = @intCast(self.points.items.len + 1),
         };
 
@@ -162,7 +158,7 @@ pub const Path = struct {
 
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
         const point_offsets = RangeU32{
-            .start = @intCast(self.points.items.len),
+            .start = @intCast(self.points.items.len - 1),
             .end = @intCast(self.points.items.len + 2),
         };
 
@@ -174,6 +170,12 @@ pub const Path = struct {
             .kind = .quadratic_bezier,
             .point_offsets = point_offsets,
         };
+    }
+
+    pub fn close(self: *@This()) void {
+        if (self.currentSubpathRecord()) |subpath| {
+            subpath.curve_offsets.end = @intCast(self.curve_records.items.len);
+        }
     }
 };
 
@@ -241,6 +243,7 @@ pub const PathBuilder = struct {
             }
         }
 
+        self.path.close();
         self.start = null;
     }
 
