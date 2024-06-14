@@ -25,6 +25,10 @@ pub fn curveTo(self: @This(), end: PointF32, control1: PointF32, control2: Point
     self.vtable.curveTo(self.ptr, end, control1, control2);
 }
 
+pub fn open(self: @This()) void {
+    self.vtable.open(self.ptr);
+}
+
 pub fn close(self: @This()) void {
     self.vtable.close(self.ptr);
 }
@@ -38,6 +42,7 @@ pub const VTable = struct {
     lineTo: *const fn (ctx: *anyopaque, end: PointF32) void,
     quadTo: *const fn (ctx: *anyopaque, end: PointF32, control: PointF32) void,
     curveTo: *const fn (ctx: *anyopaque, end: PointF32, control1: PointF32, control2: PointF32) void,
+    open: *const fn (ctx: *anyopaque) void,
     close: *const fn (ctx: *anyopaque) void,
     transform: *const fn (ctx: *anyopaque, t: TransformF32) void,
 };
@@ -48,6 +53,7 @@ pub const Debug = struct {
         .lineTo = Debug.lineTo,
         .quadTo = Debug.quadTo,
         .curveTo = Debug.curveTo,
+        .open = Debug.open,
         .close = Debug.close,
         .transform = Debug.transform,
     };
@@ -71,6 +77,10 @@ pub const Debug = struct {
 
     pub fn curveTo(_: *anyopaque, end: PointF32, control1: PointF32, control2: PointF32) void {
         std.debug.print("Outliner.Debug.curveTo({}, {}, {})\n", .{ end, control1, control2 });
+    }
+
+    pub fn open(_: *anyopaque) void {
+        std.debug.print("Outliner.Debug.open()\n", .{});
     }
 
     pub fn close(_: *anyopaque) void {
