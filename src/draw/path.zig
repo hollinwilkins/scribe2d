@@ -256,15 +256,12 @@ pub const Paths = struct {
 
     pub fn transformCurrentPath(self: *@This(), t: TransformF32) void {
         if (self.currentPathRecord()) |path| {
-            if (path.subpath_offsets.size() > 0) {
-                const start_curve_index = self.subpath_records.items[path.subpath_offsets.start].curve_offsets.start;
-                const end_curve_index = self.subpath_records.items[path.subpath_offsets.end - 1].curve_offsets.end;
-                const start_point_index = self.curve_records.items[start_curve_index].point_offsets.start;
-                const end_point_index = self.curve_records.items[end_curve_index].point_offsets.end;
+            const start_curve_index = self.subpath_records.items[path.subpath_offsets.start].curve_offsets.start;
+            const start_point_index = self.curve_records.items[start_curve_index].point_offsets.start;
+            const end_point_index = self.points.items.len;
 
-                for (self.points.items[start_point_index..end_point_index]) |*point| {
-                    point.* = t.apply(point.*);
-                }
+            for (self.points.items[start_point_index..end_point_index]) |*point| {
+                point.* = t.apply(point.*);
             }
         }
     }

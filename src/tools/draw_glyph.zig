@@ -52,13 +52,13 @@ pub fn main() !void {
     }
     std.debug.print("-----------------------------\n", .{});
 
-    // const dimensions = core.DimensionsU32{
-    //     .width = size * 3,
-    //     .height = size,
-    // };
+    const dimensions = core.DimensionsU32{
+        .width = size * 3,
+        .height = size,
+    };
 
-    // var rasterizer = try draw.Rasterizer.init(allocator);
-    // defer rasterizer.deinit();
+    var rasterizer = try draw.Rasterizer.init(allocator);
+    defer rasterizer.deinit();
 
     // std.debug.print("\n", .{});
     // std.debug.print("Grid Intersections:\n", .{});
@@ -118,59 +118,59 @@ pub fn main() !void {
     //     });
     // }
 
-    // zstbi.init(allocator);
-    // defer zstbi.deinit();
+    zstbi.init(allocator);
+    defer zstbi.deinit();
 
-    // var image = try zstbi.Image.createEmpty(
-    //     dimensions.width,
-    //     dimensions.height,
-    //     3,
-    //     .{},
-    // );
-    // defer image.deinit();
+    var image = try zstbi.Image.createEmpty(
+        dimensions.width,
+        dimensions.height,
+        3,
+        .{},
+    );
+    defer image.deinit();
 
-    // var texture = draw.TextureUnmanaged{
-    //     .dimensions = dimensions,
-    //     .format = draw.TextureFormat.SrgbU8,
-    //     .bytes = image.data,
-    // };
+    var texture = draw.TextureUnmanaged{
+        .dimensions = dimensions,
+        .format = draw.TextureFormat.SrgbU8,
+        .bytes = image.data,
+    };
 
-    // std.debug.print("\n============== Boundary Texture\n\n", .{});
-    // texture.clear(draw.Color{
-    //     .r = 1.0,
-    //     .g = 1.0,
-    //     .b = 1.0,
-    //     .a = 1.0,
-    // });
+    std.debug.print("\n============== Boundary Texture\n\n", .{});
+    texture.clear(draw.Color{
+        .r = 1.0,
+        .g = 1.0,
+        .b = 1.0,
+        .a = 1.0,
+    });
 
-    // var pen = draw.Pen.create(&rasterizer);
-    // pen.setFillColor(draw.Color{
-    //     .r = 0.0,
-    //     .g = 0.0,
-    //     .b = 0.0,
-    //     .a = 1.0,
-    // });
-    // try pen.draw(paths, 0, &texture);
+    var pen = draw.Pen.create(&rasterizer);
+    pen.setFillColor(draw.Color{
+        .r = 0.0,
+        .g = 0.0,
+        .b = 0.0,
+        .a = 1.0,
+    });
+    try pen.draw(paths, 0, &texture);
 
-    // for (0..texture.dimensions.height) |y| {
-    //     std.debug.print("{:0>4}: ", .{y});
-    //     for (0..texture.dimensions.height) |x| {
-    //         const pixel = texture.getPixelUnsafe(core.PointU32{
-    //             .x = @intCast(x),
-    //             .y = @intCast(y),
-    //         });
+    for (0..texture.dimensions.height) |y| {
+        std.debug.print("{:0>4}: ", .{y});
+        for (0..texture.dimensions.height) |x| {
+            const pixel = texture.getPixelUnsafe(core.PointU32{
+                .x = @intCast(x),
+                .y = @intCast(y),
+            });
 
-    //         if (pixel.r < 1.0) {
-    //             std.debug.print("#", .{});
-    //         } else {
-    //             std.debug.print(";", .{});
-    //         }
-    //     }
+            if (pixel.r < 1.0) {
+                std.debug.print("#", .{});
+            } else {
+                std.debug.print(";", .{});
+            }
+        }
 
-    //     std.debug.print("\n", .{});
-    // }
+        std.debug.print("\n", .{});
+    }
 
-    // std.debug.print("==============\n", .{});
+    std.debug.print("==============\n", .{});
 
-    // try image.writeToFile("/tmp/output.png", .png);
+    try image.writeToFile("/tmp/output.png", .png);
 }
