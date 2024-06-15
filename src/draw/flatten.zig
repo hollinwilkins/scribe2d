@@ -2,40 +2,150 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const path_module = @import("./path.zig");
 const pen = @import("./pen.zig");
-const curve = @import("./curve.zig");
+const curve_module = @import("./curve.zig");
+const euler = @import("./euler.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
+const PointF32 = core.PointF32;
 const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
 const Paths = path_module.Paths;
 const PathsUnmanaged = path_module.PathsUnmanaged;
 const Style = pen.Style;
-const Line = curve.Line;
+const Line = curve_module.Line;
+const CubicPoints = euler.CubicPoints;
+const CubicParams = euler.CubicParams;
+const EulerParams = euler.EulerParams;
+const EulerSegment = euler.EulerSegment;
 
-pub const LineSoup = struct {
-    const PathRecord = struct {
-        offsets: RangeU32 = RangeU32{},
-    };
-    const PathRecordList = std.ArrayListUnmanaged(PathRecord);
-    const LineList = std.ArrayListUnmanaged(Line);
+/// Threshold below which a derivative is considered too small.
+pub const DERIV_THRESH: f32 = 1e-6;
+/// Amount to nudge t when derivative is near-zero.
+pub const DERIV_EPS: f32 = 1e-6;
+// Limit for subdivision of cubic Béziers.
+pub const SUBDIV_LIMIT: f32 = 1.0 / 65536.0;
 
-    allocator: Allocator,
-    path_records: PathRecordList = PathRecordList{},
-    lines: LineList = LineList{},
+pub const K1_THRESH: f32 = 1e-3;
+pub const DIST_THRESH: f32 = 1e-3;
+pub const BREAK1: f32 = 0.8;
+pub const BREAK2: f32 = 1.25;
+pub const BREAK3: f32 = 2.1;
+pub const SIN_SCALE: f32 = 1.0976991822760038;
+pub const QUAD_A1: f32 = 0.6406;
+pub const QUAD_B1: f32 = -0.81;
+pub const QUAD_C1: f32 = 0.9148117935952064;
+pub const QUAD_A2: f32 = 0.5;
+pub const QUAD_B2: f32 = -0.156;
+pub const QUAD_C2: f32 = 0.16145779359520596;
 
-    pub fn init(allocator: Allocator) @This() {
-        return @This(){
-            .allocator = allocator,
-        };
+pub const EspcRobust = enum(u8) {
+    normal = 0,
+    low_k1 = 1,
+    low_dist = 2,
+
+    pub fn intApproximation(x: f32) f32 {
+        const y = @abs(x);
+        var a: f32 = undefined;
+
+        if (y < BREAK1) {
+            a = std.math.sin(SIN_SCALE * y) * (1.0 / SIN_SCALE);
+        } else if (y < BREAK2) {
+            a = (std.math.sqrt(8.0) / 3.0) * (y - 1.0) * (y - 1.0).abs().sqrt() + (std.math.pi / 4.0);
+        } else {
+            var qa: f32 = undefined;
+            var qb: f32 = undefined;
+            var qc: f32 = undefined;
+
+            if (y < BREAK3) {
+                qa = QUAD_A1;
+                qb = QUAD_B1;
+                qc = QUAD_C1;
+            } else {
+                qa = QUAD_A2;
+                qb = QUAD_B2;
+                qc = QUAD_C2;
+            }
+
+            a = qa * y * y + qb * y + qc;
+        }
+
+        return std.math.copysign(a, x);
     }
 
-    pub fn deinit(self: *@This(), allocator: Allocator) void {
-        self.path_records.deinit(allocator);
-        self.lines.deinit(allocator);
+    pub fn intInvApproximation(x: f32) f32 {
+        const y = @abs(x);
+        var a: f32 = undefined;
+
+        if (y < 0.7010707591262915) {
+            a = std.math.asic(x * SIN_SCALE * (1.0 / SIN_SCALE));
+        } else if (y < 0.903249293595206) {
+            const b = y - (std.math.pi / 4.0);
+            const u = std.math.copysign(std.math.pow(@abs(b), 2.0 / 3.0), b);
+            a = u * std.math.cbrt(9.0 / 8.0) + 1.0;
+        } else {
+            var u: f32 = undefined;
+            var v: f32 = undefined;
+            var w: f32 = undefined;
+
+            if (y < 2.038857793595206) {
+                const B: f32 = 0.5 * QUAD_B1 / QUAD_A1;
+                u = B * B - QUAD_C1 / QUAD_A1;
+                v = 1.0 / QUAD_A1;
+                w = B;
+            } else {
+                const B: f32 = 0.5 * QUAD_B2 / QUAD_A2;
+                u = B * B - QUAD_C2 / QUAD_A2;
+                v = 1.0 / QUAD_A2;
+                w = B;
+            }
+
+            a = std.math.sqrt(u + v * y) - w;
+        }
+
+        return std.math.copysign(a, x);
     }
+};
+
+// pub const LineSoup = struct {
+//     const PathRecord = struct {
+//         offsets: RangeU32 = RangeU32{},
+//     };
+//     const SubpathRecord = struct {
+//         offsets: RangeU32 = RangeU32{},
+//     };
+//     const PathRecordList = std.ArrayListUnmanaged(PathRecord);
+//     const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
+//     const LineList = std.ArrayListUnmanaged(Line);
+
+//     allocator: Allocator,
+//     path_records: PathRecordList = PathRecordList{},
+//     subpath_records: SubpathRecordList = SubpathRecordList{},
+//     lines: LineList = LineList{},
+
+//     pub fn init(allocator: Allocator) @This() {
+//         return @This(){
+//             .allocator = allocator,
+//         };
+//     }
+
+//     pub fn deinit(self: *@This(), allocator: Allocator) void {
+//         self.path_records.deinit(allocator);
+//         self.subpath_records.deinit(allocator);
+//         self.lines.deinit(allocator);
+//     }
+// };
+
+pub const FlattenData = struct {
+    outline: PathsUnmanaged = PathsUnmanaged{},
+    fill: PathsUnmanaged = PathsUnmanaged{},
+};
+
+pub const CubicAndDeriv = struct {
+    point: PointF32,
+    derivative: PointF32,
 };
 
 pub const PathFlattener = struct {
@@ -49,34 +159,221 @@ pub const PathFlattener = struct {
         paths: PathsUnmanaged,
         styles: []const Style,
         transforms: []const TransformF32,
-    ) !Paths {
-        var line_soup = LineSoup.init(allocator);
-        var paths = Paths.init(allocator);
+    ) !FlattenData {
+        _ = allocator;
+        const flatten_data = FlattenData{};
 
         for (metadatas) |metadata| {
             const style = styles[metadata.style_index];
             const transform = transforms[metadata.transform_index];
-            _ = style;
             _ = transform;
             for (paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end]) |path| {
-                _ = path;
-                // build lines for line_soup
-                // push a PathRecord to line_soup
+                for (paths.subpath_records.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
+                    for (paths.curve_records.items[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve| {
+                        const cubic_points = paths.getCubicPoints(curve);
+                        _ = cubic_points;
+
+                        if (style.isFilled()) {}
+                        if (style.isStroked()) {}
+                    }
+                }
             }
         }
 
-        return paths;
+        return flatten_data;
     }
 
-    // pub fn flatten(paths: []const Path, styles: []const Style, flat_paths: []Path) void {
+    fn flattenEuler(
+        cubic_points: CubicPoints,
+        transform: TransformF32,
+        offset: f32,
+        start_point: PointF32,
+        end_point: PointF32,
+    ) !void {
+        const p0 = transform.apply(cubic_points.point0);
+        const p1 = transform.apply(cubic_points.point1);
+        const p2 = transform.apply(cubic_points.point2);
+        const p3 = transform.apply(cubic_points.point3);
+        const scale = transform.scale.length();
 
-    // }
+        var t_start: PointF32 = undefined;
+        var t_end: PointF32 = undefined;
+        if (offset == 0.0) {
+            t_start = p0;
+            t_end = p3;
+        } else {
+            t_start = start_point;
+            t_end = end_point;
+        }
+
+        // Drop zero length lines. This is an exact equality test because dropping very short
+        // line segments may result in loss of watertightness. The parallel curves of zero
+        // length lines add nothing to stroke outlines, but we still may need to draw caps.
+        if (std.meta.eql(p0, p1) and std.meta.eql(p0, p2) and std.meta.eql(p0, p3)) {
+            return;
+        }
+
+        const tol: f32 = 0.25;
+        var t0_u: u32 = 0;
+        var dt: f32 = 1.0;
+        var last_p = p0;
+        var last_q = p1 - p0;
+
+        // We want to avoid near zero derivatives, so the general technique is to
+        // detect, then sample a nearby t value if it fails to meet the threshold.
+        if (last_q.length_squared() < std.math.powi(DERIV_THRESH, 2)) {
+            last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, DERIV_EPS).derivative;
+        }
+        var last_t: f32 = 0.0;
+        var lp0 = t_start;
+
+        while (true) {
+            const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
+            if (t0 == 1.0) {
+                break;
+            }
+            var t1 = t0 + dt;
+            const this_p0 = last_p;
+            const this_q0 = last_q;
+            const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
+            var this_p1 = cd1.point;
+            var this_q1 = cd1.derivative;
+            if (this_q1.length_squared() < DERIV_THRESH.powi(2)) {
+                const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - DERIV_EPS);
+                const new_p1 = cd2.point;
+                const new_q1 = cd2.derivative;
+                this_q1 = new_q1;
+
+                // Change just the derivative at the endpoint, but also move the point so it
+                // matches the derivative exactly if in the interior.
+                if (t1 < 1.0) {
+                    this_p1 = new_p1;
+                    t1 -= DERIV_EPS;
+                }
+            }
+            const actual_dt = t1 - last_t;
+            const cubic_params = CubicParams.create(this_p0, this_p1, this_q0, this_q1, actual_dt);
+            if (cubic_params.err * scale <= tol or dt <= SUBDIV_LIMIT) {
+                const euler_params = EulerParams.create(cubic_params.tho0, cubic_params.th1);
+                const es = EulerSegment{
+                    .start = this_p0,
+                    .end = this_p1,
+                    .params = euler_params,
+                };
+
+                const k0 = es.params.k0 - 0.5 * es.params.k1;
+                const k1 = es.params.k1;
+
+                // compute forward integral to determine number of subdivisions
+                const normalized_offset = offset / cubic_params.chord_len;
+                const dist_scaled = normalized_offset * es.params.ch;
+
+                // The number of subdivisions for curvature = 1
+                const scale_multiplier = 0.5 * std.math.sqrt1_2 * std.math.sqrt((scale * cubic_params.chord_len / (es.params.ch * tol)));
+                var a: f32 = 0.0;
+                var b: f32 = 0.0;
+                var integral: f32 = 0.0;
+                var int0: f32 = 0.0;
+
+                var n_frac: f32 = undefined;
+                var robust: EspcRobust = undefined;
+
+                if (@abs(k1) < K1_THRESH) {
+                    const k = k0 + 0.5 * k1;
+                    n_frac = std.math.sqrt(@abs(k * (k * dist_scaled + 1.0)));
+                    robust = .low_k1;
+                } else if (@abs(dist_scaled) < DIST_THRESH) {
+                    a = k1;
+                    b = k0;
+                    int0 = b * std.math.sqrt(@abs(b));
+                    const int1 = (a + b) * std.math.sqrt(@abs(a + b));
+                    integral = int1 - int0;
+                    n_frac = (2.0 / 3.0) * integral / a;
+                    robust = .low_dist;
+                } else {
+                    a = -2.0 * dist_scaled * k1;
+                    b = -1.0 - 2.0 * dist_scaled * k0;
+                    int0 = EspcRobust.intApproximation(b);
+                    const int1 = EspcRobust.intApproximation(a + b);
+                    integral = int1 - int0;
+                    const k_peak = k0 - k1 * b / a;
+                    const integrand_peak = std.math.sqrt(@abs(k_peak * (k_peak * dist_scaled + 1.0)));
+                    const scaled_int = integral * integrand_peak / a;
+                    n_frac = scaled_int;
+                    robust = .normal;
+                }
+
+                const n = std.math.clamp(@ceil(n_frac * scale_multiplier), 1.0, 100.0);
+
+                // Flatten line segments
+                std.debug.assert(!std.math.isNan(n));
+                for (0..n) |i| {
+                    var lp1: PointF32 = undefined;
+
+                    if (i == (@as(usize, @floatFromInt(n)) - 1) and t1 == 1.0) {
+                        lp1 = t_end;
+                    } else {
+                        const t = @as(f32, @floatFromInt(i + 1)) / n;
+                        const s: f32 = undefined;
+
+                        switch (robust) {
+                            .low_k1 => {
+                                s = t;
+                            },
+                            .low_dist => {
+                                const c = std.math.cbrt(integral * t + int0);
+                                const inv = c * @abs(c);
+                                s = (inv - b) / a;
+                            },
+                            .normal => {
+                                const inv = EspcRobust.intInvApproximation(integral * t + int0);
+                                s = (inv - b) / a;
+                            },
+                        }
+                        lp1 = es.applyOffset(s, normalized_offset);
+                    }
+
+                    const l0 = if (offset >= 0.0) lp0 else lp1;
+                    const l1 = if (offset >= 0.0) lp1 else lp0;
+                    // TODO: output line...
+                    _ = l0;
+                    _ = l1;
+
+                    lp0 = lp1;
+                }
+
+                last_p = this_p1;
+                last_q = this_q1;
+                last_t = t1;
+
+                // Advance segment to next range. Beginning of segment is the end of
+                // this one. The number of trailing zeros represents the number of stack
+                // frames to pop in the recursive version of adaptive subdivision, and
+                // each stack pop represents doubling of the size of the range.
+                t0_u += 1;
+                const shift = @ctz(t0_u);
+                t0_u >>= shift;
+                dt *= @as(f32, @floatFromInt(1 << shift));
+            } else {
+                // Subdivide; halve the size of the range while retaining its start.
+                t0_u *|= 2;
+                dt *= 0.5;
+            }
+        }
+    }
+
+    // Evaluate both the point and derivative of a cubic bezier.
+    pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, t: f32) CubicAndDeriv {
+        const m = 1.0 - t;
+        const mm = m * m;
+        const mt = m * t;
+        const tt = t * t;
+        const p = p0 * (mm * m) + (p1 * (3.0 * mm) + p2 * (3.0 * mt) + p3 * tt) * t;
+        const q = (p1 - p0) * mm + (p2 - p1) * (2.0 * mt) + (p3 - p2) * tt;
+
+        return CubicAndDeriv{
+            .point = p,
+            .derivative = q,
+        };
+    }
 };
-
-// for (self.path.getSubpathRecords()) |subpath_record| {
-//     for (self.path.getCurveRecords()) |curve_record| {
-//         const cubic_points = self.path.getCubicPoints(curve_record);
-//         _ = cubic_points;
-//         _ = subpath_record;
-//     }
-// }

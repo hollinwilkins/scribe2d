@@ -211,4 +211,14 @@ pub const EulerSegment = struct {
     start: PointF32,
     end: PointF32,
     params: EulerParams,
+
+    pub fn applyOffset(self: EulerSegment, t: f32, normalized_offset: f32) PointF32 {
+        const chord = self.end.sub(self.start);
+        const point = self.params.applyOffset(t, normalized_offset);
+
+        return PointF32{
+            .x = self.start.x + chord.x * point.x - chord.y * point.y,
+            .y = self.start.y + chord.x * point.y + chord.y * point.x,
+        };
+    }
 };

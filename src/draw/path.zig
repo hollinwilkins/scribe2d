@@ -53,6 +53,26 @@ pub const PathsUnmanaged = struct {
 
         return null;
     }
+
+    pub fn getCubicPoints(self: @This(), curve_record: Paths.CurveRecord) CubicPoints {
+        var cubic_points = CubicPoints{};
+
+        cubic_points.point0 = self.points.items[curve_record.point_offsets.start];
+        cubic_points.point1 = self.points.items[curve_record.point_offsets.start + 1];
+
+        switch (curve_record.kind) {
+            .line => {
+                cubic_points.point3 = cubic_points.point1;
+                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
+                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
+            },
+            .quadratic_bezier => {
+                cubic_points.point3 = cubic_points.point2;
+                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
+                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
+            },
+        }
+    }
 };
 
 pub const Paths = struct {
@@ -144,26 +164,6 @@ pub const Paths = struct {
                 ),
             },
         };
-    }
-
-    pub fn getCubicPoints(self: @This(), curve_record: CurveRecord) CubicPoints {
-        var cubic_points = CubicPoints{};
-
-        cubic_points.point0 = self.points.items[curve_record.point_offsets.start];
-        cubic_points.point1 = self.points.items[curve_record.point_offsets.start + 1];
-
-        switch (curve_record.kind) {
-            .line => {
-                cubic_points.point3 = cubic_points.point1;
-                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
-            },
-            .quadratic_bezier => {
-                cubic_points.point3 = cubic_points.point2;
-                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
-            },
-        }
     }
 
     pub fn currentPathRecord(self: *@This()) ?*PathRecord {

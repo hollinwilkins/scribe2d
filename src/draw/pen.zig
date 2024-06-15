@@ -18,11 +18,19 @@ pub const Style = struct {
     pub const Stroke = struct {
         color: Color,
         width: f32,
-};
+    };
 
     fill_color: ?Color = null,
     stroke: ?Stroke = null,
     blend: ?ColorBlend = null,
+
+    pub fn isFilled(self: @This()) bool {
+        return self.fill_color != null;
+    }
+
+    pub fn isStroked(self: @This()) bool {
+        return self.stroke != null;
+    }
 };
 
 pub const Pen = struct {
@@ -43,7 +51,7 @@ pub const Pen = struct {
 
     pub fn draw(self: @This(), paths: Paths, path_index: u32, texture: *TextureUnmanaged) !void {
         if (self.style.fill_color) |color| {
-            try self.drawFill( paths, path_index, texture, color);
+            try self.drawFill(paths, path_index, texture, color);
         }
 
         if (self.style.stroke) |stroke| {
