@@ -1,3 +1,5 @@
+// Source: https://github.com/linebender/vello/blob/eb20ffcd3eff4fe842932e26e6431a7e4fb502d2/vello_shaders/src/cpu/flatten.rs
+
 const std = @import("std");
 const core = @import("../core/root.zig");
 const path_module = @import("./path.zig");
