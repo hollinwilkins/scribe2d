@@ -231,15 +231,30 @@ pub const RectU32 = Rect(u32);
 
 pub fn Transform(comptime T: type) type {
     return struct {
-        const P = Point(T);
-        const Translation = Point(T);
-        const Scale = Point(T);
+        pub const Matrix = struct {
+            coefficients: [6]T,
 
-        translate: Translation = Translation{},
+            pub fn apply(self: @This(), point: P) P {
+                const z = self.coefficients;
+                const x = z[0] * point.x + z[2] * point.y + z[4];
+                const y = z[1] * point.x + z[3] * point.y + z[5];
+
+                return P{
+                    .x = x,
+                    .y = y,
+                };
+            }
+        };
+
+        const P = Point(T);
+        const Scale = Point(T);
+        const Translation = Point(T);
+
         scale: Scale = Scale{
             .x = 1.0,
             .y = 1.0,
         },
+        translate: Translation = Translation{},
 
         pub fn apply(self: @This(), point: P) P {
             return P{

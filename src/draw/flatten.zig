@@ -42,6 +42,7 @@ pub const QUAD_C1: f32 = 0.9148117935952064;
 pub const QUAD_A2: f32 = 0.5;
 pub const QUAD_B2: f32 = -0.156;
 pub const QUAD_C2: f32 = 0.16145779359520596;
+pub const ROBUST_EPSILON: f32 = 2e-7;
 
 pub const EspcRobust = enum(u8) {
     normal = 0,
@@ -111,43 +112,99 @@ pub const EspcRobust = enum(u8) {
     }
 };
 
-// pub const LineSoup = struct {
-//     const PathRecord = struct {
-//         offsets: RangeU32 = RangeU32{},
-//     };
-//     const SubpathRecord = struct {
-//         offsets: RangeU32 = RangeU32{},
-//     };
-//     const PathRecordList = std.ArrayListUnmanaged(PathRecord);
-//     const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
-//     const LineList = std.ArrayListUnmanaged(Line);
+pub fn cubicStartTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
+    const d01 = p1.sub(p0);
+    const d02 = p2.sub(p0);
+    const d03 = p3.sub(p0);
 
-//     allocator: Allocator,
-//     path_records: PathRecordList = PathRecordList{},
-//     subpath_records: SubpathRecordList = SubpathRecordList{},
-//     lines: LineList = LineList{},
+    if (d01.dot(d01) > ROBUST_EPSILON) {
+        return d01;
+    } else if (d02.dot(d02) > ROBUST_EPSILON) {
+        return d02;
+    } else {
+        return d03;
+    }
+}
 
-//     pub fn init(allocator: Allocator) @This() {
-//         return @This(){
-//             .allocator = allocator,
-//         };
-//     }
-
-//     pub fn deinit(self: *@This(), allocator: Allocator) void {
-//         self.path_records.deinit(allocator);
-//         self.subpath_records.deinit(allocator);
-//         self.lines.deinit(allocator);
-//     }
-// };
-
-pub const FlattenData = struct {
-    outline: PathsUnmanaged = PathsUnmanaged{},
-    fill: PathsUnmanaged = PathsUnmanaged{},
-};
+fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
+    const d23 = p3.sub(p2);
+    const d13 = p3.sub(p1);
+    const d03 = p3.sub(p0);
+    if (d23.dot(d23) > ROBUST_EPSILON) {
+        return d23;
+    } else if (d13.dot(d13) > ROBUST_EPSILON) {
+        return d13;
+    } else {
+        return d03;
+    }
+}
 
 pub const CubicAndDeriv = struct {
     point: PointF32,
     derivative: PointF32,
+};
+
+pub const LineSoup = struct {
+    const PathRecord = struct {
+        fill: Style.Fill,
+        offsets: RangeU32,
+    };
+
+    const SubpathRecord = struct {
+        offsets: RangeU32,
+    };
+
+    const PathRecordList = std.ArrayListUnmanaged(PathRecord);
+    const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
+    const LineList = std.ArrayListUnmanaged(Line);
+
+    allocator: Allocator,
+    paths: PathRecordList = PathRecordList{},
+    subpaths: SubpathRecordList = SubpathRecordList{},
+    lines: LineList = LineList{},
+
+    pub fn init(allocator: Allocator) @This() {
+        return @This(){
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.lines.deinit(self.allocator);
+    }
+
+    pub fn openPath(self: *@This(), fill: Style.Fill) !void {
+        const path = try self.paths.addOne(self.allocator);
+        path.* = PathRecord{
+            .fill = fill,
+            .offsets = RangeU32{
+                .start = @intCast(self.subpaths.items.len),
+                .end = @intCast(self.subpaths.items.len),
+            },
+        };
+    }
+
+    pub fn closePath(self: *@This()) !void {
+        self.paths.items[self.paths.items.len - 1].offsets.end = @intCast(self.subpaths.items.len);
+    }
+
+    pub fn openSubpath(self: *@This()) !void {
+        const subpath = try self.subpaths.addOne(self.allocator);
+        subpath.* = SubpathRecord{
+            .offsets = RangeU32{
+                .start = @intCast(self.lines.items.len),
+                .end = @intCast(self.lines.items.len),
+            },
+        };
+    }
+
+    pub fn closeSubpath(self: *@This()) !void {
+        self.subpaths.items[self.subpaths.items.len - 1].offsets.end = @intCast(self.subpaths.items.len);
+    }
+
+    pub fn addLine(self: *@This()) !*Line {
+        return try self.lines.addOne(self.allocator);
+    }
 };
 
 pub const PathFlattener = struct {
@@ -161,28 +218,182 @@ pub const PathFlattener = struct {
         paths: PathsUnmanaged,
         styles: []const Style,
         transforms: []const TransformF32,
-    ) !FlattenData {
-        _ = allocator;
-        const flatten_data = FlattenData{};
+    ) !void {
+        var stroke_lines = LineSoup.init(allocator);
+        var fill_lines = LineSoup.init(allocator);
 
         for (metadatas) |metadata| {
             const style = styles[metadata.style_index];
             const transform = transforms[metadata.transform_index];
-            _ = transform;
+
             for (paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end]) |path| {
+                if (style.fill) |fill| {
+                    try fill_lines.openPath(fill);
+                }
+
+                if (style.stroke) |stroke| {
+                    try stroke_lines.openPath(stroke.toFill());
+                }
+
                 for (paths.subpath_records.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
+                    if (style.isFilled()) {
+                        try fill_lines.openSubpath();
+                    }
+
+                    if (style.isStroked()) {
+                        try stroke_lines.openSubpath();
+                    }
+
                     for (paths.curve_records.items[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve| {
                         const cubic_points = paths.getCubicPoints(curve);
-                        _ = cubic_points;
 
-                        if (style.isFilled()) {}
-                        if (style.isStroked()) {}
+                        if (style.isFilled()) {
+                            try flattenEuler(
+                                cubic_points,
+                                transform,
+                                0.0,
+                                cubic_points.point0,
+                                cubic_points.point3,
+                                &fill_lines,
+                            );
+                        }
+
+                        if (style.stroke) |stroke| {
+                            const offset = 0.5 * stroke.width;
+
+                            if (curve.is_open) {
+                                // Draw start cap
+                                const tangent = cubicStartTangent(
+                                    cubic_points.p0,
+                                    cubic_points.p1,
+                                    cubic_points.p2,
+                                    cubic_points.p3,
+                                );
+                                const offset_tangent = PointF32{
+                                    .x = offset,
+                                    .y = offset,
+                                } * tangent.normalize().?;
+                                const n = PointF32{
+                                    .x = -offset_tangent.y,
+                                    .y = offset_tangent.x,
+                                };
+
+                                drawCap(
+                                    stroke.cap,
+                                    cubic_points.point0,
+                                    cubic_points.p0.sub(n),
+                                    cubic_points.point0.add(n),
+                                    -offset_tangent,
+                                    transform,
+                                    &stroke_lines,
+                                );
+                            }
+                        }
                     }
+
+                    if (style.isFilled()) {
+                        try fill_lines.closeSubpath();
+                    }
+
+                    if (style.isStroked()) {
+                        try stroke_lines.closeSubpath();
+                    }
+                }
+
+                if (style.isFilled()) {
+                    try fill_lines.closePath();
+                }
+
+                if (style.isStroked()) {
+                    try stroke_lines.closePath();
                 }
             }
         }
+    }
 
-        return flatten_data;
+    fn drawCap(
+        cap_style: Style.Cap,
+        point: PointF32,
+        cap0: PointF32,
+        cap1: PointF32,
+        offset_tangent: PointF32,
+        transform: TransformF32,
+        line_soup: *LineSoup,
+    ) !void {
+        if (cap_style == .round) {
+            try flattenArc(
+                cap0,
+                cap1,
+                point,
+                std.math.pi,
+                transform,
+                line_soup,
+            );
+            return;
+        }
+
+        var start = cap0;
+        var end = cap1;
+        if (cap_style == .square) {
+            const v = offset_tangent;
+            const p0 = start + v;
+            const p1 = end + v;
+            const line1 = try line_soup.addLine();
+            line1.start = transform.apply(start);
+            line1.end = transform.apply(p0);
+
+            const line2 = try line_soup.addLine();
+            line2.start = transform.apply(p1);
+            line2.end = transform.apply(end);
+
+            start = p0;
+            end = p1;
+        }
+
+        const line = try line_soup.addLine();
+        line.start = transform.apply(start);
+        line.end = transform.apply(end);
+    }
+
+    fn flattenArc(
+        start: PointF32,
+        end: PointF32,
+        center: PointF32,
+        angle: f32,
+        transform: TransformF32,
+        line_soup: *LineSoup,
+    ) !void {
+        const MIN_THETA: f32 = 0.0001;
+
+        var p0 = transform.apply(start);
+        var r = start.sub(center);
+        const tol: f32 = 0.25;
+        const radius = tol.max((p0 - transform.apply(center)).length());
+        const theta = @max(MIN_THETA, @as(u32, @intFromFloat((2.0 * std.math.acos(1.0 - tol / radius)))));
+
+        // Always output at least one line so that we always draw the chord.
+        const n_lines = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
+
+        // let (s, c) = theta.sin_cos();
+        const s = std.math.sin(theta);
+        const c = std.math.cos(theta);
+        const rot = TransformF32.Matrix{
+            .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
+        };
+
+        for (0..n_lines - 1) |_| {
+            r = rot.apply(r);
+            const p1 = transform.apply(center.add(r));
+            const line = try line_soup.addLine();
+            line.start = p0;
+            line.end = p1;
+            p0 = p1;
+        }
+
+        const p1 = transform.apply(end);
+        const line = try line_soup.addLine();
+        line.start = p0;
+        line.end = p1;
     }
 
     fn flattenEuler(
@@ -191,6 +402,7 @@ pub const PathFlattener = struct {
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
+        line_soup: *LineSoup,
     ) !void {
         const p0 = transform.apply(cubic_points.point0);
         const p1 = transform.apply(cubic_points.point1);
@@ -337,9 +549,9 @@ pub const PathFlattener = struct {
 
                     const l0 = if (offset >= 0.0) lp0 else lp1;
                     const l1 = if (offset >= 0.0) lp1 else lp0;
-                    // TODO: output line...
-                    _ = l0;
-                    _ = l1;
+                    const line = try line_soup.addLine();
+                    line.start = l0;
+                    line.end = l1;
 
                     lp0 = lp1;
                 }

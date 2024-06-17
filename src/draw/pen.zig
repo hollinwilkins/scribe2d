@@ -15,17 +15,34 @@ const PointU32 = core.PointU32;
 const RasterData = raster.RasterData;
 
 pub const Style = struct {
-    pub const Stroke = struct {
-        color: Color,
-        width: f32,
+    pub const Cap = enum(u8) {
+        butt = 0,
+        square = 1,
+        round = 2,
     };
 
-    fill_color: ?Color = null,
+    pub const Fill = struct {
+        color: Color,
+    };
+
+    pub const Stroke = struct {
+        color: Color = Color.BLACK,
+        width: f32 = 1.0,
+        cap: Cap = .butt,
+
+        pub fn toFill(self: @This()) Fill {
+            return Fill{
+                .color = self.color,
+            };
+        }
+    };
+
+    fill: ?Fill = null,
     stroke: ?Stroke = null,
     blend: ?ColorBlend = null,
 
     pub fn isFilled(self: @This()) bool {
-        return self.fill_color != null;
+        return self.fill != null;
     }
 
     pub fn isStroked(self: @This()) bool {

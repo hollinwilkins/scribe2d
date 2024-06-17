@@ -124,7 +124,7 @@ pub const Paths = struct {
     }
 
     pub fn toUnmanaged(self: @This()) PathsUnmanaged {
-        return PathsUnmanaged {
+        return PathsUnmanaged{
             .path_records = self.path_records,
             .subpath_records = self.subpath_records,
             .curve_records = self.curve_records,
@@ -260,7 +260,7 @@ pub const Paths = struct {
             }
 
             try self.closePath();
-        }        
+        }
     }
 
     pub fn currentSubpathRecord(self: *@This()) ?*SubpathRecord {
@@ -315,7 +315,7 @@ pub const Paths = struct {
         }
     }
 
-     fn addSubpathRecords(self: *@This(), n: usize) ![]SubpathRecord {
+    fn addSubpathRecords(self: *@This(), n: usize) ![]SubpathRecord {
         return try self.subpath_records.addManyAsSlice(self.allocator, n);
     }
 
@@ -331,7 +331,7 @@ pub const Paths = struct {
         return curve;
     }
 
-     fn addCurveRecords(self: *@This(), n: usize) ![]CurveRecord {
+    fn addCurveRecords(self: *@This(), n: usize) ![]CurveRecord {
         return try self.curve_records.addManyAsSlice(self.allocator, n);
     }
 
@@ -339,7 +339,7 @@ pub const Paths = struct {
         return try self.points.addOne(self.allocator);
     }
 
-     fn addPoints(self: *@This(), n: usize) ![]PointF32 {
+    fn addPoints(self: *@This(), n: usize) ![]PointF32 {
         return try self.points.addManyAsSlice(self.allocator, n);
     }
 
