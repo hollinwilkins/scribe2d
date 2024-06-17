@@ -288,6 +288,8 @@ pub const PathFlattener = struct {
                                     &stroke_lines,
                                 );
                             }
+                        } else {
+                            
                         }
                     }
 
@@ -307,6 +309,106 @@ pub const PathFlattener = struct {
                 if (style.isStroked()) {
                     try stroke_lines.closePath();
                 }
+            }
+        }
+    }
+
+    fn drawJoin(
+        stroke: Style.Stroke,
+        p0: PointF32,
+        tan_prev: PointF32,
+        tan_next: PointF32,
+        n_prev: PointF32,
+        n_next: PointF32,
+        transform: TransformF32,
+        line_soup: *LineSoup,
+    ) !void {
+        var front0 = p0.add(n_prev);
+        const front1 = p0.add(n_next);
+        var back0 = p0.sub(n_next);
+        const back1 = p0.sub(n_prev);
+
+        const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
+        const d = tan_prev.dot(tan_next);
+
+        switch (stroke.join) {
+            .bevel => {
+                if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
+                    const line1 = try line_soup.addLine();
+                    line1.start = transform.apply(front0);
+                    line1.end = transform.apply(front1);
+
+                    const line2 = try line_soup.addLine();
+                    line2.start = transform.apply(back0);
+                    line2.end = transform.apply(back1);
+                }
+            },
+            .miter => {
+                const hypot = std.math.hypot(cr, d);
+                const miter_limit = stroke.miter_limit;
+
+                if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
+                    const is_backside = cr > 0.0;
+                    const fp_last = if (is_backside) back1 else front0;
+                    const fp_this = if (is_backside) back0 else front1;
+                    const p = if (is_backside) back0 else front0;
+
+                    const v = fp_this.sub(fp_last);
+                    const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+                    const miter_pt = fp_this.sub(tan_next).mul(PointF32{
+                        .x = h,
+                        .y = h,
+                    });
+
+                    const line = try line_soup.addLine();
+                    line.start = transform.apply(p);
+                    line.end = transform.apply(miter_pt);
+
+                    if (is_backside) {
+                        back0 = miter_pt;
+                    } else {
+                        front0 = miter_pt;
+                    }
+                }
+
+                const line1 = try line_soup.addLine();
+                line1.start = transform.apply(front0);
+                line1.end = transform.apply(front1);
+
+                const line2 = try line_soup.addLine();
+                line2.start = transform.apply(back0);
+                line2.end = transform.apply(back1);
+            },
+            .round => {
+                var arc0: f32 = undefined;
+                var arc1: f32 = undefined;
+                var other0: f32 = undefined;
+                var other1: f32 = undefined;
+
+                if (cr > 0.0) {
+                    arc0 = back0;
+                    arc1 = back1;
+                    other0 = front0;
+                    other1 = front1;
+                } else {
+                    arc0 = front0;
+                    arc1 = front1;
+                    other0 = back0;
+                    other1 = back1;
+                }
+
+                try flattenArc(
+                    arc0,
+                    arc1,
+                    p0,
+                    @abs(std.math.atan2(cr, d)),
+                    transform,
+                    line_soup,
+                );
+
+                const line = try line_soup.addLine();
+                line.start = transform.apply(other0);
+                line.end = transform.apply(other1);
             }
         }
     }

@@ -21,6 +21,12 @@ pub const Style = struct {
         round = 2,
     };
 
+    pub const Join = enum(u8) {
+        bevel = 0,
+        miter = 1,
+        round = 2,
+    };
+
     pub const Fill = struct {
         color: Color,
     };
@@ -29,6 +35,8 @@ pub const Style = struct {
         color: Color = Color.BLACK,
         width: f32 = 1.0,
         cap: Cap = .butt,
+        join: Join = .round,
+        miter_limit: f32 = 4.0,
 
         pub fn toFill(self: @This()) Fill {
             return Fill{
