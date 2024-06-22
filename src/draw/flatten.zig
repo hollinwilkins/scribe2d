@@ -15,7 +15,6 @@ const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
 const Paths = path_module.Paths;
-const PathsUnmanaged = path_module.PathsUnmanaged;
 const Style = pen.Style;
 const Line = curve_module.Line;
 const CubicPoints = euler.CubicPoints;
@@ -228,6 +227,11 @@ pub const LineSoup = struct {
 pub const FlatData = struct {
     fill_lines: LineSoup,
     stroke_lines: LineSoup,
+
+    pub fn deinit(self: *@This()) void {
+        self.fill_lines.deinit();
+        self.stroke_lines.deinit();
+    }
 };
 
 pub const PathFlattener = struct {

@@ -43,8 +43,16 @@ pub const Scene = struct {
         self.paths.deinit();
     }
 
+    pub fn getMetadatas(self: @This()) []const PathMetadata {
+        return self.metadata.items;
+    }
+
     pub fn getStyles(self: @This()) []const Style {
         return self.styles.items;
+    }
+
+    pub fn getTransforms(self: @This()) []const TransformF32 {
+        return self.transforms.items;
     }
 
     pub fn pushStyle(self: *@This()) !*Style {

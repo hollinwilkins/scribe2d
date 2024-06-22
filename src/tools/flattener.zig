@@ -45,12 +45,12 @@ pub fn main() !void {
         },
     };
 
-    // const paths_unmanaged = paths.toUnmanaged();
-    // draw.PathFlattener.flattenAlloc(
-    //     allocator,
-    //     metadatas,
-    //     paths_unmanaged,
-    //     styles,
-    //     transforms,
-    // );
+    var flat_data = try draw.PathFlattener.flattenAlloc(
+        allocator,
+        scene.getMetadatas(),
+        scene.paths,
+        scene.getStyles(),
+        scene.getTransforms(),
+    );
+    defer flat_data.deinit();
 }
