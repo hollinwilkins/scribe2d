@@ -225,6 +225,11 @@ pub const LineSoup = struct {
     }
 };
 
+pub const FlatData = struct {
+    fill_lines: LineSoup,
+    stroke_lines: LineSoup,
+};
+
 pub const PathFlattener = struct {
     const PathRecord = struct {
         path_index: u32,
@@ -236,7 +241,7 @@ pub const PathFlattener = struct {
         paths: PathsUnmanaged,
         styles: []const Style,
         transforms: []const TransformF32,
-    ) !void {
+    ) !FlatData {
         var stroke_lines = LineSoup.init(allocator);
         var fill_lines = LineSoup.init(allocator);
 
@@ -415,6 +420,11 @@ pub const PathFlattener = struct {
                 }
             }
         }
+
+        return FlatData{
+            .fill_lines = fill_lines,
+            .stroke_lines = stroke_lines,
+        };
     }
 
     fn drawJoin(
