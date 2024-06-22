@@ -101,6 +101,7 @@ pub const Paths = struct {
         point_offsets: RangeU32,
         is_end: bool = false,
         is_open: bool = false,
+        is_cap: bool = false,
     };
 
     const PathRecordList = std.ArrayListUnmanaged(PathRecord);
@@ -302,7 +303,7 @@ pub const Paths = struct {
                 return;
             }
 
-            const start_curve = self.curve_records.items[subpath.curve_offsets.start];
+            const start_curve = &self.curve_records.items[subpath.curve_offsets.start];
             var end_curve = &self.curve_records.items[self.curve_records.items.len - 1];
             const start_point = self.points.items[start_curve.point_offsets.start];
             const end_point = self.points.items[end_curve.point_offsets.end - 1];
@@ -312,6 +313,8 @@ pub const Paths = struct {
                 try self.lineTo(start_point);
                 end_curve = &self.curve_records.items[self.curve_records.items.len - 1];
                 end_curve.is_open = true;
+                end_curve.is_cap = true;
+                start_curve.is_cap = true;
             }
 
             end_curve.is_end = true;

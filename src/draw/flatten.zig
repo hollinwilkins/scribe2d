@@ -143,9 +143,7 @@ fn readNeighborSegment(paths: PathsUnmanaged, curve_range: RangeU32, index: u32)
     const index_shifted = (index - curve_range.start) % curve_range.end + curve_range.start;
     const curve_record = paths.getCurveRecord(index_shifted);
     const cubic_points = paths.getCubicPoints(curve_record);
-    // let is_stroke_cap_marker = (tag.tag_byte & PathTag::SUBPATH_END_BIT) != 0;
-    // let do_join = !is_stroke_cap_marker || is_closed;
-    const do_join = !curve_record.is_open; // TODO: is_stroke_cap_marker
+    const do_join = !curve_record.is_cap || !curve_record.is_open;
     const tangent = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
 
     return NeighborSegment{
@@ -279,7 +277,7 @@ pub const PathFlattener = struct {
                         }
 
                         if (style.stroke) |stroke| {
-                            const is_stroke_cap_marker = true;
+                            const is_stroke_cap_marker = curve.is_cap;
                             const offset = 0.5 * stroke.width;
                             const offset_point = PointF32{
                                 .x = offset,
