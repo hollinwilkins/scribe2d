@@ -496,10 +496,10 @@ pub const PathFlattener = struct {
                 line2.end = transform.apply(back1);
             },
             .round => {
-                var arc0: f32 = undefined;
-                var arc1: f32 = undefined;
-                var other0: f32 = undefined;
-                var other1: f32 = undefined;
+                var arc0: PointF32 = undefined;
+                var arc1: PointF32 = undefined;
+                var other0: PointF32 = undefined;
+                var other1: PointF32 = undefined;
 
                 if (cr > 0.0) {
                     arc0 = back0;
