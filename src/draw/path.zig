@@ -174,7 +174,7 @@ pub const Paths = struct {
             try self.openPath();
 
             const start_curve_index = paths.subpath_records.items[path.subpath_offsets.start].curve_offsets.start;
-            const end_curve_index = paths.subpath_records.items[path.subpath_offsets.end].curve_offsets.end;
+            const end_curve_index = paths.subpath_records.items[path.subpath_offsets.end - 1].curve_offsets.end;
             const start_point_index = paths.curve_records.items[start_curve_index].point_offsets.start;
             const end_point_index = paths.curve_records.items[end_curve_index].point_offsets.end;
 

@@ -79,8 +79,8 @@ pub const Scene = struct {
         }
 
         metadata.* = PathMetadata{
-            .style_index = @intCast(self.styles.items.len - 1),
-            .transform_index = @intCast(self.transforms.items.len - 1),
+            .style_index = @as(u16, @intCast(self.styles.items.len)) -| 1,
+            .transform_index = @as(u16, @intCast(self.transforms.items.len)) -| 1,
             .path_offsets = RangeU32{
                 .start = @intCast(self.paths.path_records.items.len),
                 .end = @intCast(self.paths.path_records.items.len),
