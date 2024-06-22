@@ -66,6 +66,13 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn mulScalar(self: @This(), scalar: T) @This() {
+            return @This(){
+                .x = self.x * scalar,
+                .y = self.y * scalar,
+            };
+        }
+
         pub fn min(self: @This(), other: @This()) @This() {
             return @This(){
                 .x = @min(self.x, other.x),

@@ -321,6 +321,8 @@ pub const Paths = struct {
                 cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
             },
         }
+
+        return cubic_points;
     }
 
     pub fn transformCurrentPath(self: *@This(), t: TransformF32) void {

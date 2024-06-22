@@ -24,6 +24,7 @@ const EulerSegment = euler.EulerSegment;
 
 /// Threshold below which a derivative is considered too small.
 pub const DERIV_THRESH: f32 = 1e-6;
+pub const DERIV_THRESH_POW2: f32 = std.math.pow(f32, DERIV_THRESH, 2.0);
 /// Amount to nudge t when derivative is near-zero.
 pub const DERIV_EPS: f32 = 1e-6;
 // Limit for subdivision of cubic Béziers.
@@ -55,7 +56,7 @@ pub const EspcRobust = enum(u8) {
         if (y < BREAK1) {
             a = std.math.sin(SIN_SCALE * y) * (1.0 / SIN_SCALE);
         } else if (y < BREAK2) {
-            a = (std.math.sqrt(8.0) / 3.0) * (y - 1.0) * (y - 1.0).abs().sqrt() + (std.math.pi / 4.0);
+            a = (std.math.sqrt(8.0) / 3.0) * (y - 1.0) * std.math.sqrt(@abs(y - 1.0)) + (std.math.pi / 4.0);
         } else {
             var qa: f32 = undefined;
             var qb: f32 = undefined;
@@ -138,7 +139,7 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
     }
 }
 
-fn readNeighborSegment(paths: PathsUnmanaged, curve_range: RangeU32, index: u32) NeighborSegment {
+fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) NeighborSegment {
     const index_shifted = (index - curve_range.start) % curve_range.end + curve_range.start;
     const curve_record = paths.getCurveRecord(index_shifted);
     const cubic_points = paths.getCubicPoints(curve_record);
@@ -242,7 +243,7 @@ pub const PathFlattener = struct {
     pub fn flattenAlloc(
         allocator: Allocator,
         metadatas: []const PathMetadata,
-        paths: PathsUnmanaged,
+        paths: Paths,
         styles: []const Style,
         transforms: []const TransformF32,
     ) !FlatData {
@@ -327,21 +328,21 @@ pub const PathFlattener = struct {
                                 var tan_next = neighbor.tangent;
                                 var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
 
-                                if (tan_start.dot(tan_start) < std.math.powi(euler.TANGENT_THRESH, 2)) {
+                                if (tan_start.dot(tan_start) < euler.TANGENT_THRESH_POW2) {
                                     tan_start = PointF32{
                                         .x = euler.TANGENT_THRESH,
                                         .y = 0.0,
                                     };
                                 }
 
-                                if (tan_prev.dot(tan_prev) < std.math.powi(euler.TANGENT_THRESH, 2)) {
+                                if (tan_prev.dot(tan_prev) < euler.TANGENT_THRESH_POW2) {
                                     tan_prev = PointF32{
                                         .x = euler.TANGENT_THRESH,
                                         .y = 0.0,
                                     };
                                 }
 
-                                if (tan_next.dot(tan_next) < std.math.powi(euler.TANGENT_THRESH, 2)) {
+                                if (tan_next.dot(tan_next) < euler.TANGENT_THRESH_POW2) {
                                     tan_next = PointF32{
                                         .x = euler.TANGENT_THRESH,
                                         .y = 0.0,
@@ -655,7 +656,7 @@ pub const PathFlattener = struct {
 
         // We want to avoid near zero derivatives, so the general technique is to
         // detect, then sample a nearby t value if it fails to meet the threshold.
-        if (last_q.dot(last_q) < std.math.powi(DERIV_THRESH, 2)) {
+        if (last_q.dot(last_q) < DERIV_THRESH_POW2) {
             last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, DERIV_EPS).derivative;
         }
         var last_t: f32 = 0.0;
@@ -672,7 +673,7 @@ pub const PathFlattener = struct {
             const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
             var this_p1 = cd1.point;
             var this_q1 = cd1.derivative;
-            if (this_q1.dot(this_q1) < DERIV_THRESH.powi(2)) {
+            if (this_q1.dot(this_q1) < DERIV_THRESH_POW2) {
                 const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - DERIV_EPS);
                 const new_p1 = cd2.point;
                 const new_q1 = cd2.derivative;
@@ -688,7 +689,7 @@ pub const PathFlattener = struct {
             const actual_dt = t1 - last_t;
             const cubic_params = CubicParams.create(this_p0, this_p1, this_q0, this_q1, actual_dt);
             if (cubic_params.err * scale <= tol or dt <= SUBDIV_LIMIT) {
-                const euler_params = EulerParams.create(cubic_params.tho0, cubic_params.th1);
+                const euler_params = EulerParams.create(cubic_params.th0, cubic_params.th1);
                 const es = EulerSegment{
                     .start = this_p0,
                     .end = this_p1,
@@ -798,12 +799,12 @@ pub const PathFlattener = struct {
 
     // Evaluate both the point and derivative of a cubic bezier.
     pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, t: f32) CubicAndDeriv {
-        const m = 1.0 - t;
+        const m: f32 = 1.0 - t;
         const mm = m * m;
         const mt = m * t;
         const tt = t * t;
-        const p = p0 * (mm * m) + (p1 * (3.0 * mm) + p2 * (3.0 * mt) + p3 * tt) * t;
-        const q = (p1 - p0) * mm + (p2 - p1) * (2.0 * mt) + (p3 - p2) * tt;
+        const p = p0.mulScalar(mm * m).add((p1.mulScalar(3.0 * mm).add(p2).mulScalar(3.0 * mt).add(p3).mulScalar(tt)).mulScalar(t));
+        const q = (p1.sub(p0)).mulScalar(mm).add(p2.sub(p1)).mulScalar(2.0 * mt).add(p3.sub(p2)).mulScalar(tt);
 
         return CubicAndDeriv{
             .point = p,

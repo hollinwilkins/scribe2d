@@ -5,6 +5,7 @@ const core = @import("../core/root.zig");
 const PointF32 = core.PointF32;
 
 pub const TANGENT_THRESH: f32 = 1e-6;
+pub const TANGENT_THRESH_POW2: f32 = std.math.pow(f32, TANGENT_THRESH, 2.0);
 
 pub const CubicPoints = struct {
     point0: PointF32 = PointF32{},
@@ -15,7 +16,7 @@ pub const CubicPoints = struct {
 
 pub const CubicParams = struct {
     // tangent at start of curve
-    tho0: f32,
+    th0: f32,
     // tangend at end of curve
     th1: f32,
     // length of the chord
@@ -28,14 +29,14 @@ pub const CubicParams = struct {
         const chord_squared = chord.dot(chord); // length_squared
         const chord_len: f32 = std.math.sqrt(chord_squared);
         // Chord is near-zero; straight line case.
-        if (chord_squared < std.math.powi(f32, TANGENT_THRESH, 2)) {
+        if (chord_squared < TANGENT_THRESH_POW2) {
             // This error estimate was determined empirically through randomized
             // testing, though it is likely it can be derived analytically.
             const chord_err = std.math.sqrt((9.0 / 32.0) * (q0.dot(q0) + q1.dot(q1))) * dt;
             return CubicParams{
-                .theta_start = 0.0,
-                .theta_end = 0.0,
-                .chord_length = TANGENT_THRESH,
+                .th0 = 0.0,
+                .th1 = 0.0,
+                .chord_len = TANGENT_THRESH,
                 .err = chord_err,
             };
         }
@@ -57,8 +58,8 @@ pub const CubicParams = struct {
         // a bit less than pi. Perhaps here, perhaps downstream.
 
         // Estimate error of geometric Hermite interpolation to Euler spiral.
-        const cth0 = th0.cos();
-        const cth1 = th1.cos();
+        const cth0 = std.math.cos(th0);
+        const cth1 = std.math.cos(th1);
         var err: f32 = undefined;
 
         if (cth0 * cth1 < 0.0) {
@@ -71,37 +72,37 @@ pub const CubicParams = struct {
         } else {
             // Protect against divide-by-zero. This happens with a double cusp, so
             // should in the general case cause subdivisions.
-            const e0 = (2.0 / 3.0) / (1.0 + cth0).max(1e-9);
-            const e1 = (2.0 / 3.0) / (1.0 + cth1).max(1e-9);
-            const s0 = th0.sin();
-            const s1 = th1.sin();
+            const e0 = (2.0 / 3.0) / @max(1.0 + cth0, 1e-9);
+            const e1 = (2.0 / 3.0) / @max(1.0 + cth1, 1e-9);
+            const s0 = std.math.sin(th0);
+            const s1 = std.math.sin(th1);
             // Note: some other versions take sin of s0 + s1 instead. Those are incorrect.
             // Strangely, calibration is the same, but more work could be done.
             const s01 = cth0 * s1 + cth1 * s0;
             const amin = 0.15 * (2.0 * e0 * s0 + 2.0 * e1 * s1 - e0 * e1 * s01);
             const a = 0.15 * (2.0 * d0 * s0 + 2.0 * d1 * s1 - d0 * d1 * s01);
-            const aerr = (a - amin).abs();
-            const symm = (th0 + th1).abs();
-            const asymm = (th0 - th1).abs();
-            const dist = (d0 - e0).hypot(d1 - e1);
-            const ctr = 4.625e-6 * symm.powi(5) + 7.5e-3 * asymm * symm.powi(2);
+            const aerr = @abs(a - amin);
+            const symm = @abs(th0 + th1);
+            const asymm = @abs(th0 - th1);
+            const dist = std.math.hypot(d0 - e0, d1 - e1);
+            const ctr = 4.625e-6 * std.math.pow(f32, symm, 5.0) + 7.5e-3 * asymm * std.math.pow(f32, symm, 2.0);
             const halo_symm = 5e-3 * symm * dist;
             const halo_asymm = 7e-2 * asymm * dist;
             err = ctr + 1.55 * aerr + halo_symm + halo_asymm;
         }
         err *= chord_len;
         return @This(){
-            th0,
-            th1,
-            chord_len,
-            err,
+            .th0 = th0,
+            .th1 = th1,
+            .chord_len = chord_len,
+            .err = err,
         };
     }
 };
 
 pub const EulerParams = struct {
     // tangent at start of curve
-    tho0: f32,
+    th0: f32,
     // tangent at end of curve
     th1: f32,
     k0: f32,
@@ -113,7 +114,7 @@ pub const EulerParams = struct {
         const dth = th1 - th0;
         const d2 = dth * dth;
         const k2 = k0 * k0;
-        var a = 6.0;
+        var a: f32 = 6.0;
         a -= d2 * (1.0 / 70.0);
         a -= (d2 * d2) * (1.0 / 10780.0);
         a += (d2 * d2 * d2) * 2.769178184818219e-07;
@@ -123,7 +124,7 @@ pub const EulerParams = struct {
         const k1 = dth * a;
 
         // calculation of chord
-        var ch = 1.0;
+        var ch: f32 = 1.0;
         ch -= d2 * (1.0 / 40.0);
         ch += (d2 * d2) * 0.00034226190482569864;
         ch -= (d2 * d2 * d2) * 1.9349474568904524e-06;
@@ -132,11 +133,11 @@ pub const EulerParams = struct {
         ch += (b2 + c2 * k2) * k2;
 
         return @This(){
-            th0,
-            th1,
-            k0,
-            k1,
-            ch,
+            .th0 = th0,
+            .th1 = th1,
+            .k0 = k0,
+            .k1 = k1,
+            .ch = ch,
         };
     }
 
