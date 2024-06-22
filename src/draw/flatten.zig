@@ -139,6 +139,26 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
     }
 }
 
+fn readNeighborSegment(paths: PathsUnmanaged, curve_range: RangeU32, index: u32) NeighborSegment {
+    const index_shifted = (index - curve_range.start) % curve_range.end + curve_range.start;
+    const curve_record = paths.getCurveRecord(index_shifted);
+    const cubic_points = paths.getCubicPoints(curve_record);
+    // let is_stroke_cap_marker = (tag.tag_byte & PathTag::SUBPATH_END_BIT) != 0;
+    // let do_join = !is_stroke_cap_marker || is_closed;
+    const do_join = !curve_record.is_open; // TODO: is_stroke_cap_marker
+    const tangent = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+
+    return NeighborSegment{
+        .do_join = do_join,
+        .tangent = tangent,
+    };
+}
+
+pub const NeighborSegment = struct {
+    do_join: bool,
+    tangent: PointF32,
+};
+
 pub const CubicAndDeriv = struct {
     point: PointF32,
     derivative: PointF32,
@@ -244,7 +264,7 @@ pub const PathFlattener = struct {
                         try stroke_lines.openSubpath();
                     }
 
-                    for (paths.curve_records.items[subpath.curve_offsets.start..subpath.curve_offsets.end]) |curve| {
+                    for (paths.curve_records.items[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
                         const cubic_points = paths.getCubicPoints(curve);
 
                         if (style.isFilled()) {
@@ -259,37 +279,123 @@ pub const PathFlattener = struct {
                         }
 
                         if (style.stroke) |stroke| {
+                            const is_stroke_cap_marker = true;
                             const offset = 0.5 * stroke.width;
+                            const offset_point = PointF32{
+                                .x = offset,
+                                .y = offset,
+                            };
 
-                            if (curve.is_open) {
-                                // Draw start cap
-                                const tangent = cubicStartTangent(
-                                    cubic_points.p0,
-                                    cubic_points.p1,
-                                    cubic_points.p2,
-                                    cubic_points.p3,
-                                );
-                                const offset_tangent = PointF32{
-                                    .x = offset,
-                                    .y = offset,
-                                } * tangent.normalize().?;
-                                const n = PointF32{
+                            if (is_stroke_cap_marker) {
+                                if (curve.is_open) {
+                                    // Draw start cap
+                                    const tangent = cubicStartTangent(
+                                        cubic_points.p0,
+                                        cubic_points.p1,
+                                        cubic_points.p2,
+                                        cubic_points.p3,
+                                    );
+                                    const offset_tangent = PointF32{
+                                        .x = offset,
+                                        .y = offset,
+                                    } * tangent.normalizeUnsafe();
+                                    const n = PointF32{
+                                        .x = -offset_tangent.y,
+                                        .y = offset_tangent.x,
+                                    };
+
+                                    drawCap(
+                                        stroke.cap,
+                                        cubic_points.point0,
+                                        cubic_points.point0.sub(n),
+                                        cubic_points.point0.add(n),
+                                        -offset_tangent,
+                                        transform,
+                                        &stroke_lines,
+                                    );
+                                }
+                            } else {
+                                const neighbor = readNeighborSegment(paths, subpath.curve_offsets, curve_index + 1);
+                                var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+                                var tan_next = neighbor.tangent;
+                                var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+
+                                if (tan_start.dot(tan_start) < std.math.powi(euler.TANGENT_THRESH, 2)) {
+                                    tan_start = PointF32{
+                                        .x = euler.TANGENT_THRESH,
+                                        .y = 0.0,
+                                    };
+                                }
+
+                                if (tan_prev.dot(tan_prev) < std.math.powi(euler.TANGENT_THRESH, 2)) {
+                                    tan_prev = PointF32{
+                                        .x = euler.TANGENT_THRESH,
+                                        .y = 0.0,
+                                    };
+                                }
+
+                                if (tan_next.dot(tan_next) < std.math.powi(euler.TANGENT_THRESH, 2)) {
+                                    tan_next = PointF32{
+                                        .x = euler.TANGENT_THRESH,
+                                        .y = 0.0,
+                                    };
+                                }
+
+                                const n_start = offset_point.mul(PointF32{
+                                    .x = -tan_start.y,
+                                    .y = tan_start.x,
+                                }).normalizeUnsafe();
+                                const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
+                                const n_prev = PointF32{
                                     .x = -offset_tangent.y,
                                     .y = offset_tangent.x,
                                 };
+                                const tan_next_norm = tan_next.normalizeUnsafe();
+                                const n_next = offset_point.mul(PointF32{
+                                    .x = -tan_next_norm.y,
+                                    .y = tan_next_norm.x,
+                                });
 
-                                drawCap(
-                                    stroke.cap,
-                                    cubic_points.point0,
-                                    cubic_points.p0.sub(n),
-                                    cubic_points.point0.add(n),
-                                    -offset_tangent,
+                                flattenEuler(
+                                    cubic_points,
                                     transform,
+                                    offset,
+                                    cubic_points.point0.add(n_start),
+                                    cubic_points.point3.add(n_prev),
                                     &stroke_lines,
                                 );
+                                flattenEuler(
+                                    cubic_points,
+                                    transform,
+                                    -offset,
+                                    cubic_points.point0.sub(n_start),
+                                    cubic_points.point3.sub(n_prev),
+                                    &stroke_lines,
+                                );
+
+                                if (neighbor.do_join) {
+                                    drawJoin(
+                                        stroke,
+                                        cubic_points.point3,
+                                        tan_prev,
+                                        tan_next,
+                                        n_prev,
+                                        n_next,
+                                        transform,
+                                        &stroke_lines,
+                                    );
+                                } else {
+                                    drawCap(
+                                        stroke.cap,
+                                        cubic_points.point3,
+                                        cubic_points.point3.add(n_prev),
+                                        cubic_points.point3.sub(n_prev),
+                                        offset_tangent,
+                                        transform,
+                                        &stroke_lines,
+                                    );
+                                }
                             }
-                        } else {
-                            
                         }
                     }
 
@@ -409,7 +515,7 @@ pub const PathFlattener = struct {
                 const line = try line_soup.addLine();
                 line.start = transform.apply(other0);
                 line.end = transform.apply(other1);
-            }
+            },
         }
     }
 

@@ -54,6 +54,10 @@ pub const PathsUnmanaged = struct {
         return null;
     }
 
+    pub fn getCurveRecord(self: @This(), index: u32) Paths.CurveRecord {
+        return self.curve_records.items[index];
+    }
+
     pub fn getCubicPoints(self: @This(), curve_record: Paths.CurveRecord) CubicPoints {
         var cubic_points = CubicPoints{};
 
