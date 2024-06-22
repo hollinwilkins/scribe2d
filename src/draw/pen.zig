@@ -70,8 +70,8 @@ pub const Pen = struct {
         };
     }
 
-    pub fn setFillColor(self: *Pen, color: ?Color) void {
-        self.style.fill_color = color;
+    pub fn setFill(self: *Pen, fill: ?Style.Fill) void {
+        self.style.fill = fill;
     }
 
     pub fn draw(self: @This(), paths: Paths, path_index: u32, texture: *TextureUnmanaged) !void {

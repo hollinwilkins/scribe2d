@@ -144,7 +144,7 @@ pub fn main() !void {
     });
 
     var pen = draw.Pen.create(&rasterizer);
-    pen.setFillColor(draw.Color{
+    pen.setFill(draw.Color{
         .r = 0.0,
         .g = 0.0,
         .b = 0.0,
