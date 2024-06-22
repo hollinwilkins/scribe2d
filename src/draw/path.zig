@@ -180,7 +180,7 @@ pub const Paths = struct {
 
             const self_start_point_index: u32 = @intCast(self.points.items.len);
             const points = try self.addPoints(end_point_index - start_point_index);
-            std.mem.copyForwards(PointF32, points, paths.points[start_point_index..end_point_index]);
+            std.mem.copyForwards(PointF32, points, paths.points.items[start_point_index..end_point_index]);
 
             const self_start_curve_index: u32 = @intCast(self.curve_records.items.len);
             const curve_records = try self.addCurveRecords(end_curve_index - start_curve_index);

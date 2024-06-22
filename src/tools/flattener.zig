@@ -34,8 +34,7 @@ pub fn main() !void {
     var scene = try draw.Scene.init(allocator);
     defer scene.deinit();
 
-    const glyph_paths_unamanaged = glyph_paths.toUnmanaged();
-    scene.paths = glyph_paths_unamanaged;
+    try scene.paths.copyPath(glyph_paths, 0);
     const style = try scene.pushStyle();
     style.fill = draw.Style.Fill{
         .color = draw.Color{
