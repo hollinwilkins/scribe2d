@@ -25,60 +25,6 @@ pub const PathMetadata = struct {
     path_offsets: RangeU32 = RangeU32{},
 };
 
-pub const PathsUnmanaged = struct {
-    path_records: Paths.PathRecordList = Paths.PathRecordList{},
-    subpath_records: Paths.SubpathRecordList = Paths.SubpathRecordList{},
-    curve_records: Paths.CurveRecordList = Paths.CurveRecordList{},
-    points: Paths.PointList = Paths.PointList{},
-
-    pub fn deinit(self: *@This(), allocator: Allocator) void {
-        var managed = self.toManaged(allocator);
-        managed.deinit();
-    }
-
-    pub fn toManaged(self: @This(), allocator: Allocator) Paths {
-        return Paths{
-            .allocator = allocator,
-            .path_records = self.path_records,
-            .subpath_records = self.subpath_records,
-            .curve_records = self.curve_records,
-            .points = self.points,
-        };
-    }
-
-    pub fn getPathRecord(self: @This(), index: u32) ?Paths.PathRecord {
-        if (index < self.path_records.items.len) {
-            return self.path_records.items[index];
-        }
-
-        return null;
-    }
-
-    pub fn getCurveRecord(self: @This(), index: u32) Paths.CurveRecord {
-        return self.curve_records.items[index];
-    }
-
-    pub fn getCubicPoints(self: @This(), curve_record: Paths.CurveRecord) CubicPoints {
-        var cubic_points = CubicPoints{};
-
-        cubic_points.point0 = self.points.items[curve_record.point_offsets.start];
-        cubic_points.point1 = self.points.items[curve_record.point_offsets.start + 1];
-
-        switch (curve_record.kind) {
-            .line => {
-                cubic_points.point3 = cubic_points.point1;
-                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
-            },
-            .quadratic_bezier => {
-                cubic_points.point3 = cubic_points.point2;
-                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
-            },
-        }
-    }
-};
-
 pub const Paths = struct {
     pub const PathRecord = struct {
         subpath_offsets: RangeU32,
@@ -126,15 +72,6 @@ pub const Paths = struct {
         self.subpath_records.deinit(self.allocator);
         self.curve_records.deinit(self.allocator);
         self.points.deinit(self.allocator);
-    }
-
-    pub fn toUnmanaged(self: @This()) PathsUnmanaged {
-        return PathsUnmanaged{
-            .path_records = self.path_records,
-            .subpath_records = self.subpath_records,
-            .curve_records = self.curve_records,
-            .points = self.points,
-        };
     }
 
     pub fn getPathRecords(self: @This()) []const PathRecord {
@@ -232,7 +169,7 @@ pub const Paths = struct {
         }
     }
 
-    pub fn copyPath(self: *@This(), paths: PathsUnmanaged, path_index: u32) !void {
+    pub fn copyPath(self: *@This(), paths: Paths, path_index: u32) !void {
         if (paths.getPathRecord(path_index)) |path| {
             try self.openPath();
 
@@ -348,6 +285,42 @@ pub const Paths = struct {
 
     fn addPoints(self: *@This(), n: usize) ![]PointF32 {
         return try self.points.addManyAsSlice(self.allocator, n);
+    }
+
+    pub fn getPathRecord(self: @This(), index: u32) ?Paths.PathRecord {
+        if (index < self.path_records.items.len) {
+            return self.path_records.items[index];
+        }
+
+        return null;
+    }
+
+    pub fn getCurveRecord(self: @This(), index: u32) ?Paths.CurveRecord {
+        if (index < self.curve_records.items.len) {
+            return self.curve_records.items[index];
+        }
+
+        return null;
+    }
+
+    pub fn getCubicPoints(self: @This(), curve_record: Paths.CurveRecord) CubicPoints {
+        var cubic_points = CubicPoints{};
+
+        cubic_points.point0 = self.points.items[curve_record.point_offsets.start];
+        cubic_points.point1 = self.points.items[curve_record.point_offsets.start + 1];
+
+        switch (curve_record.kind) {
+            .line => {
+                cubic_points.point3 = cubic_points.point1;
+                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
+                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
+            },
+            .quadratic_bezier => {
+                cubic_points.point3 = cubic_points.point2;
+                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
+                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
+            },
+        }
     }
 
     pub fn transformCurrentPath(self: *@This(), t: TransformF32) void {

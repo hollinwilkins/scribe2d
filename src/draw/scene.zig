@@ -8,7 +8,7 @@ const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
 const Style = pen.Style;
-const PathsUnmanaged = path_module.PathsUnmanaged;
+const Paths = path_module.Paths;
 const PathMetadata = path_module.PathMetadata;
 
 pub const Scene = struct {
@@ -20,11 +20,12 @@ pub const Scene = struct {
     styles: StyleList = StyleList{},
     transforms: TransformList = TransformList{},
     metadata: PathMetadataList = PathMetadataList{},
-    paths: PathsUnmanaged = PathsUnmanaged{},
+    paths: Paths,
 
     pub fn init(allocator: Allocator) !@This() {
         var scene = @This(){
             .allocator = allocator,
+            .paths = Paths.init(allocator),
         };
 
         // push defaults
@@ -39,7 +40,7 @@ pub const Scene = struct {
         self.styles.deinit(self.allocator);
         self.transforms.deinit(self.allocator);
         self.metadata.deinit(self.allocator);
-        self.paths.deinit(self.allocator);
+        self.paths.deinit();
     }
 
     pub fn getStyles(self: @This()) []const Style {
