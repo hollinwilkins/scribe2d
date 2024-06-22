@@ -647,11 +647,11 @@ pub const PathFlattener = struct {
         var t0_u: u32 = 0;
         var dt: f32 = 1.0;
         var last_p = p0;
-        var last_q = p1 - p0;
+        var last_q = p1.sub(p0);
 
         // We want to avoid near zero derivatives, so the general technique is to
         // detect, then sample a nearby t value if it fails to meet the threshold.
-        if (last_q.length_squared() < std.math.powi(DERIV_THRESH, 2)) {
+        if (last_q.dot(last_q) < std.math.powi(DERIV_THRESH, 2)) {
             last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, DERIV_EPS).derivative;
         }
         var last_t: f32 = 0.0;
@@ -668,7 +668,7 @@ pub const PathFlattener = struct {
             const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
             var this_p1 = cd1.point;
             var this_q1 = cd1.derivative;
-            if (this_q1.length_squared() < DERIV_THRESH.powi(2)) {
+            if (this_q1.dot(this_q1) < DERIV_THRESH.powi(2)) {
                 const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - DERIV_EPS);
                 const new_p1 = cd2.point;
                 const new_q1 = cd2.derivative;
