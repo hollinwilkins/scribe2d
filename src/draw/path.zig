@@ -297,10 +297,14 @@ pub const Paths = struct {
 
     pub fn getCurveRecord(self: @This(), index: u32) ?Paths.CurveRecord {
         if (index < self.curve_records.items.len) {
-            return self.curve_records.items[index];
+            return self.getCurveRecordUnsafe(index);
         }
 
         return null;
+    }
+
+    pub fn getCurveRecordUnsafe(self: @This(), index: u32) Paths.CurveRecord {
+        return self.curve_records.items[index];
     }
 
     pub fn getCubicPoints(self: @This(), curve_record: Paths.CurveRecord) CubicPoints {

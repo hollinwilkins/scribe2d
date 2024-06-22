@@ -83,11 +83,11 @@ pub const EspcRobust = enum(u8) {
         var a: f32 = undefined;
 
         if (y < 0.7010707591262915) {
-            a = std.math.asic(x * SIN_SCALE * (1.0 / SIN_SCALE));
+            a = std.math.asin(x * SIN_SCALE * (1.0 / SIN_SCALE));
         } else if (y < 0.903249293595206) {
             const b = y - (std.math.pi / 4.0);
-            const u = std.math.copysign(std.math.pow(@abs(b), 2.0 / 3.0), b);
-            a = u * std.math.cbrt(9.0 / 8.0) + 1.0;
+            const u = std.math.copysign(std.math.pow(f32, @abs(b), 2.0 / 3.0), b);
+            a = u * std.math.cbrt(@as(f32, 9.0 / 8.0)) + 1.0;
         } else {
             var u: f32 = undefined;
             var v: f32 = undefined;
@@ -141,9 +141,9 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
 
 fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) NeighborSegment {
     const index_shifted = (index - curve_range.start) % curve_range.end + curve_range.start;
-    const curve_record = paths.getCurveRecord(index_shifted);
+    const curve_record = paths.getCurveRecordUnsafe(index_shifted);
     const cubic_points = paths.getCubicPoints(curve_record);
-    const do_join = !curve_record.is_cap || !curve_record.is_open;
+    const do_join = !curve_record.is_cap or !curve_record.is_open;
     const tangent = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
 
     return NeighborSegment{
@@ -298,32 +298,29 @@ pub const PathFlattener = struct {
                                 if (curve.is_open) {
                                     // Draw start cap
                                     const tangent = cubicStartTangent(
-                                        cubic_points.p0,
-                                        cubic_points.p1,
-                                        cubic_points.p2,
-                                        cubic_points.p3,
+                                        cubic_points.point0,
+                                        cubic_points.point1,
+                                        cubic_points.point2,
+                                        cubic_points.point3,
                                     );
-                                    const offset_tangent = PointF32{
-                                        .x = offset,
-                                        .y = offset,
-                                    } * tangent.normalizeUnsafe();
+                                    const offset_tangent = tangent.normalizeUnsafe().mulScalar(offset);
                                     const n = PointF32{
                                         .x = -offset_tangent.y,
                                         .y = offset_tangent.x,
                                     };
 
-                                    drawCap(
+                                    try drawCap(
                                         stroke.cap,
                                         cubic_points.point0,
                                         cubic_points.point0.sub(n),
                                         cubic_points.point0.add(n),
-                                        -offset_tangent,
+                                        offset_tangent.negate(),
                                         transform,
                                         &stroke_lines,
                                     );
                                 }
                             } else {
-                                const neighbor = readNeighborSegment(paths, subpath.curve_offsets, curve_index + 1);
+                                const neighbor = readNeighborSegment(paths, subpath.curve_offsets, @intCast(curve_index + 1));
                                 var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
                                 var tan_next = neighbor.tangent;
                                 var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
@@ -364,7 +361,7 @@ pub const PathFlattener = struct {
                                     .y = tan_next_norm.x,
                                 });
 
-                                flattenEuler(
+                                try flattenEuler(
                                     cubic_points,
                                     transform,
                                     offset,
@@ -372,7 +369,7 @@ pub const PathFlattener = struct {
                                     cubic_points.point3.add(n_prev),
                                     &stroke_lines,
                                 );
-                                flattenEuler(
+                                try flattenEuler(
                                     cubic_points,
                                     transform,
                                     -offset,
@@ -382,7 +379,7 @@ pub const PathFlattener = struct {
                                 );
 
                                 if (neighbor.do_join) {
-                                    drawJoin(
+                                    try drawJoin(
                                         stroke,
                                         cubic_points.point3,
                                         tan_prev,
@@ -393,7 +390,7 @@ pub const PathFlattener = struct {
                                         &stroke_lines,
                                     );
                                 } else {
-                                    drawCap(
+                                    try drawCap(
                                         stroke.cap,
                                         cubic_points.point3,
                                         cubic_points.point3.add(n_prev),
@@ -557,8 +554,8 @@ pub const PathFlattener = struct {
         var end = cap1;
         if (cap_style == .square) {
             const v = offset_tangent;
-            const p0 = start + v;
-            const p1 = end + v;
+            const p0 = start.add(v);
+            const p1 = end.add(v);
             const line1 = try line_soup.addLine();
             line1.start = transform.apply(start);
             line1.end = transform.apply(p0);
@@ -589,8 +586,8 @@ pub const PathFlattener = struct {
         var p0 = transform.apply(start);
         var r = start.sub(center);
         const tol: f32 = 0.25;
-        const radius = tol.max((p0 - transform.apply(center)).length());
-        const theta = @max(MIN_THETA, @as(u32, @intFromFloat((2.0 * std.math.acos(1.0 - tol / radius)))));
+        const radius = @max(tol, (p0.sub(transform.apply(center))).length());
+        const theta = @max(MIN_THETA, (2.0 * std.math.acos(1.0 - tol / radius)));
 
         // Always output at least one line so that we always draw the chord.
         const n_lines = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
@@ -742,15 +739,15 @@ pub const PathFlattener = struct {
 
                 // Flatten line segments
                 std.debug.assert(!std.math.isNan(n));
-                for (0..n) |i| {
+                for (0..@intFromFloat(n)) |i| {
                     var lp1: PointF32 = undefined;
 
-                    if (i == (@as(usize, @floatFromInt(n)) - 1) and t1 == 1.0) {
+                    if (i == (@as(usize, @intFromFloat(n)) - 1) and t1 == 1.0) {
                         lp1 = t_end;
                     } else {
                         const t = @as(f32, @floatFromInt(i + 1)) / n;
-                        const s: f32 = undefined;
 
+                        var s: f32 = undefined;
                         switch (robust) {
                             .low_k1 => {
                                 s = t;
@@ -786,9 +783,9 @@ pub const PathFlattener = struct {
                 // frames to pop in the recursive version of adaptive subdivision, and
                 // each stack pop represents doubling of the size of the range.
                 t0_u += 1;
-                const shift = @ctz(t0_u);
+                const shift: u5 = @intCast(@ctz(t0_u));
                 t0_u >>= shift;
-                dt *= @as(f32, @floatFromInt(1 << shift));
+                dt *= @as(f32, @floatFromInt(@as(u32, 1) << shift));
             } else {
                 // Subdivide; halve the size of the range while retaining its start.
                 t0_u *|= 2;
