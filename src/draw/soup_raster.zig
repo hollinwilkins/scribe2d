@@ -287,14 +287,6 @@ pub fn RasterData(comptime T: type) type {
             self.spans.deinit(self.allocator);
         }
 
-        pub fn getPaths(self: @This()) *const Paths {
-            return self.paths;
-        }
-
-        pub fn getPathIndex(self: @This()) u32 {
-            return self.path_index;
-        }
-
         pub fn getPathRecords(self: @This()) []const PathRecord {
             return self.path_records.items;
         }
@@ -303,24 +295,36 @@ pub fn RasterData(comptime T: type) type {
             return self.subpath_records.items;
         }
 
-        pub fn getGridIntersectionsRecords(self: @This()) []const GridIntersectionsRecord {
-            return self.grid_intersections_records.items;
+        pub fn getGridRecords(self: @This()) []const GridRecord {
+            return self.grid_records.items;
         }
 
         pub fn getGridIntersections(self: @This()) []const GridIntersection {
             return self.grid_intersections.items;
         }
 
-        pub fn getCurveFragments(self: @This()) []const CurveFragment {
-            return self.curve_fragments.items;
-        }
-
         pub fn getBoundaryFragments(self: @This()) []const BoundaryFragment {
             return self.boundary_fragments.items;
         }
 
+        pub fn getMergeFragments(self: @This()) []const MergeFragment {
+            return self.merge_fragments.items;
+        }
+
         pub fn getSpans(self: @This()) []Span {
             return self.spans.items;
+        }
+
+        pub fn getPathRecordUnsafe(self: *@This(), index: u32) *PathRecord {
+            return self.path_records.items[index];
+        }
+
+        pub fn getSubpathRecordUnsafe(self: *@This(), index: u32) *SubpathRecord {
+            return self.subpath_records.items[index];
+        }
+
+        pub fn getGridRecord(self: *@This(), index: u32) *GridRecord {
+            return self.grid_records.items[index];
         }
 
         pub fn openPathRecord(self: *@This()) !void {
@@ -365,20 +369,16 @@ pub fn RasterData(comptime T: type) type {
             self.subpath_records.items[self.subpath_records.items.len - 1].offsets.end = @intCast(self.subpath_records.items.len);
         }
 
-        pub fn addGridIntersectionsRecords(self: *RasterData) !*GridIntersectionsRecord {
-            return try self.grid_intersections_records.addOne(self.allocator);
-        }
-
         pub fn addGridIntersection(self: *RasterData) !*GridIntersection {
             return try self.grid_intersections.addOne(self.allocator);
         }
 
-        pub fn addCurveFragment(self: *RasterData) !*CurveFragment {
-            return try self.curve_fragments.addOne(self.allocator);
-        }
-
         pub fn addBoundaryFragment(self: *RasterData) !*BoundaryFragment {
             return try self.boundary_fragments.addOne(self.allocator);
+        }
+
+        pub fn addMergeFragment(self: *RasterData) !*MergeFragment {
+            return try self.merge_fragments.addOne(self.allocator);
         }
 
         pub fn addSpan(self: *RasterData) !*Span {
@@ -405,19 +405,20 @@ pub fn SoupRasterizer(comptime T: type) type {
             errdefer raster_data.deinit();
 
             try self.populateGridIntersections(&raster_data);
-            try self.populateCurveFragments(&raster_data);
-            try self.populateBoundaryFragments(&raster_data);
-            try self.populateSpans(&raster_data);
+            // try self.populateCurveFragments(&raster_data);
+            // try self.populateBoundaryFragments(&raster_data);
+            // try self.populateSpans(&raster_data);
 
             return raster_data;
         }
 
         pub fn populateGridIntersections(self: @This(), raster_data: *RD) !void {
             _ = self;
-            var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
+            _ = raster_data;
+            // var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
-            for (raster_data.soup.getPathRecords()) |path_record| {
-            }
+            // for (raster_data.soup.getPathRecords()) |path_record| {
+            // }
 
         //     const path = raster_data.paths.getPathRecords()[raster_data.path_index];
         //     const subpath_records = raster_data.paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
