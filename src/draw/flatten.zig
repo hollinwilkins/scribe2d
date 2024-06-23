@@ -193,6 +193,10 @@ pub const LineSoup = struct {
         self.lines.deinit(self.allocator);
     }
 
+    pub fn getLines(self: @This()) []const Line {
+        return self.lines.items;
+    }
+
     pub fn openPath(self: *@This(), fill: Style.Fill) !void {
         const path = try self.paths.addOne(self.allocator);
         path.* = PathRecord{

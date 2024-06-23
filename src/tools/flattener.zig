@@ -53,4 +53,11 @@ pub fn main() !void {
         scene.getTransforms(),
     );
     defer flat_data.deinit();
+
+    std.debug.print("===================\n", .{});
+    std.debug.print("Lines:\n", .{});
+    for (flat_data.fill_lines.getLines()) |line| {
+        std.debug.print("{}\n", .{ line });
+    }
+    std.debug.print("===================\n", .{});
 }
