@@ -222,6 +222,15 @@ pub const Line = struct {
         return self.getDeltaY() / self.getDeltaX();
     }
 
+    pub fn intersectHorizontalLineGeneric(self: Line, other: Line, result: *[3]Intersection) []Intersection{
+        if (self.intersectHorizontalLine(other)) |intersection| {
+            result[0] = intersection;
+            return result[0..1];
+        }
+
+        return &.{};
+    }
+
     pub fn intersectHorizontalLine(self: Line, other: Line) ?Intersection {
         const delta_y = self.getDeltaY();
         if (delta_y == 0.0) {
@@ -245,6 +254,15 @@ pub const Line = struct {
                 .y = other.start.y,
             },
         };
+    }
+
+    pub fn intersectVerticalLineGeneric(self: Line, other: Line, result: *[3]Intersection) []Intersection{
+        if (self.intersectVerticalLine(other)) |intersection| {
+            result[0] = intersection;
+            return result[0..1];
+        }
+
+        return &.{};
     }
 
     pub fn intersectVerticalLine(self: Line, other: Line) ?Intersection {
@@ -358,6 +376,10 @@ pub const QuadraticBezier = struct {
         };
     }
 
+    pub fn intersectHorizontalLineGeneric(self: QuadraticBezier, line: Line, result: *[3]Intersection) []const Intersection {
+        return self.intersectHorizontalLine(line, result);
+    }
+
     pub fn intersectHorizontalLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {
         std.debug.assert(line.isHorizontal());
         const a = self.start.y - (2.0 * self.control.y) + self.end.y;
@@ -385,6 +407,10 @@ pub const QuadraticBezier = struct {
         }
 
         return result[0..intersections];
+    }
+
+    pub fn intersectVerticalLineGeneric(self: QuadraticBezier, line: Line, result: *[3]Intersection) []const Intersection {
+        return self.intersectVerticalLine(line, result);
     }
 
     pub fn intersectVerticalLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {

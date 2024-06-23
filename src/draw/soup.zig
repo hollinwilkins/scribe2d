@@ -23,11 +23,11 @@ const EulerSegment = euler.EulerSegment;
 
 const PathRecord = struct {
     fill: Style.Fill,
-    offsets: RangeU32,
+    subpath_offsets: RangeU32,
 };
 
 const SubpathRecord = struct {
-    offsets: RangeU32,
+    item_offsets: RangeU32,
 };
 
 const PathRecordList = std.ArrayListUnmanaged(PathRecord);
@@ -70,7 +70,7 @@ pub fn Soup(comptime T: type) type {
             const path = try self.path_records.addOne(self.allocator);
             path.* = PathRecord{
                 .fill = fill,
-                .offsets = RangeU32{
+                .subpath_offsets = RangeU32{
                     .start = @intCast(self.subpath_records.items.len),
                     .end = @intCast(self.subpath_records.items.len),
                 },
@@ -78,13 +78,13 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn closePath(self: *@This()) !void {
-            self.path_records.items[self.path_records.items.len - 1].offsets.end = @intCast(self.subpath_records.items.len);
+            self.path_records.items[self.path_records.items.len - 1].subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
 
         pub fn openSubpath(self: *@This()) !void {
             const subpath = try self.subpath_records.addOne(self.allocator);
             subpath.* = SubpathRecord{
-                .offsets = RangeU32{
+                .item_offsets = RangeU32{
                     .start = @intCast(self.items.items.len),
                     .end = @intCast(self.items.items.len),
                 },
@@ -92,7 +92,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn closeSubpath(self: *@This()) !void {
-            self.subpath_records.items[self.subpath_records.items.len - 1].offsets.end = @intCast(self.subpath_records.items.len);
+            self.subpath_records.items[self.subpath_records.items.len - 1].item_offsets.end = @intCast(self.items.items.len);
         }
 
         pub fn addItem(self: *@This()) !*T {

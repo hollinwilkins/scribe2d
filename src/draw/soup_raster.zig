@@ -340,7 +340,7 @@ pub fn RasterData(comptime T: type) type {
         }
 
         pub fn closePathRecord(self: *@This()) void {
-            self.path_records.items[self.path_records.items.len - 1].offsets.end = @intCast(self.subpath_records.items.len);
+            self.path_records.items[self.path_records.items.len - 1].subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
 
         pub fn openSubpathRecord(self: *@This()) !void {
@@ -354,7 +354,7 @@ pub fn RasterData(comptime T: type) type {
         }
 
         pub fn closeSubpathRecord(self: *@This()) void {
-            self.subpath_records.items[self.subpath_records.items.len - 1].offsets.end = @intCast(self.grid_records.items.len);
+            self.subpath_records.items[self.subpath_records.items.len - 1].grid_offsets.end = @intCast(self.grid_records.items.len);
         }
 
         pub fn openGridRecord(self: *@This()) !*const GridRecord {
@@ -369,7 +369,7 @@ pub fn RasterData(comptime T: type) type {
         }
 
         pub fn closeGridRecord(self: *@This()) void {
-            self.grid_records.items[self.grid_records.items.len - 1].offsets.end = @intCast(self.grid_intersections.items.len);
+            self.grid_records.items[self.grid_records.items.len - 1].intersection_offsets.end = @intCast(self.grid_intersections.items.len);
         }
 
         pub fn addGridIntersection(self: *@This()) !*GridIntersection {
@@ -417,16 +417,15 @@ pub fn SoupRasterizer(comptime T: type) type {
 
         pub fn populateGridIntersections(self: @This(), raster_data: *RD) !void {
             _ = self;
-            var monotonic_cuts: [2]Intersection = [_]Intersection{undefined} ** 2;
 
             for (raster_data.soup.getPathRecords()) |path_record| {
                 try raster_data.openPathRecord();
 
-                const subpath_records = raster_data.soup.getSubpathRecords()[path_record.offsets.start..path_record.offsets.end];
+                const subpath_records = raster_data.soup.getSubpathRecords()[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                 for (subpath_records) |subpath_record| {
                     try raster_data.openSubpathRecord();
 
-                    const items = raster_data.soup.getItems()[subpath_record.offsets.start..subpath_record.offsets.end];
+                    const items = raster_data.soup.getItems()[subpath_record.item_offsets.start..subpath_record.item_offsets.end];
                     for (items) |curve| {
                         const grid_record = try raster_data.openGridRecord();
 
@@ -467,12 +466,6 @@ pub fn SoupRasterizer(comptime T: type) type {
                             );
                         }
 
-                        // insert monotonic cuts, which ensure curves are monotonic within a pixel
-                        for (curve.monotonicCuts(&monotonic_cuts)) |intersection| {
-                            const ao = try raster_data.addGridIntersection();
-                            ao.* = GridIntersection.create(intersection, .virtual);
-                        }
-
                         // last virtual intersection
                         (try raster_data.addGridIntersection()).* = GridIntersection.create(
                             Intersection{
@@ -482,9 +475,9 @@ pub fn SoupRasterizer(comptime T: type) type {
                             .virtual,
                         );
 
-                        try raster_data.closeGridRecord();
+                        raster_data.closeGridRecord();
 
-                        const grid_intersections = raster_data.grid_intersections.items[grid_record.boundary_offsets.start..grid_record.boundary_offsets.end];
+                        const grid_intersections = raster_data.grid_intersections.items[grid_record.intersection_offsets.start..grid_record.intersection_offsets.end];
 
                         // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
                         std.mem.sort(
@@ -495,10 +488,10 @@ pub fn SoupRasterizer(comptime T: type) type {
                         );
                     }
 
-                    try raster_data.closeSubpathRecord();
+                    raster_data.closeSubpathRecord();
                 }
 
-                try raster_data.closePathRecord();
+                raster_data.closePathRecord();
             }
         }
 
@@ -701,7 +694,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                     .y = curve_bounds.max.y + 1.0,
                 },
             );
-            const scaled_intersections = curve.intersectVerticalLine(line, &scaled_intersections_result);
+            const scaled_intersections = curve.intersectVerticalLineGeneric(line, &scaled_intersections_result);
 
             for (scaled_intersections) |intersection| {
                 const ao = try raster_data.addGridIntersection();
@@ -726,7 +719,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                     .y = grid_y,
                 },
             );
-            const scaled_intersections = curve.intersectHorizontalLine(line, &scaled_intersections_result);
+            const scaled_intersections = curve.intersectHorizontalLineGeneric(line, &scaled_intersections_result);
 
             for (scaled_intersections) |intersection| {
                 const ao = try raster_data.addGridIntersection();
