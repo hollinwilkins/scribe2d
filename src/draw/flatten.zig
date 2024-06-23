@@ -143,17 +143,19 @@ fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) Neighbor
     const index_shifted = (index - curve_range.start) % curve_range.end + curve_range.start;
     const curve_record = paths.getCurveRecordUnsafe(index_shifted);
     const cubic_points = paths.getCubicPoints(curve_record);
-    const do_join = !curve_record.is_cap or !curve_record.is_open;
-    const tangent = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+    const tangent = cubicStartTangent(
+        cubic_points.point0,
+        cubic_points.point1,
+        cubic_points.point2,
+        cubic_points.point3,
+    );
 
     return NeighborSegment{
-        .do_join = do_join,
         .tangent = tangent,
     };
 }
 
 pub const NeighborSegment = struct {
-    do_join: bool,
     tangent: PointF32,
 };
 
@@ -287,15 +289,14 @@ pub const PathFlattener = struct {
                         }
 
                         if (style.stroke) |stroke| {
-                            const is_stroke_cap_marker = curve.is_cap;
                             const offset = 0.5 * stroke.width;
                             const offset_point = PointF32{
                                 .x = offset,
                                 .y = offset,
                             };
 
-                            if (is_stroke_cap_marker) {
-                                if (curve.is_open) {
+                            if (!curve.is_open) {
+                                if (curve.cap == .start) {
                                     // Draw start cap
                                     const tangent = cubicStartTangent(
                                         cubic_points.point0,
@@ -319,7 +320,7 @@ pub const PathFlattener = struct {
                                         &stroke_lines,
                                     );
                                 }
-                            } else {
+
                                 const neighbor = readNeighborSegment(paths, subpath.curve_offsets, @intCast(curve_index + 1));
                                 var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
                                 var tan_next = neighbor.tangent;
@@ -378,7 +379,18 @@ pub const PathFlattener = struct {
                                     &stroke_lines,
                                 );
 
-                                if (neighbor.do_join) {
+                                if (curve.cap == .end) {
+                                    // Draw end cap
+                                    try drawCap(
+                                        stroke.cap,
+                                        cubic_points.point3,
+                                        cubic_points.point3.add(n_prev),
+                                        cubic_points.point3.sub(n_prev),
+                                        offset_tangent,
+                                        transform,
+                                        &stroke_lines,
+                                    );
+                                } else {
                                     try drawJoin(
                                         stroke,
                                         cubic_points.point3,
@@ -386,16 +398,6 @@ pub const PathFlattener = struct {
                                         tan_next,
                                         n_prev,
                                         n_next,
-                                        transform,
-                                        &stroke_lines,
-                                    );
-                                } else {
-                                    try drawCap(
-                                        stroke.cap,
-                                        cubic_points.point3,
-                                        cubic_points.point3.add(n_prev),
-                                        cubic_points.point3.sub(n_prev),
-                                        offset_tangent,
                                         transform,
                                         &stroke_lines,
                                     );

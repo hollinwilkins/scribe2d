@@ -38,6 +38,12 @@ pub const Paths = struct {
     };
 
     pub const CurveRecord = struct {
+        pub const Cap = enum(u8) {
+            none = 0,
+            start = 1,
+            end = 2,
+        };
+
         pub const Kind = enum(u8) {
             line = 0,
             quadratic_bezier = 1,
@@ -47,7 +53,7 @@ pub const Paths = struct {
         point_offsets: RangeU32,
         is_end: bool = false,
         is_open: bool = false,
-        is_cap: bool = false,
+        cap: Cap = .none,
     };
 
     const PathRecordList = std.ArrayListUnmanaged(PathRecord);
@@ -250,8 +256,8 @@ pub const Paths = struct {
                 try self.lineTo(start_point);
                 end_curve = &self.curve_records.items[self.curve_records.items.len - 1];
                 end_curve.is_open = true;
-                end_curve.is_cap = true;
-                start_curve.is_cap = true;
+                end_curve.cap = .end;
+                start_curve.cap = .start;
             }
 
             end_curve.is_end = true;
