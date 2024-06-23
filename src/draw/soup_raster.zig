@@ -480,6 +480,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                         const grid_intersections = raster_data.grid_intersections.items[grid_record.intersection_offsets.start..grid_record.intersection_offsets.end];
 
                         // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
+                        // TODO: might not need to sort this now
                         std.mem.sort(
                             GridIntersection,
                             grid_intersections,
@@ -683,7 +684,7 @@ pub fn SoupRasterizer(comptime T: type) type {
             curve: T,
             curve_bounds: RectF32,
         ) !void {
-            var scaled_intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
+            var intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
             const line = Line.create(
                 PointF32{
                     .x = grid_x,
@@ -694,9 +695,9 @@ pub fn SoupRasterizer(comptime T: type) type {
                     .y = curve_bounds.max.y + 1.0,
                 },
             );
-            const scaled_intersections = curve.intersectVerticalLineGeneric(line, &scaled_intersections_result);
+            const intersections = curve.intersectVerticalLineGeneric(line, &intersections_result);
 
-            for (scaled_intersections) |intersection| {
+            for (intersections) |intersection| {
                 const ao = try raster_data.addGridIntersection();
                 ao.* = GridIntersection.create(intersection, .x);
             }
@@ -708,7 +709,7 @@ pub fn SoupRasterizer(comptime T: type) type {
             curve: T,
             curve_bounds: RectF32,
         ) !void {
-            var scaled_intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
+            var intersections_result: [3]Intersection = [_]Intersection{undefined} ** 3;
             const line = Line.create(
                 PointF32{
                     .x = curve_bounds.min.x - 1.0,
@@ -719,9 +720,9 @@ pub fn SoupRasterizer(comptime T: type) type {
                     .y = grid_y,
                 },
             );
-            const scaled_intersections = curve.intersectHorizontalLineGeneric(line, &scaled_intersections_result);
+            const intersections = curve.intersectHorizontalLineGeneric(line, &intersections_result);
 
-            for (scaled_intersections) |intersection| {
+            for (intersections) |intersection| {
                 const ao = try raster_data.addGridIntersection();
                 ao.* = GridIntersection.create(intersection, .y);
             }
