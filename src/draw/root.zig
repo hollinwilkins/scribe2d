@@ -26,6 +26,7 @@ pub const TextureFormat = texture.TextureFormat;
 pub const TextureCodec = texture.TextureCodec;
 pub const ColorCodec = texture.ColorCodec;
 
+pub const Arc = curve.Arc;
 pub const Line = curve.Line;
 pub const QuadraticBezier = curve.QuadraticBezier;
 

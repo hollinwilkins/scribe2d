@@ -57,7 +57,7 @@ pub fn main() !void {
 
     std.debug.print("===================\n", .{});
     std.debug.print("Lines:\n", .{});
-    for (flat_data.fill_lines.getLines()) |line| {
+    for (flat_data.fill_lines.getItems()) |line| {
         std.debug.print("{}\n", .{ line });
     }
     std.debug.print("===================\n", .{});

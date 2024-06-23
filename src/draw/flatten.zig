@@ -6,6 +6,7 @@ const path_module = @import("./path.zig");
 const pen = @import("./pen.zig");
 const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
+const soup = @import("./soup.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -21,6 +22,7 @@ const CubicPoints = euler.CubicPoints;
 const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
+const LineSoup = soup.LineSoup;
 
 /// Threshold below which a derivative is considered too small.
 pub const DERIV_THRESH: f32 = 1e-6;
@@ -162,75 +164,6 @@ pub const NeighborSegment = struct {
 pub const CubicAndDeriv = struct {
     point: PointF32,
     derivative: PointF32,
-};
-
-pub const LineSoup = struct {
-    const PathRecord = struct {
-        fill: Style.Fill,
-        offsets: RangeU32,
-    };
-
-    const SubpathRecord = struct {
-        offsets: RangeU32,
-    };
-
-    const PathRecordList = std.ArrayListUnmanaged(PathRecord);
-    const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
-    const LineList = std.ArrayListUnmanaged(Line);
-
-    allocator: Allocator,
-    paths: PathRecordList = PathRecordList{},
-    subpaths: SubpathRecordList = SubpathRecordList{},
-    lines: LineList = LineList{},
-
-    pub fn init(allocator: Allocator) @This() {
-        return @This(){
-            .allocator = allocator,
-        };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.paths.deinit(self.allocator);
-        self.subpaths.deinit(self.allocator);
-        self.lines.deinit(self.allocator);
-    }
-
-    pub fn getLines(self: @This()) []const Line {
-        return self.lines.items;
-    }
-
-    pub fn openPath(self: *@This(), fill: Style.Fill) !void {
-        const path = try self.paths.addOne(self.allocator);
-        path.* = PathRecord{
-            .fill = fill,
-            .offsets = RangeU32{
-                .start = @intCast(self.subpaths.items.len),
-                .end = @intCast(self.subpaths.items.len),
-            },
-        };
-    }
-
-    pub fn closePath(self: *@This()) !void {
-        self.paths.items[self.paths.items.len - 1].offsets.end = @intCast(self.subpaths.items.len);
-    }
-
-    pub fn openSubpath(self: *@This()) !void {
-        const subpath = try self.subpaths.addOne(self.allocator);
-        subpath.* = SubpathRecord{
-            .offsets = RangeU32{
-                .start = @intCast(self.lines.items.len),
-                .end = @intCast(self.lines.items.len),
-            },
-        };
-    }
-
-    pub fn closeSubpath(self: *@This()) !void {
-        self.subpaths.items[self.subpaths.items.len - 1].offsets.end = @intCast(self.subpaths.items.len);
-    }
-
-    pub fn addLine(self: *@This()) !*Line {
-        return try self.lines.addOne(self.allocator);
-    }
 };
 
 pub const FlatData = struct {
@@ -458,11 +391,11 @@ pub const PathFlattener = struct {
         switch (stroke.join) {
             .bevel => {
                 if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
-                    const line1 = try line_soup.addLine();
+                    const line1 = try line_soup.addItem();
                     line1.start = transform.apply(front0);
                     line1.end = transform.apply(front1);
 
-                    const line2 = try line_soup.addLine();
+                    const line2 = try line_soup.addItem();
                     line2.start = transform.apply(back0);
                     line2.end = transform.apply(back1);
                 }
@@ -484,7 +417,7 @@ pub const PathFlattener = struct {
                         .y = h,
                     });
 
-                    const line = try line_soup.addLine();
+                    const line = try line_soup.addItem();
                     line.start = transform.apply(p);
                     line.end = transform.apply(miter_pt);
 
@@ -495,11 +428,11 @@ pub const PathFlattener = struct {
                     }
                 }
 
-                const line1 = try line_soup.addLine();
+                const line1 = try line_soup.addItem();
                 line1.start = transform.apply(front0);
                 line1.end = transform.apply(front1);
 
-                const line2 = try line_soup.addLine();
+                const line2 = try line_soup.addItem();
                 line2.start = transform.apply(back0);
                 line2.end = transform.apply(back1);
             },
@@ -530,7 +463,7 @@ pub const PathFlattener = struct {
                     line_soup,
                 );
 
-                const line = try line_soup.addLine();
+                const line = try line_soup.addItem();
                 line.start = transform.apply(other0);
                 line.end = transform.apply(other1);
             },
@@ -564,11 +497,11 @@ pub const PathFlattener = struct {
             const v = offset_tangent;
             const p0 = start.add(v);
             const p1 = end.add(v);
-            const line1 = try line_soup.addLine();
+            const line1 = try line_soup.addItem();
             line1.start = transform.apply(start);
             line1.end = transform.apply(p0);
 
-            const line2 = try line_soup.addLine();
+            const line2 = try line_soup.addItem();
             line2.start = transform.apply(p1);
             line2.end = transform.apply(end);
 
@@ -576,7 +509,7 @@ pub const PathFlattener = struct {
             end = p1;
         }
 
-        const line = try line_soup.addLine();
+        const line = try line_soup.addItem();
         line.start = transform.apply(start);
         line.end = transform.apply(end);
     }
@@ -610,14 +543,14 @@ pub const PathFlattener = struct {
         for (0..n_lines - 1) |_| {
             r = rot.apply(r);
             const p1 = transform.apply(center.add(r));
-            const line = try line_soup.addLine();
+            const line = try line_soup.addItem();
             line.start = p0;
             line.end = p1;
             p0 = p1;
         }
 
         const p1 = transform.apply(end);
-        const line = try line_soup.addLine();
+        const line = try line_soup.addItem();
         line.start = p0;
         line.end = p1;
     }
@@ -775,7 +708,7 @@ pub const PathFlattener = struct {
 
                     const l0 = if (offset >= 0.0) lp0 else lp1;
                     const l1 = if (offset >= 0.0) lp1 else lp0;
-                    const line = try line_soup.addLine();
+                    const line = try line_soup.addItem();
                     line.start = l0;
                     line.end = l1;
 

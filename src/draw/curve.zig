@@ -114,6 +114,13 @@ pub const Curve = union(enum) {
     }
 };
 
+pub const Arc = struct {
+    start: PointF32,
+    center: PointF32,
+    end: PointF32,
+    angle: PointF32,
+};
+
 pub const Line = struct {
     start: PointF32,
     end: PointF32,
