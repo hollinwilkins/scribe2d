@@ -38,8 +38,8 @@ pub fn Soup(comptime T: type) type {
         const ItemList = std.ArrayListUnmanaged(T);
 
         allocator: Allocator,
-        paths: PathRecordList = PathRecordList{},
-        subpaths: SubpathRecordList = SubpathRecordList{},
+        path_records: PathRecordList = PathRecordList{},
+        subpath_records: SubpathRecordList = SubpathRecordList{},
         items: ItemList = ItemList{},
 
         pub fn init(allocator: Allocator) @This() {
@@ -49,9 +49,17 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn deinit(self: *@This()) void {
-            self.paths.deinit(self.allocator);
-            self.subpaths.deinit(self.allocator);
+            self.path_records.deinit(self.allocator);
+            self.subpath_records.deinit(self.allocator);
             self.items.deinit(self.allocator);
+        }
+
+        pub fn getPathRecords(self: @This()) []const PathRecord {
+            return self.path_records.items;
+        }
+
+        pub fn getSubpathRecords(self: @This()) []const SubpathRecord {
+            return self.subpath_records.items;
         }
 
         pub fn getItems(self: @This()) []const T {
@@ -59,22 +67,22 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn openPath(self: *@This(), fill: Style.Fill) !void {
-            const path = try self.paths.addOne(self.allocator);
+            const path = try self.path_records.addOne(self.allocator);
             path.* = PathRecord{
                 .fill = fill,
                 .offsets = RangeU32{
-                    .start = @intCast(self.subpaths.items.len),
-                    .end = @intCast(self.subpaths.items.len),
+                    .start = @intCast(self.subpath_records.items.len),
+                    .end = @intCast(self.subpath_records.items.len),
                 },
             };
         }
 
         pub fn closePath(self: *@This()) !void {
-            self.paths.items[self.paths.items.len - 1].offsets.end = @intCast(self.subpaths.items.len);
+            self.path_records.items[self.path_records.items.len - 1].offsets.end = @intCast(self.subpath_records.items.len);
         }
 
         pub fn openSubpath(self: *@This()) !void {
-            const subpath = try self.subpaths.addOne(self.allocator);
+            const subpath = try self.subpath_records.addOne(self.allocator);
             subpath.* = SubpathRecord{
                 .offsets = RangeU32{
                     .start = @intCast(self.items.items.len),
@@ -84,7 +92,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn closeSubpath(self: *@This()) !void {
-            self.subpaths.items[self.subpaths.items.len - 1].offsets.end = @intCast(self.subpaths.items.len);
+            self.subpath_records.items[self.subpath_records.items.len - 1].offsets.end = @intCast(self.subpath_records.items.len);
         }
 
         pub fn addItem(self: *@This()) !*T {
