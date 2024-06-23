@@ -10,7 +10,7 @@ const Line = curve.Line;
 
 const DEGREE_45: f32 = (2 * std.math.pi) / 8.0;
 
-pub fn HalfPlanes(comptime T: type) type {
+pub fn HalfPlanes(comptime T: type, points: []const PointF32) type {
     return struct {
         allocator: Allocator,
         half_planes_dimensions: DimensionsU32,
@@ -18,7 +18,7 @@ pub fn HalfPlanes(comptime T: type) type {
         half_planes_mid_point: PointU32,
         vertical_masks: []T,
 
-        pub fn create(allocator: Allocator, points: []const PointF32) !@This() {
+        pub fn init(allocator: Allocator) !@This() {
             const bit_size = @sizeOf(T) * 8;
 
             const half_planes_dimensions = DimensionsU32{
@@ -147,7 +147,7 @@ pub fn HalfPlanes(comptime T: type) type {
     };
 }
 
-pub const HalfPlanesU16 = HalfPlanes(u16);
+pub const HalfPlanesU16 = HalfPlanes(u16, &UV_SAMPLE_COUNT_16);
 
 pub fn createHalfPlanes(
     comptime T: type,

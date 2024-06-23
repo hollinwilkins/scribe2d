@@ -61,4 +61,11 @@ pub fn main() !void {
         std.debug.print("{}\n", .{ line });
     }
     std.debug.print("===================\n", .{});
+
+    var half_planes = try draw.HalfPlanesU16.init(allocator);
+    defer half_planes.deinit();
+
+    var soup_rasterizer = draw.LineSoupRasterizer.create(&half_planes);
+    const raster_data = try soup_rasterizer.rasterizeAlloc(allocator, flat_data.fill_lines, 0);
+    _ = raster_data;
 }

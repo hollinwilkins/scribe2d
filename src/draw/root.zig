@@ -6,9 +6,12 @@ const path = @import("./path.zig");
 const flatten = @import("./flatten.zig");
 const scene = @import("./scene.zig");
 const raster = @import("./raster.zig");
+const soup = @import("./soup.zig");
+const soup_raster = @import("./soup_raster.zig");
 const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const pen = @import("./pen.zig");
+const msaa = @import("./msaa.zig");
 
 pub const Pen = pen.Pen;
 pub const Style = pen.Style;
@@ -18,6 +21,9 @@ pub const PathBuilder = path.PathBuilder;
 pub const Segment = path.Segment;
 
 pub const Rasterizer = raster.Rasterizer;
+
+pub const LineSoup = soup.LineSoup;
+pub const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
 
 pub const Color = texture.Color;
 pub const Texture = texture.Texture;
@@ -33,3 +39,5 @@ pub const QuadraticBezier = curve.QuadraticBezier;
 pub const PathFlattener = flatten.PathFlattener;
 
 pub const Scene = scene.Scene;
+
+pub const HalfPlanesU16 = msaa.HalfPlanesU16;
