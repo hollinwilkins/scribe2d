@@ -480,7 +480,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                         const grid_intersections = raster_data.grid_intersections.items[grid_record.intersection_offsets.start..grid_record.intersection_offsets.end];
 
                         // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
-                        // TODO: might not need to sort this now
+                        // TODO: can probably sort this as part of fragment generation
                         std.mem.sort(
                             GridIntersection,
                             grid_intersections,
