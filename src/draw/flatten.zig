@@ -190,6 +190,8 @@ pub const LineSoup = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        self.paths.deinit(self.allocator);
+        self.subpaths.deinit(self.allocator);
         self.lines.deinit(self.allocator);
     }
 

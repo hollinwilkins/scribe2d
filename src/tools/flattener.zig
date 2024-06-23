@@ -34,7 +34,6 @@ pub fn main() !void {
     var scene = try draw.Scene.init(allocator);
     defer scene.deinit();
 
-    try scene.paths.copyPath(glyph_paths, 0);
     const style = try scene.pushStyle();
     style.fill = draw.Style.Fill{
         .color = draw.Color{
@@ -44,6 +43,8 @@ pub fn main() !void {
             .a = 1.0,
         },
     };
+    try scene.paths.copyPath(glyph_paths, 0);
+    try scene.close();
 
     var flat_data = try draw.PathFlattener.flattenAlloc(
         allocator,
