@@ -218,18 +218,6 @@ pub const GridIntersection = struct {
             },
         };
     }
-
-    pub fn getT(self: @This()) f32 {
-        return self.intersection.t;
-    }
-
-    pub fn getPoint(self: @This()) PointF32 {
-        return self.intersection.point;
-    }
-
-    pub fn getPixel(self: @This()) PointI32 {
-        return self.pixel;
-    }
 };
 
 pub fn RasterData(comptime T: type) type {
@@ -376,7 +364,7 @@ pub fn SoupRasterizer(comptime T: type) type {
             for (soup_subpath_records) |soup_subpath_record| {
                 const soup_items = raster_data.soup.getItems()[soup_subpath_record.item_offsets.start..soup_subpath_record.item_offsets.end];
                 for (soup_items) |item| {
-                    // const start_intersection_index = raster_data.grid_intersections.items.len;
+                    const start_intersection_index = raster_data.grid_intersections.items.len;
 
                     const start_point: PointF32 = item.applyT(0.0);
                     const end_point: PointF32 = item.applyT(1.0);
@@ -396,6 +384,10 @@ pub fn SoupRasterizer(comptime T: type) type {
                         .y = @floatFromInt(bounds.max.y + 1),
                     });
 
+                    (try raster_data.addGridIntersection()).* = GridIntersection.create((Intersection{
+                        .t = 0.0,
+                        .point = start_point,
+                    }).fitToGrid());
                     if (bounds.getWidth() > 0) {
                         var vertical_intersection: Intersection = item.intersectVerticalLine(Line.create(PointF32{
                             .x = @floatFromInt(bounds.min.x),
@@ -446,14 +438,21 @@ pub fn SoupRasterizer(comptime T: type) type {
                             bounds.max.y,
                         );
                     }
+                    (try raster_data.addGridIntersection()).* = GridIntersection.create((Intersection{
+                        .t = 1.0,
+                        .point = end_point,
+                    }).fitToGrid());
+
+                    const end_intersection_index = raster_data.grid_intersections.items.len;
+                    const grid_intersections = raster_data.grid_intersections.items[start_intersection_index..end_intersection_index];
 
                     // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
-                    // std.mem.sort(
-                    //     GridIntersection,
-                    //     grid_intersections,
-                    //     @as(u32, 0),
-                    //     gridIntersectionLessThan,
-                    // );
+                    std.mem.sort(
+                        GridIntersection,
+                        grid_intersections,
+                        @as(u32, 0),
+                        gridIntersectionLessThan,
+                    );
                 }
             }
 
@@ -461,13 +460,13 @@ pub fn SoupRasterizer(comptime T: type) type {
         }
 
         fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
-            if (left.getPixel().y < right.getPixel().y) {
+            if (left.intersection.point.y < right.intersection.point.y) {
                 return true;
-            } else if (left.getPixel().y > right.getPixel().y) {
+            } else if (left.intersection.point.y > right.intersection.point.y) {
                 return true;
-            } else if (left.getPixel().x < right.getPixel().x) {
+            } else if (left.intersection.point.x < right.intersection.point.x) {
                 return true;
-            } else if (left.getPixel().x > right.getPixel().x) {
+            } else if (left.intersection.point.x > right.intersection.point.x) {
                 return true;
             } else if (left.grid_line != .virtual and right.grid_line == .virtual) {
                 return true;
