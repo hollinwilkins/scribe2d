@@ -197,6 +197,10 @@ pub fn Rect(comptime T: type) type {
             return self.max.y - self.min.y;
         }
 
+        pub fn size(self: @This()) usize {
+            return self.getDimensions().size();
+        }
+
         pub fn getAspectRatio(self: *const @This()) f64 {
             return @as(f64, self.getWidth()) / @as(f64, self.getHeight());
         }
@@ -234,6 +238,7 @@ pub fn Rect(comptime T: type) type {
 
 pub const RectF32 = Rect(f32);
 pub const RectI16 = Rect(i16);
+pub const RectI32 = Rect(i32);
 pub const RectU32 = Rect(u32);
 
 pub fn Transform(comptime T: type) type {

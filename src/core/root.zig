@@ -11,6 +11,7 @@ pub const PointI32 = geometry.PointI32;
 pub const Rect = geometry.Rect;
 pub const RectF32 = geometry.RectF32;
 pub const RectI16 = geometry.RectI16;
+pub const RectI32 = geometry.RectI32;
 pub const RectU32 = geometry.RectU32;
 
 pub const Dimensions = geometry.Dimensions;

@@ -8,8 +8,29 @@ const DimensionsF32 = core.DimensionsF32;
 const TransformF32 = core.TransformF32;
 
 pub const Intersection = struct {
+    pub const GRID_FIT_THRESHOLD: f32 = 1e-6;
+
     t: f32,
     point: PointF32,
+
+    pub fn fitToGrid(self: @This()) @This() {
+        var point = self.point;
+        const rounded_x = @round(self.point.x);
+        const rounded_y = @round(self.point.y);
+
+        if (@abs(rounded_x - self.point.x) < GRID_FIT_THRESHOLD) {
+            point.x = rounded_x;
+        }
+
+        if (@abs(rounded_y - self.point.y) < GRID_FIT_THRESHOLD) {
+            point.y = rounded_y;
+        }
+
+        return @This() {
+            .t = self.t,
+            .point = point,
+        };
+    }
 };
 
 pub const Curve = union(enum) {
