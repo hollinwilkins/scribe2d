@@ -28,6 +28,7 @@ const PathRecord = struct {
     subpath_offsets: RangeU32 = RangeU32{},
     boundary_offsets: RangeU32 = RangeU32{},
     merge_offsets: RangeU32 = RangeU32{},
+    span_offsets: RangeU32 = RangeU32{},
 };
 
 const SubpathRecord = struct {
@@ -103,7 +104,7 @@ pub const BoundaryFragment = struct {
         };
     }
 
-    pub fn calculateMasks(self: @This(), half_planes: HalfPlanesU16) Masks {
+    pub fn calculateMasks(self: @This(), half_planes: *const HalfPlanesU16) Masks {
         var masks = Masks{};
         if (self.intersections[0].point.x == 0.0 and self.intersections[1].point.x != 0.0) {
             const vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
@@ -284,6 +285,10 @@ pub fn RasterData(comptime T: type) type {
             path_record.merge_offsets.start = @intCast(self.merge_fragments.items.len);
         }
 
+        pub fn openPathRecordSpans(self: *@This(), path_record: *PathRecord) void {
+            path_record.span_offsets.start = @intCast(self.merge_fragments.items.len);
+        }
+
         pub fn closePathRecordSubpaths(self: *@This(), path_record: *PathRecord) void {
             path_record.subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
@@ -294,6 +299,10 @@ pub fn RasterData(comptime T: type) type {
 
         pub fn closePathRecordMerges(self: *@This(), path_record: *PathRecord) void {
             path_record.merge_offsets.end = @intCast(self.merge_fragments.items.len);
+        }
+
+        pub fn closePathRecordSpans(self: *@This(), path_record: *PathRecord) void {
+            path_record.span_offsets.end = @intCast(self.merge_fragments.items.len);
         }
 
         pub fn openSubpathRecordIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
@@ -365,12 +374,13 @@ pub fn SoupRasterizer(comptime T: type) type {
                     path_record,
                 );
 
+                try self.populateSpans(
+                    &raster_data,
+                    path_record,
+                );
+
                 raster_data.closePathRecordMerges(path_record);
             }
-
-            // try self.populateBoundaryFragments(&raster_data);
-            // try self.populateCurveFragments(&raster_data);
-            // try self.populateSpans(&raster_data);
 
             return raster_data;
         }
@@ -500,103 +510,106 @@ pub fn SoupRasterizer(comptime T: type) type {
         }
 
         pub fn populateMergeFragments(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
-            _ = self;
-            _ = raster_data;
-            _ = path_record;
-            //     {
-            //         const first_curve_fragment = &raster_data.getCurveFragments()[0];
-            //         var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
-            //         boundary_fragment.* = BoundaryFragment{
-            //             .pixel = first_curve_fragment.pixel,
-            //         };
-            //         var curve_fragment_offsets = RangeU32{};
-            //         var main_ray_winding: f32 = 0.0;
+            raster_data.openPathRecordMerges(path_record);
+            {
+                const first_boundary_fragment = &raster_data.boundary_fragments.items[0];
+                var merge_fragment: *MergeFragment = try raster_data.addMergeFragment();
+                merge_fragment.* = MergeFragment{
+                    .pixel = first_boundary_fragment.pixel,
+                };
+                var boundary_offsets = RangeU32{};
+                var main_ray_winding: f32 = 0.0;
 
-            //         const curve_fragments = raster_data.getCurveFragments();
-            //         for (curve_fragments, 0..) |*curve_fragment, curve_fragment_index| {
-            //             const y_changing = curve_fragment.pixel.y != boundary_fragment.pixel.y;
-            //             if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
-            //                 curve_fragment_offsets.end = @intCast(curve_fragment_index);
-            //                 boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
-            //                 boundary_fragment = try raster_data.addBoundaryFragment();
-            //                 curve_fragment_offsets.start = curve_fragment_offsets.end;
-            //                 boundary_fragment.* = BoundaryFragment{
-            //                     .pixel = curve_fragment.pixel,
-            //                 };
-            //                 std.debug.assert(boundary_fragment.pixel.x >= 0);
-            //                 std.debug.assert(boundary_fragment.pixel.y >= 0);
-            //                 boundary_fragment.main_ray_winding = main_ray_winding;
+                const boundary_fragments = raster_data.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
+                for (boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
+                    const y_changing = boundary_fragment.pixel.y != merge_fragment.pixel.y;
+                    if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
+                        boundary_offsets.end = @intCast(boundary_fragment_index);
+                        merge_fragment.boundary_offsets = boundary_offsets;
+                        merge_fragment = try raster_data.addMergeFragment();
+                        boundary_offsets.start = boundary_offsets.end;
+                        merge_fragment.* = MergeFragment{
+                            .pixel = boundary_fragment.pixel,
+                        };
+                        std.debug.assert(merge_fragment.pixel.x >= 0);
+                        std.debug.assert(merge_fragment.pixel.y >= 0);
+                        merge_fragment.main_ray_winding = main_ray_winding;
 
-            //                 if (y_changing) {
-            //                     main_ray_winding = 0.0;
-            //                 }
-            //             }
+                        if (y_changing) {
+                            main_ray_winding = 0.0;
+                        }
+                    }
 
-            //             main_ray_winding += curve_fragment.calculateMainRayWinding();
-            //         }
-            //     }
+                    main_ray_winding += boundary_fragment.calculateMainRayWinding();
+                }
+            }
+            raster_data.closePathRecordMerges(path_record);
 
-            //     {
-            //         const boundary_fragments = raster_data.getBoundaryFragments();
-            //         for (boundary_fragments) |*boundary_fragment| {
-            //             const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
+            {
+                const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+                for (merge_fragments) |*merge_fragment| {
+                    const boundary_fragments = raster_data.boundary_fragments.items[merge_fragment.boundary_offsets.start..merge_fragment.boundary_offsets.end];
 
-            //             for (0..16) |index| {
-            //                 boundary_fragment.winding[index] += boundary_fragment.main_ray_winding;
-            //             }
+                    for (0..16) |index| {
+                        merge_fragment.winding[index] += merge_fragment.main_ray_winding;
+                    }
 
-            //             for (curve_fragments) |curve_fragment| {
-            //                 // if (curve_fragment.pixel.x == 193 and curve_fragment.pixel.y == 167) {
-            //                 //     std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
-            //                 // }
-            //                 const masks = curve_fragment.calculateMasks(self.half_planes);
-            //                 for (0..16) |index| {
-            //                     const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-            //                     const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
-            //                     const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
-            //                     const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
-            //                     boundary_fragment.winding[index] += vertical_winding0 + vertical_winding1 + horizontal_winding;
-            //                 }
-            //             }
+                    for (boundary_fragments) |boundary_fragment| {
+                        // if (curve_fragment.pixel.x == 193 and curve_fragment.pixel.y == 167) {
+                        //     std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
+                        // }
+                        const masks = boundary_fragment.calculateMasks(self.half_planes);
+                        for (0..16) |index| {
+                            const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+                            const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
+                            const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
+                            const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
+                            merge_fragment.winding[index] += vertical_winding0 + vertical_winding1 + horizontal_winding;
+                        }
+                    }
 
-            //             for (0..16) |index| {
-            //                 const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-            //                 boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
-            //             }
+                    for (0..16) |index| {
+                        const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+                        merge_fragment.stencil_mask = merge_fragment.stencil_mask | (@as(u16, @intFromBool(merge_fragment.winding[index] != 0.0)) * bit_index);
+                    }
 
-            //             // std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
-            //             //     boundary_fragment.pixel.x,
-            //             //     boundary_fragment.pixel.y,
-            //             //     boundary_fragment.stencil_mask,
-            //             // });
-            //         }
-            //     }
+                    // std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
+                    //     boundary_fragment.pixel.x,
+                    //     boundary_fragment.pixel.y,
+                    //     boundary_fragment.stencil_mask,
+                    // });
+                }
+            }
         }
 
-        // pub fn populateSpans(self: @This(), raster_data: *RasterData) !void {
-        //     _ = self;
-        //     const boundary_fragments = raster_data.getBoundaryFragments();
-        //     var previous_boundary_fragment: ?*BoundaryFragment = null;
+        pub fn populateSpans(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
+            _ = self;
 
-        //     for (boundary_fragments) |*boundary_fragment| {
-        //         if (previous_boundary_fragment) |pbf| {
-        //             if (pbf.pixel.y == boundary_fragment.pixel.y and pbf.pixel.x != boundary_fragment.pixel.x - 1 and boundary_fragment.main_ray_winding != 0) {
-        //                 const ao = try raster_data.addSpan();
-        //                 ao.* = Span{
-        //                     .y = boundary_fragment.pixel.y,
-        //                     .x_range = RangeI32{
-        //                         .start = pbf.pixel.x + 1,
-        //                         .end = boundary_fragment.pixel.x,
-        //                     },
-        //                 };
+            raster_data.openPathRecordSpans(path_record);
 
-        //                 std.debug.assert(ao.y >= 0);
-        //             }
-        //         }
+            const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+            var previous_merge_fragment: ?*MergeFragment = null;
 
-        //         previous_boundary_fragment = boundary_fragment;
-        //     }
-        // }
+            for (merge_fragments) |*merge_fragment| {
+                if (previous_merge_fragment) |pmf| {
+                    if (pmf.pixel.y == merge_fragment.pixel.y and pmf.pixel.x != merge_fragment.pixel.x - 1 and merge_fragment.main_ray_winding != 0) {
+                        const ao = try raster_data.addSpan();
+                        ao.* = Span{
+                            .y = merge_fragment.pixel.y,
+                            .x_range = RangeI32{
+                                .start = pmf.pixel.x + 1,
+                                .end = merge_fragment.pixel.x,
+                            },
+                        };
+
+                        std.debug.assert(ao.y >= 0);
+                    }
+                }
+
+                previous_merge_fragment = merge_fragment;
+            }
+            raster_data.closePathRecordSpans(path_record);
+        }
 
         fn scanX(
             raster_data: *RD,
