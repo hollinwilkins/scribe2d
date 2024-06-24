@@ -383,64 +383,93 @@ pub fn SoupRasterizer(comptime T: type) type {
             for (soup_subpath_records) |soup_subpath_record| {
                 const soup_items = raster_data.soup.getItems()[soup_subpath_record.item_offsets.start..soup_subpath_record.item_offsets.end];
                 for (soup_items) |curve| {
-                    const curve_bounds = curve.getBounds();
                     const start_intersection_index = raster_data.grid_intersections.items.len;
 
-                    // first virtual intersection
-                    (try raster_data.addGridIntersection()).* = GridIntersection.create(
-                        Intersection{
-                            .t = 0.0,
-                            .point = curve.applyT(0.0),
-                        },
-                        .virtual,
-                    );
+                    const start_point = curve.applyT(0.0);
+                    const end_point = curve.applyT(1.0);
+                    const start_x: u32 = @intFromFloat(@ceil(start_point.x));
+                    const end_x: u32 = @intFromFloat(@floor(end_point.x));
+                    const start_y: u32 = @intFromFloat(@ceil(start_point.y));
+                    const end_y: u32 = @intFromFloat(@floor(end_point.y));
+                    const is_virtual_start = !(start_x == @as(u32, @intFromFloat(start_point.x)) or start_y == @as(u32, @intFromFloat(start_point.y)));
+                    const is_virtual_end = !(end_x == @as(u32, @intFromFloat(end_point.x)) or end_y == @as(u32, @intFromFloat(end_point.y)));
 
-                    // scan x lines within bounds
-                    const grid_x_size: usize = @intFromFloat(@ceil(curve_bounds.getWidth()));
-                    const grid_x_start: i32 = @intFromFloat(curve_bounds.min.x);
-                    for (0..grid_x_size + 1) |x_offset| {
-                        const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
-                        try scanX(
-                            raster_data,
-                            @as(f32, @floatFromInt(grid_x)),
-                            curve,
-                            curve_bounds,
+                    if (is_virtual_start) {
+                        // need virtual start point
+                        (try raster_data.addGridIntersection()).* = GridIntersection.create(
+                            Intersection{
+                                .t = 0.0,
+                                .point = start_point,
+                            },
+                            .virtual,
                         );
                     }
 
-                    // scan y lines within bounds
-                    const grid_y_size: usize = @intFromFloat(@ceil(curve_bounds.getHeight()));
-                    const grid_y_start: i32 = @intFromFloat(curve_bounds.min.y);
-                    for (0..grid_y_size + 1) |y_offset| {
-                        const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
-                        try scanY(
-                            raster_data,
-                            @as(f32, @floatFromInt(grid_y)),
-                            curve,
-                            curve_bounds,
+                    if (is_virtual_end) {
+                        // need virtual end point
+                        (try raster_data.addGridIntersection()).* = GridIntersection.create(
+                            Intersection{
+                                .t = 0.0,
+                                .point = start_point,
+                            },
+                            .virtual,
                         );
                     }
 
-                    // last virtual intersection
-                    (try raster_data.addGridIntersection()).* = GridIntersection.create(
-                        Intersection{
-                            .t = 1.0,
-                            .point = curve.applyT(1.0),
-                        },
-                        .virtual,
-                    );
-                    const end_intersection_index = raster_data.grid_intersections.items.len;
+                    // // first virtual intersection
+                    // (try raster_data.addGridIntersection()).* = GridIntersection.create(
+                    //     Intersection{
+                    //         .t = 0.0,
+                    //         .point = curve.applyT(0.0),
+                    //     },
+                    //     .virtual,
+                    // );
 
-                    const grid_intersections = raster_data.grid_intersections.items[start_intersection_index..end_intersection_index];
+                    // // scan x lines within bounds
+                    // const grid_x_size: usize = @intFromFloat(@ceil(curve_bounds.getWidth()));
+                    // const grid_x_start: i32 = @intFromFloat(curve_bounds.min.x);
+                    // for (0..grid_x_size + 1) |x_offset| {
+                    //     const grid_x = grid_x_start + @as(i32, @intCast(x_offset));
+                    //     try scanX(
+                    //         raster_data,
+                    //         @as(f32, @floatFromInt(grid_x)),
+                    //         curve,
+                    //         curve_bounds,
+                    //     );
+                    // }
 
-                    // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
-                    // TODO: can probably sort this as part of fragment generation
-                    std.mem.sort(
-                        GridIntersection,
-                        grid_intersections,
-                        @as(u32, 0),
-                        gridIntersectionLessThan,
-                    );
+                    // // scan y lines within bounds
+                    // const grid_y_size: usize = @intFromFloat(@ceil(curve_bounds.getHeight()));
+                    // const grid_y_start: i32 = @intFromFloat(curve_bounds.min.y);
+                    // for (0..grid_y_size + 1) |y_offset| {
+                    //     const grid_y = grid_y_start + @as(i32, @intCast(y_offset));
+                    //     try scanY(
+                    //         raster_data,
+                    //         @as(f32, @floatFromInt(grid_y)),
+                    //         curve,
+                    //         curve_bounds,
+                    //     );
+                    // }
+
+                    // // last virtual intersection
+                    // (try raster_data.addGridIntersection()).* = GridIntersection.create(
+                    //     Intersection{
+                    //         .t = 1.0,
+                    //         .point = curve.applyT(1.0),
+                    //     },
+                    //     .virtual,
+                    // );
+                    // const end_intersection_index = raster_data.grid_intersections.items.len;
+
+                    // const grid_intersections = raster_data.grid_intersections.items[start_intersection_index..end_intersection_index];
+
+                    // // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
+                    // std.mem.sort(
+                    //     GridIntersection,
+                    //     grid_intersections,
+                    //     @as(u32, 0),
+                    //     gridIntersectionLessThan,
+                    // );
                 }
             }
 
@@ -448,10 +477,14 @@ pub fn SoupRasterizer(comptime T: type) type {
         }
 
         fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
-            if (left.getT() < right.getT()) {
+            if (left.getPixel().y < right.getPixel().y) {
                 return true;
-            } else if (left.getT() > right.getT()) {
-                return false;
+            } else if (left.getPixel().y > right.getPixel().y) {
+                return true;
+            } else if (left.getPixel().x < right.getPixel().x) {
+                return true;
+            } else if (left.getPixel().x > right.getPixel().x) {
+                return true;
             } else if (left.grid_line != .virtual and right.grid_line == .virtual) {
                 return true;
             }
@@ -461,69 +494,52 @@ pub fn SoupRasterizer(comptime T: type) type {
 
         pub fn populateBoundaryFragments(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
             _ = self;
+            _ = raster_data;
+            _ = path_record;
 
-            raster_data.openPathRecordBoundaries(path_record);
+            // raster_data.openPathRecordBoundaries(path_record);
 
-            const grid_intersections = raster_data.grid_intersections.items[path_record.intersection_offsets.start..path_record.intersection_offsets.end];
-            std.debug.assert(grid_intersections.len > 0);
+            // const grid_intersections = raster_data.grid_intersections.items[path_record.intersection_offsets.start..path_record.intersection_offsets.end];
+            // std.debug.assert(grid_intersections.len > 0);
 
-            var previous_grid_intersection: *GridIntersection = &grid_intersections[0];
-            for (grid_intersections[1..]) |*grid_intersection| {
-                if (previous_grid_intersection.getT() == grid_intersection.getT()) {
-                    if (previous_grid_intersection.grid_line == .x) {
-                        grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
-                    } else if (previous_grid_intersection.grid_line == .y) {
-                        grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
-                    }
+            // for (grid_intersections, 0..) |*grid_intersection, index| {
+            //     const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
+            // }
 
-                    if (grid_intersection.grid_line == .x) {
-                        previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
-                    } else if (grid_intersection.grid_line == .y) {
-                        previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
-                    }
+            // var previous_grid_intersection: *GridIntersection = &grid_intersections[0];
+            // for (grid_intersections[1..]) |*grid_intersection| {
+            //     if (previous_grid_intersection.getT() == grid_intersection.getT()) {
+            //         if (previous_grid_intersection.grid_line == .x) {
+            //             grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
+            //         } else if (previous_grid_intersection.grid_line == .y) {
+            //             grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
+            //         }
 
-                    continue;
-                }
+            //         if (grid_intersection.grid_line == .x) {
+            //             previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
+            //         } else if (grid_intersection.grid_line == .y) {
+            //             previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
+            //         }
 
-                if (std.meta.eql(previous_grid_intersection.getPoint(), grid_intersection.getPoint())) {
-                    // skip if exactly the same point
-                    previous_grid_intersection = grid_intersection;
-                    continue;
-                }
+            //         continue;
+            //     }
 
-                {
-                    const ao = try raster_data.addBoundaryFragment();
-                    ao.* = BoundaryFragment.create([_]*const GridIntersection{ previous_grid_intersection, grid_intersection });
-                    std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
-                }
+            //     if (std.meta.eql(previous_grid_intersection.getPoint(), grid_intersection.getPoint())) {
+            //         // skip if exactly the same point
+            //         previous_grid_intersection = grid_intersection;
+            //         continue;
+            //     }
 
-                previous_grid_intersection = grid_intersection;
-            }
+            //     {
+            //         const ao = try raster_data.addBoundaryFragment();
+            //         ao.* = BoundaryFragment.create([_]*const GridIntersection{ previous_grid_intersection, grid_intersection });
+            //         std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
+            //     }
 
-            raster_data.closePathRecordBoundaries(path_record);
+            //     previous_grid_intersection = grid_intersection;
+            // }
 
-            const boundary_fragments = raster_data.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
-            // sort all curve fragments of all the subpaths by y ascending, x ascending
-            std.mem.sort(
-                BoundaryFragment,
-                boundary_fragments,
-                @as(u32, 0),
-                boundaryFragmentLessThan,
-            );
-        }
-
-        fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
-            if (left.pixel.y < right.pixel.y) {
-                return true;
-            } else if (left.pixel.y > right.pixel.y) {
-                return false;
-            } else if (left.pixel.x < right.pixel.x) {
-                return true;
-            } else if (left.pixel.x > right.pixel.x) {
-                return false;
-            } else {
-                return false;
-            }
+            // raster_data.closePathRecordBoundaries(path_record);
         }
 
         // pub fn populateBoundaryFragments(self: @This(), raster_data: *RasterData) !void {
