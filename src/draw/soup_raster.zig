@@ -378,9 +378,9 @@ pub fn SoupRasterizer(comptime T: type) type {
 
             raster_data.openSubpathRecordIntersections(subpath_record);
 
-            const start_intersection_index = raster_data.grid_intersections.items.len;
             const soup_items = raster_data.soup.getItems()[soup_subpath_record.item_offsets.start..soup_subpath_record.item_offsets.end];
             for (soup_items) |item| {
+                const start_intersection_index = raster_data.grid_intersections.items.len;
                 const start_point: PointF32 = item.applyT(0.0);
                 const end_point: PointF32 = item.applyT(1.0);
                 const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
@@ -418,31 +418,25 @@ pub fn SoupRasterizer(comptime T: type) type {
                     .t = 1.0,
                     .point = end_point,
                 }).fitToGrid());
+
+                const end_intersection_index = raster_data.grid_intersections.items.len;
+                const grid_intersections = raster_data.grid_intersections.items[start_intersection_index..end_intersection_index];
+
+                // need to sort by T for each curve, in order
+                std.mem.sort(
+                    GridIntersection,
+                    grid_intersections,
+                    @as(u32, 0),
+                    gridIntersectionLessThan,
+                );
             }
-
-            const end_intersection_index = raster_data.grid_intersections.items.len;
-            const grid_intersections = raster_data.grid_intersections.items[start_intersection_index..end_intersection_index];
-
-            // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
-            std.mem.sort(
-                GridIntersection,
-                grid_intersections,
-                @as(u32, 0),
-                gridIntersectionLessThan,
-            );
 
             raster_data.closeSubpathRecordIntersections(subpath_record);
         }
 
         fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
-            if (left.intersection.point.y < right.intersection.point.y) {
+            if (left.intersection.t < right.intersection.t) {
                 return true;
-            } else if (left.intersection.point.y > right.intersection.point.y) {
-                return false;
-            } else if (left.intersection.point.x < right.intersection.point.x) {
-                return true;
-            } else if (left.intersection.point.x > right.intersection.point.x) {
-                return false;
             }
 
             return false;
