@@ -45,19 +45,19 @@ pub const SoupPen = struct {
         defer raster_data.deinit();
 
         for (metadatas) |metadata| {
-            const blend = self.style.blend orelse DEFAULT_BLEND;
+            const blend = DEFAULT_BLEND;
             const path_records = raster_data.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
 
             for (path_records, 0..) |path_record, path_record_index| {
                 const soup_path_record = line_soup.path_records.items[path_record_index];
                 const color = soup_path_record.fill.color;
-                const boundary_fragments = raster_data.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
+                const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
                 const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
 
-                for (boundary_fragments) |boundary_fragment| {
-                    const pixel = boundary_fragment.pixel;
+                for (merge_fragments) |merge_fragment| {
+                    const pixel = merge_fragment.pixel;
                     if (pixel.x >= 0 and pixel.y >= 0) {
-                        const intensity = boundary_fragment.getIntensity();
+                        const intensity = merge_fragment.getIntensity();
                         const texture_pixel = PointU32{
                             .x = @intCast(pixel.x),
                             .y = @intCast(pixel.y),

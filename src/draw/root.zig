@@ -8,6 +8,7 @@ const scene = @import("./scene.zig");
 const raster = @import("./raster.zig");
 const soup = @import("./soup.zig");
 const soup_raster = @import("./soup_raster.zig");
+const soup_pen = @import("./soup_pen.zig");
 const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const pen = @import("./pen.zig");
@@ -24,6 +25,8 @@ pub const Rasterizer = raster.Rasterizer;
 
 pub const LineSoup = soup.LineSoup;
 pub const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
+
+pub const SoupPen = soup_pen.SoupPen;
 
 pub const Color = texture.Color;
 pub const Texture = texture.Texture;

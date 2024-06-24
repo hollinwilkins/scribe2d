@@ -36,21 +36,21 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
-    // const draw_glyph_exe = b.addExecutable(.{
-    //     .name = "draw_glyph",
-    //     .root_source_file = b.path("src/tools/draw_glyph.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // draw_glyph_exe.root_module.addImport("scriobh", &lib.root_module);
-    // b.installArtifact(draw_glyph_exe);
-    // const run_draw_glyph = b.addRunArtifact(draw_glyph_exe);
-    // run_draw_glyph.step.dependOn(b.getInstallStep());
-    // if (b.args) |args| {
-    //     run_draw_glyph.addArgs(args);
-    // }
-    // const run_draw_glyph_step = b.step("draw_glyph", "Run the draw_glyph tool");
-    // run_draw_glyph_step.dependOn(&run_draw_glyph.step);
+    const draw_glyph_exe = b.addExecutable(.{
+        .name = "draw_glyph",
+        .root_source_file = b.path("src/tools/draw_glyph.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    draw_glyph_exe.root_module.addImport("scriobh", &lib.root_module);
+    b.installArtifact(draw_glyph_exe);
+    const run_draw_glyph = b.addRunArtifact(draw_glyph_exe);
+    run_draw_glyph.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_draw_glyph.addArgs(args);
+    }
+    const run_draw_glyph_step = b.step("draw_glyph", "Run the draw_glyph tool");
+    run_draw_glyph_step.dependOn(&run_draw_glyph.step);
 
     const flattener_exe = b.addExecutable(.{
         .name = "flattener",
@@ -90,8 +90,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     })) |dep| {
-        // draw_glyph_exe.root_module.addImport("zstbi", dep.module("root"));
-        // draw_glyph_exe.linkLibrary(dep.artifact("zstbi"));
+        draw_glyph_exe.root_module.addImport("zstbi", dep.module("root"));
+        draw_glyph_exe.linkLibrary(dep.artifact("zstbi"));
         exe_unit_tests.root_module.addImport("zstbi", dep.module("root"));
         exe_unit_tests.linkLibrary(dep.artifact("zstbi"));
     }

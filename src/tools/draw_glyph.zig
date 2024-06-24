@@ -29,9 +29,9 @@ pub fn main() !void {
         std.debug.print("Table: {s}\n", .{table.tag.toBytes()});
     }
 
-    var paths = draw.Paths.init(allocator);
-    defer paths.deinit();
-    var builder = draw.PathBuilder.create(&paths);
+    var glyph_paths = draw.Paths.init(allocator);
+    defer glyph_paths.deinit();
+    var builder = draw.PathBuilder.create(&glyph_paths);
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
@@ -41,12 +41,12 @@ pub fn main() !void {
     std.debug.print("\n", .{});
     std.debug.print("Curves:\n", .{});
     std.debug.print("-----------------------------\n", .{});
-    const path = paths.getPathRecords()[0];
-    const subpath_records = paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
+    const path = glyph_paths.getPathRecords()[0];
+    const subpath_records = glyph_paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
     for (subpath_records, 0..) |subpath_record, subpath_index| {
-        const curve_records = paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+        const curve_records = glyph_paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
         for (curve_records, 0..) |curve_record, curve_index| {
-            const curve = paths.getCurve(curve_record);
+            const curve = glyph_paths.getCurve(curve_record);
             std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
         }
     }
@@ -57,8 +57,10 @@ pub fn main() !void {
         .height = size,
     };
 
-    var rasterizer = try draw.Rasterizer.init(allocator);
-    defer rasterizer.deinit();
+    var half_planes = try draw.HalfPlanesU16.init(allocator);
+    defer half_planes.deinit();
+
+    const rasterizer = draw.LineSoupRasterizer.create(&half_planes);
 
     // std.debug.print("\n", .{});
     // std.debug.print("Grid Intersections:\n", .{});
@@ -143,14 +145,32 @@ pub fn main() !void {
         .a = 1.0,
     });
 
-    var pen = draw.Pen.create(&rasterizer);
-    pen.setFill(draw.Color{
-        .r = 0.0,
-        .g = 0.0,
-        .b = 0.0,
-        .a = 1.0,
-    });
-    try pen.draw(paths, 0, &texture);
+    var scene = try draw.Scene.init(allocator);
+    defer scene.deinit();
+
+    const style = try scene.pushStyle();
+    style.fill = draw.Style.Fill{
+        .color = draw.Color{
+            .r = 1.0,
+            .g = 0.0,
+            .b = 0.0,
+            .a = 1.0,
+        },
+    };
+    try scene.paths.copyPath(glyph_paths, 0);
+    try scene.close();
+
+    var flat_data = try draw.PathFlattener.flattenAlloc(
+        allocator,
+        scene.getMetadatas(),
+        scene.paths,
+        scene.getStyles(),
+        scene.getTransforms(),
+    );
+    defer flat_data.deinit();
+
+    var pen = draw.SoupPen.init(allocator, &rasterizer);
+    try pen.draw(flat_data.fill_lines, scene.metadata.items, &texture);
 
     for (0..texture.dimensions.height) |y| {
         std.debug.print("{:0>4}: ", .{y});
