@@ -26,12 +26,12 @@ const Soup = soup_module.Soup;
 
 const PathRecord = struct {
     subpath_offsets: RangeU32 = RangeU32{},
+    boundary_offsets: RangeU32 = RangeU32{},
     merge_offsets: RangeU32 = RangeU32{},
 };
 
 const SubpathRecord = struct {
     intersection_offsets: RangeU32 = RangeU32{},
-    boundary_offsets: RangeU32 = RangeU32{},
 };
 
 pub const Masks = struct {
@@ -276,6 +276,10 @@ pub fn RasterData(comptime T: type) type {
             path_record.subpath_offsets.start = @intCast(self.subpath_records.items.len);
         }
 
+        pub fn openPathRecordBoundaries(self: *@This(), path_record: *PathRecord) void {
+            path_record.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
+        }
+
         pub fn openPathRecordMerges(self: *@This(), path_record: *PathRecord) void {
             path_record.merge_offsets.start = @intCast(self.merge_fragments.items.len);
         }
@@ -284,20 +288,16 @@ pub fn RasterData(comptime T: type) type {
             path_record.subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
 
+        pub fn closePathRecordBoundaries(self: *@This(), path_record: *PathRecord) void {
+            path_record.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
+        }
+
         pub fn closePathRecordMerges(self: *@This(), path_record: *PathRecord) void {
             path_record.merge_offsets.end = @intCast(self.merge_fragments.items.len);
         }
 
         pub fn openSubpathRecordIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
             subpath_record.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
-        }
-
-        pub fn openSubpathRecordBoundaries(self: *@This(), subpath_record: *SubpathRecord) void {
-            subpath_record.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
-        }
-
-        pub fn closeSubpathRecordBoundaries(self: *@This(), subpath_record: *SubpathRecord) void {
-            subpath_record.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
         }
 
         pub fn closeSubpathRecordIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
@@ -351,14 +351,21 @@ pub fn SoupRasterizer(comptime T: type) type {
                         subpath_record,
                         soup_subpath_record,
                     );
-
-                    try self.populateBoundaryFragments(
-                        &raster_data,
-                        subpath_record,
-                    );
                 }
 
                 raster_data.closePathRecordSubpaths(path_record);
+
+                try self.populateBoundaryFragments(
+                    &raster_data,
+                    path_record,
+                );
+
+                try self.populateMergeFragments(
+                    &raster_data,
+                    path_record,
+                );
+
+                raster_data.closePathRecordMerges(path_record);
             }
 
             // try self.populateBoundaryFragments(&raster_data);
@@ -442,31 +449,33 @@ pub fn SoupRasterizer(comptime T: type) type {
             return false;
         }
 
-        pub fn populateBoundaryFragments(self: @This(), raster_data: *RD, subpath_record: *SubpathRecord) !void {
+        pub fn populateBoundaryFragments(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
             _ = self;
 
-            raster_data.openSubpathRecordBoundaries(subpath_record);
+            raster_data.openPathRecordBoundaries(path_record);
 
-            const grid_intersections = raster_data.grid_intersections.items[subpath_record.intersection_offsets.start..subpath_record.intersection_offsets.end];
-            std.debug.assert(grid_intersections.len > 0);
+            const subpath_records = raster_data.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+            for (subpath_records) |subpath_record| {
+                const grid_intersections = raster_data.grid_intersections.items[subpath_record.intersection_offsets.start..subpath_record.intersection_offsets.end];
+                std.debug.assert(grid_intersections.len > 0);
 
-            for (grid_intersections, 0..) |*grid_intersection, index| {
-                const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
+                for (grid_intersections, 0..) |*grid_intersection, index| {
+                    const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
 
-                if (std.meta.eql(grid_intersection.intersection.point, next_grid_intersection.intersection.point)) {
-                    // skip if exactly the same point
-                    continue;
-                }
+                    if (std.meta.eql(grid_intersection.intersection.point, next_grid_intersection.intersection.point)) {
+                        // skip if exactly the same point
+                        continue;
+                    }
 
-                {
-                    const ao = try raster_data.addBoundaryFragment();
-                    ao.* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, next_grid_intersection });
+                    {
+                        const ao = try raster_data.addBoundaryFragment();
+                        ao.* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, next_grid_intersection });
+                    }
                 }
             }
 
-            raster_data.closeSubpathRecordBoundaries(subpath_record);
-
-            const boundary_fragments = raster_data.boundary_fragments.items[subpath_record.boundary_offsets.start..subpath_record.boundary_offsets.end];
+            raster_data.closePathRecordBoundaries(path_record);
+            const boundary_fragments = raster_data.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
             // sort all curve fragments of all the subpaths by y ascending, x ascending
             std.mem.sort(
                 BoundaryFragment,
@@ -490,9 +499,10 @@ pub fn SoupRasterizer(comptime T: type) type {
             return false;
         }
 
-        pub fn populateMergeFragments(self: @This(), raster_data: *RasterData) !void {
+        pub fn populateMergeFragments(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
             _ = self;
             _ = raster_data;
+            _ = path_record;
             //     {
             //         const first_curve_fragment = &raster_data.getCurveFragments()[0];
             //         var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
