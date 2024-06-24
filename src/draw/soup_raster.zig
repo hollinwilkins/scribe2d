@@ -25,9 +25,13 @@ const HalfPlanesU16 = msaa.HalfPlanesU16;
 const Soup = soup_module.Soup;
 
 const PathRecord = struct {
+    subpath_offsets: RangeU32 = RangeU32{},
+    merge_offsets: RangeU32 = RangeU32{},
+};
+
+const SubpathRecord = struct {
     intersection_offsets: RangeU32 = RangeU32{},
     boundary_offsets: RangeU32 = RangeU32{},
-    merge_offsets: RangeU32 = RangeU32{},
 };
 
 pub const Masks = struct {
@@ -225,6 +229,7 @@ pub fn RasterData(comptime T: type) type {
 
     return struct {
         const PathRecordList = std.ArrayListUnmanaged(PathRecord);
+        const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
         const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
         const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
         const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
@@ -233,6 +238,7 @@ pub fn RasterData(comptime T: type) type {
         allocator: Allocator,
         soup: *const S,
         path_records: PathRecordList = PathRecordList{},
+        subpath_records: SubpathRecordList = SubpathRecordList{},
         grid_intersections: GridIntersectionList = GridIntersectionList{},
         boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
         merge_fragments: MergeFragmentList = MergeFragmentList{},
@@ -247,34 +253,11 @@ pub fn RasterData(comptime T: type) type {
 
         pub fn deinit(self: *@This()) void {
             self.path_records.deinit(self.allocator);
+            self.subpath_records.deinit(self.allocator);
             self.grid_intersections.deinit(self.allocator);
             self.boundary_fragments.deinit(self.allocator);
             self.merge_fragments.deinit(self.allocator);
             self.spans.deinit(self.allocator);
-        }
-
-        pub fn getPathRecords(self: @This()) []const PathRecord {
-            return self.path_records.items;
-        }
-
-        pub fn getGridIntersections(self: @This()) []const GridIntersection {
-            return self.grid_intersections.items;
-        }
-
-        pub fn getBoundaryFragments(self: @This()) []const BoundaryFragment {
-            return self.boundary_fragments.items;
-        }
-
-        pub fn getMergeFragments(self: @This()) []const MergeFragment {
-            return self.merge_fragments.items;
-        }
-
-        pub fn getSpans(self: @This()) []Span {
-            return self.spans.items;
-        }
-
-        pub fn getPathRecordUnsafe(self: *@This(), index: u32) *PathRecord {
-            return self.path_records.items[index];
         }
 
         pub fn addPathRecord(self: *@This()) !*PathRecord {
@@ -283,28 +266,42 @@ pub fn RasterData(comptime T: type) type {
             return path_record;
         }
 
-        pub fn openPathRecordIntersections(self: *@This(), path_record: *PathRecord) void {
-            path_record.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
+        pub fn addSubpathRecord(self: *@This()) !*SubpathRecord {
+            const subpath_record = try self.subpath_records.addOne(self.allocator);
+            subpath_record.* = SubpathRecord{};
+            return subpath_record;
         }
 
-        pub fn openPathRecordBoundaries(self: *@This(), path_record: *PathRecord) void {
-            path_record.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
+        pub fn openPathRecordSubpaths(self: *@This(), path_record: *PathRecord) void {
+            path_record.subpath_offsets.start = @intCast(self.subpath_records.items.len);
         }
 
         pub fn openPathRecordMerges(self: *@This(), path_record: *PathRecord) void {
             path_record.merge_offsets.start = @intCast(self.merge_fragments.items.len);
         }
 
-        pub fn closePathRecordIntersections(self: *@This(), path_record: *PathRecord) void {
-            path_record.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
-        }
-
-        pub fn closePathRecordBoundaries(self: *@This(), path_record: *PathRecord) void {
-            path_record.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
+        pub fn closePathRecordSubpaths(self: *@This(), path_record: *PathRecord) void {
+            path_record.subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
 
         pub fn closePathRecordMerges(self: *@This(), path_record: *PathRecord) void {
             path_record.merge_offsets.end = @intCast(self.merge_fragments.items.len);
+        }
+
+        pub fn openSubpathRecordIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
+            subpath_record.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
+        }
+
+        pub fn openSubpathRecordBoundaries(self: *@This(), subpath_record: *SubpathRecord) void {
+            subpath_record.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
+        }
+
+        pub fn closeSubpathRecordBoundaries(self: *@This(), subpath_record: *SubpathRecord) void {
+            subpath_record.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
+        }
+
+        pub fn closeSubpathRecordIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
+            subpath_record.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
         }
 
         pub fn addGridIntersection(self: *@This()) !*GridIntersection {
@@ -342,10 +339,26 @@ pub fn SoupRasterizer(comptime T: type) type {
             var raster_data = RD.init(allocator, &soup);
             errdefer raster_data.deinit();
 
-            for (raster_data.soup.getPathRecords()) |soup_path_record| {
+            for (raster_data.soup.path_records.items) |soup_path_record| {
                 const path_record = try raster_data.addPathRecord();
-                try self.populateGridIntersections(&raster_data, path_record, soup_path_record);
-                try self.populateBoundaryFragments(&raster_data, path_record);
+                raster_data.openPathRecordSubpaths(path_record);
+
+                const soup_subpath_records = raster_data.soup.subpath_records.items[soup_path_record.subpath_offsets.start..soup_path_record.subpath_offsets.end];
+                for (soup_subpath_records) |soup_subpath_record| {
+                    const subpath_record = try raster_data.addSubpathRecord();
+                    try self.populateGridIntersections(
+                        &raster_data,
+                        subpath_record,
+                        soup_subpath_record,
+                    );
+
+                    try self.populateBoundaryFragments(
+                        &raster_data,
+                        subpath_record,
+                    );
+                }
+
+                raster_data.closePathRecordSubpaths(path_record);
             }
 
             // try self.populateBoundaryFragments(&raster_data);
@@ -355,69 +368,70 @@ pub fn SoupRasterizer(comptime T: type) type {
             return raster_data;
         }
 
-        pub fn populateGridIntersections(self: @This(), raster_data: *RD, path_record: *PathRecord, soup_path_record: S.PathRecord) !void {
+        pub fn populateGridIntersections(
+            self: @This(),
+            raster_data: *RD,
+            subpath_record: *SubpathRecord,
+            soup_subpath_record: S.SubpathRecord,
+        ) !void {
             _ = self;
 
-            raster_data.openPathRecordIntersections(path_record);
+            raster_data.openSubpathRecordIntersections(subpath_record);
 
-            const soup_subpath_records = raster_data.soup.getSubpathRecords()[soup_path_record.subpath_offsets.start..soup_path_record.subpath_offsets.end];
-            for (soup_subpath_records) |soup_subpath_record| {
-                const soup_items = raster_data.soup.getItems()[soup_subpath_record.item_offsets.start..soup_subpath_record.item_offsets.end];
-                for (soup_items) |item| {
-                    const start_intersection_index = raster_data.grid_intersections.items.len;
+            const start_intersection_index = raster_data.grid_intersections.items.len;
+            const soup_items = raster_data.soup.getItems()[soup_subpath_record.item_offsets.start..soup_subpath_record.item_offsets.end];
+            for (soup_items) |item| {
+                const start_point: PointF32 = item.applyT(0.0);
+                const end_point: PointF32 = item.applyT(1.0);
+                const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+                const bounds: RectI32 = RectI32.create(PointI32{
+                    .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+                    .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+                }, PointI32{
+                    .x = @intFromFloat(@floor(bounds_f32.max.x)),
+                    .y = @intFromFloat(@floor(bounds_f32.max.y)),
+                });
+                const scan_bounds = RectF32.create(PointF32{
+                    .x = @floatFromInt(bounds.min.x - 1),
+                    .y = @floatFromInt(bounds.min.y - 1),
+                }, PointF32{
+                    .x = @floatFromInt(bounds.max.x + 1),
+                    .y = @floatFromInt(bounds.max.y + 1),
+                });
 
-                    const start_point: PointF32 = item.applyT(0.0);
-                    const end_point: PointF32 = item.applyT(1.0);
-                    const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
-                    const bounds: RectI32 = RectI32.create(PointI32{
-                        .x = @intFromFloat(@ceil(bounds_f32.min.x)),
-                        .y = @intFromFloat(@ceil(bounds_f32.min.y)),
-                    }, PointI32{
-                        .x = @intFromFloat(@floor(bounds_f32.max.x)),
-                        .y = @intFromFloat(@floor(bounds_f32.max.y)),
-                    });
-                    const scan_bounds = RectF32.create(PointF32{
-                        .x = @floatFromInt(bounds.min.x - 1),
-                        .y = @floatFromInt(bounds.min.y - 1),
-                    }, PointF32{
-                        .x = @floatFromInt(bounds.max.x + 1),
-                        .y = @floatFromInt(bounds.max.y + 1),
-                    });
+                (try raster_data.addGridIntersection()).* = GridIntersection.create((Intersection{
+                    .t = 0.0,
+                    .point = start_point,
+                }).fitToGrid());
 
-                    (try raster_data.addGridIntersection()).* = GridIntersection.create((Intersection{
-                        .t = 0.0,
-                        .point = start_point,
-                    }).fitToGrid());
-
-                    for (0..@as(usize, @intCast(bounds.getWidth()))) |x_offset| {
-                        const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
-                        try scanX(raster_data, grid_x, item, scan_bounds);
-                    }
-
-                    for (0..@as(usize, @intCast(bounds.getHeight()))) |y_offset| {
-                        const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
-                        try scanY(raster_data, grid_y, item, scan_bounds);
-                    }
-
-                    (try raster_data.addGridIntersection()).* = GridIntersection.create((Intersection{
-                        .t = 1.0,
-                        .point = end_point,
-                    }).fitToGrid());
-
-                    const end_intersection_index = raster_data.grid_intersections.items.len;
-                    const grid_intersections = raster_data.grid_intersections.items[start_intersection_index..end_intersection_index];
-
-                    // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
-                    std.mem.sort(
-                        GridIntersection,
-                        grid_intersections,
-                        @as(u32, 0),
-                        gridIntersectionLessThan,
-                    );
+                for (0..@as(usize, @intCast(bounds.getWidth()))) |x_offset| {
+                    const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
+                    try scanX(raster_data, grid_x, item, scan_bounds);
                 }
+
+                for (0..@as(usize, @intCast(bounds.getHeight()))) |y_offset| {
+                    const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
+                    try scanY(raster_data, grid_y, item, scan_bounds);
+                }
+
+                (try raster_data.addGridIntersection()).* = GridIntersection.create((Intersection{
+                    .t = 1.0,
+                    .point = end_point,
+                }).fitToGrid());
             }
 
-            raster_data.closePathRecordIntersections(path_record);
+            const end_intersection_index = raster_data.grid_intersections.items.len;
+            const grid_intersections = raster_data.grid_intersections.items[start_intersection_index..end_intersection_index];
+
+            // need to sort by T unfortunately, maybe we can fix this to generate in order in the future
+            std.mem.sort(
+                GridIntersection,
+                grid_intersections,
+                @as(u32, 0),
+                gridIntersectionLessThan,
+            );
+
+            raster_data.closeSubpathRecordIntersections(subpath_record);
         }
 
         fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
@@ -434,12 +448,12 @@ pub fn SoupRasterizer(comptime T: type) type {
             return false;
         }
 
-        pub fn populateBoundaryFragments(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
+        pub fn populateBoundaryFragments(self: @This(), raster_data: *RD, subpath_record: *SubpathRecord) !void {
             _ = self;
 
-            raster_data.openPathRecordBoundaries(path_record);
+            raster_data.openSubpathRecordBoundaries(subpath_record);
 
-            const grid_intersections = raster_data.grid_intersections.items[path_record.intersection_offsets.start..path_record.intersection_offsets.end];
+            const grid_intersections = raster_data.grid_intersections.items[subpath_record.intersection_offsets.start..subpath_record.intersection_offsets.end];
             std.debug.assert(grid_intersections.len > 0);
 
             for (grid_intersections, 0..) |*grid_intersection, index| {
@@ -456,7 +470,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                 }
             }
 
-            raster_data.closePathRecordBoundaries(path_record);
+            raster_data.closeSubpathRecordBoundaries(subpath_record);
         }
 
         // pub fn populateBoundaryFragments(self: @This(), raster_data: *RasterData) !void {
