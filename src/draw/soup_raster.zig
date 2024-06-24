@@ -60,7 +60,7 @@ pub const BoundaryFragment = struct {
     intersections: [2]Intersection,
 
     pub fn create(grid_intersections: [2]*const GridIntersection) @This() {
-        const pixel = grid_intersections[0].getPixel().min(grid_intersections[1].getPixel());
+        const pixel = grid_intersections[0].pixel.min(grid_intersections[1].pixel);
 
         // can move diagonally, but cannot move by more than 1 pixel in both directions
         std.debug.assert(@abs(pixel.sub(grid_intersections[0].pixel).x) <= 1);
@@ -71,20 +71,20 @@ pub const BoundaryFragment = struct {
         const intersections: [2]Intersection = [2]Intersection{
             Intersection{
                 // retain t
-                .t = grid_intersections[0].getT(),
+                .t = grid_intersections[0].intersection.t,
                 // float component of the intersection points, range [0.0, 1.0]
                 .point = PointF32{
-                    .x = std.math.clamp(@abs(grid_intersections[0].getPoint().x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
-                    .y = std.math.clamp(@abs(grid_intersections[0].getPoint().y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
+                    .x = std.math.clamp(@abs(grid_intersections[0].intersection.point.x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[0].intersection.point.y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
                 },
             },
             Intersection{
                 // retain t
-                .t = grid_intersections[1].getT(),
+                .t = grid_intersections[1].intersection.t,
                 // float component of the intersection points, range [0.0, 1.0]
                 .point = PointF32{
-                    .x = std.math.clamp(@abs(grid_intersections[1].getPoint().x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
-                    .y = std.math.clamp(@abs(grid_intersections[1].getPoint().y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
+                    .x = std.math.clamp(@abs(grid_intersections[1].intersection.point.x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[1].intersection.point.y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
                 },
             },
         };
@@ -434,78 +434,29 @@ pub fn SoupRasterizer(comptime T: type) type {
             return false;
         }
 
-        // fn scanY(raster_data: *RD, item: T, scan_bounds: RectF32, y1: f32, y2: f32) !void {
-        //     const start_y: i32 = @intFromFloat(@ceil(@min(y1, y2)));
-        //     const end_y: i32 = @intFromFloat(@floor(@max(y1, y2)));
-
-        //     if (end_y <= start_y) {
-        //         return;
-        //     }
-
-        //     const y_size: usize = @intCast(end_y - start_y);
-
-        //     for (0..y_size) |y_offset| {
-        //         const grid_y: f32 = @floatFromInt(start_y + @as(i32, @intCast(y_offset)));
-
-        //         const horizontal_intersection: Intersection = item.intersectHorizontalLine(Line.create(PointF32{
-        //             .x = scan_bounds.min.x,
-        //             .y = grid_y,
-        //         }, PointF32{
-        //             .x = scan_bounds.max.x,
-        //             .y = grid_y,
-        //         })).?.fitToGrid();
-        //         (try raster_data.addGridIntersection()).* = GridIntersection.create(horizontal_intersection);
-        //     }
-        // }
-
         pub fn populateBoundaryFragments(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
             _ = self;
-            _ = raster_data;
-            _ = path_record;
 
-            // raster_data.openPathRecordBoundaries(path_record);
+            raster_data.openPathRecordBoundaries(path_record);
 
-            // const grid_intersections = raster_data.grid_intersections.items[path_record.intersection_offsets.start..path_record.intersection_offsets.end];
-            // std.debug.assert(grid_intersections.len > 0);
+            const grid_intersections = raster_data.grid_intersections.items[path_record.intersection_offsets.start..path_record.intersection_offsets.end];
+            std.debug.assert(grid_intersections.len > 0);
 
-            // for (grid_intersections, 0..) |*grid_intersection, index| {
-            //     const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
-            // }
+            for (grid_intersections, 0..) |*grid_intersection, index| {
+                const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
 
-            // var previous_grid_intersection: *GridIntersection = &grid_intersections[0];
-            // for (grid_intersections[1..]) |*grid_intersection| {
-            //     if (previous_grid_intersection.getT() == grid_intersection.getT()) {
-            //         if (previous_grid_intersection.grid_line == .x) {
-            //             grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
-            //         } else if (previous_grid_intersection.grid_line == .y) {
-            //             grid_intersection.intersection.point.x = previous_grid_intersection.intersection.point.x;
-            //         }
+                if (std.meta.eql(grid_intersection.intersection.point, next_grid_intersection.intersection.point)) {
+                    // skip if exactly the same point
+                    continue;
+                }
 
-            //         if (grid_intersection.grid_line == .x) {
-            //             previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
-            //         } else if (grid_intersection.grid_line == .y) {
-            //             previous_grid_intersection.intersection.point.x = grid_intersection.intersection.point.x;
-            //         }
+                {
+                    const ao = try raster_data.addBoundaryFragment();
+                    ao.* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, next_grid_intersection });
+                }
+            }
 
-            //         continue;
-            //     }
-
-            //     if (std.meta.eql(previous_grid_intersection.getPoint(), grid_intersection.getPoint())) {
-            //         // skip if exactly the same point
-            //         previous_grid_intersection = grid_intersection;
-            //         continue;
-            //     }
-
-            //     {
-            //         const ao = try raster_data.addBoundaryFragment();
-            //         ao.* = BoundaryFragment.create([_]*const GridIntersection{ previous_grid_intersection, grid_intersection });
-            //         std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
-            //     }
-
-            //     previous_grid_intersection = grid_intersection;
-            // }
-
-            // raster_data.closePathRecordBoundaries(path_record);
+            raster_data.closePathRecordBoundaries(path_record);
         }
 
         // pub fn populateBoundaryFragments(self: @This(), raster_data: *RasterData) !void {
