@@ -28,8 +28,24 @@ pub fn main() !void {
     var glyph_paths = draw.Paths.init(allocator);
     defer glyph_paths.deinit();
     var builder = draw.PathBuilder.create(&glyph_paths);
+    _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     const bounds = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
     _ = bounds;
+
+    for (glyph_paths.path_records.items, 0..) |path_record, path_index| {
+        std.debug.print("=========== Path({}) =========\n", .{path_index});
+        const subpath_records = glyph_paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+        for (subpath_records, 0..) |subpath_record, subpath_index| {
+            std.debug.print("=========== Subath({}) =========\n", .{subpath_index});
+            const curve_records = glyph_paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            for (curve_records, 0..) |curve_record, curve_record_index| {
+                const points = glyph_paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                std.debug.print("CurveRecord({}, {any})\n", .{curve_record_index, points});
+            }
+            std.debug.print("=========== End Subath({}) =========\n", .{subpath_index});
+        }
+        std.debug.print("=========== End Path({}) =========\n", .{path_index});
+    }
 
     var scene = try draw.Scene.init(allocator);
     defer scene.deinit();

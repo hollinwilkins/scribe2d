@@ -326,6 +326,7 @@ pub const Paths = struct {
                 cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
             },
             .quadratic_bezier => {
+                cubic_points.point2 = self.points.items[curve_record.point_offsets.start + 2];
                 cubic_points.point3 = cubic_points.point2;
                 cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
                 cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
