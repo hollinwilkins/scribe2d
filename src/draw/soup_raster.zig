@@ -465,78 +465,103 @@ pub fn SoupRasterizer(comptime T: type) type {
             }
 
             raster_data.closeSubpathRecordBoundaries(subpath_record);
+
+            const boundary_fragments = raster_data.boundary_fragments.items[subpath_record.boundary_offsets.start..subpath_record.boundary_offsets.end];
+            // sort all curve fragments of all the subpaths by y ascending, x ascending
+            std.mem.sort(
+                BoundaryFragment,
+                boundary_fragments,
+                @as(u32, 0),
+                boundaryFragmentLessThan,
+            );
         }
 
-        // pub fn populateBoundaryFragments(self: @This(), raster_data: *RasterData) !void {
-        //     {
-        //         const first_curve_fragment = &raster_data.getCurveFragments()[0];
-        //         var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
-        //         boundary_fragment.* = BoundaryFragment{
-        //             .pixel = first_curve_fragment.pixel,
-        //         };
-        //         var curve_fragment_offsets = RangeU32{};
-        //         var main_ray_winding: f32 = 0.0;
+        fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
+            if (left.pixel.y < right.pixel.y) {
+                return true;
+            } else if (left.pixel.y > right.pixel.y) {
+                return false;
+            } else if (left.pixel.x < right.pixel.x) {
+                return true;
+            } else if (left.pixel.x > right.pixel.x) {
+                return false;
+            }
 
-        //         const curve_fragments = raster_data.getCurveFragments();
-        //         for (curve_fragments, 0..) |*curve_fragment, curve_fragment_index| {
-        //             const y_changing = curve_fragment.pixel.y != boundary_fragment.pixel.y;
-        //             if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
-        //                 curve_fragment_offsets.end = @intCast(curve_fragment_index);
-        //                 boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
-        //                 boundary_fragment = try raster_data.addBoundaryFragment();
-        //                 curve_fragment_offsets.start = curve_fragment_offsets.end;
-        //                 boundary_fragment.* = BoundaryFragment{
-        //                     .pixel = curve_fragment.pixel,
-        //                 };
-        //                 std.debug.assert(boundary_fragment.pixel.x >= 0);
-        //                 std.debug.assert(boundary_fragment.pixel.y >= 0);
-        //                 boundary_fragment.main_ray_winding = main_ray_winding;
+            return false;
+        }
 
-        //                 if (y_changing) {
-        //                     main_ray_winding = 0.0;
-        //                 }
-        //             }
+        pub fn populateMergeFragments(self: @This(), raster_data: *RasterData) !void {
+            _ = self;
+            _ = raster_data;
+            //     {
+            //         const first_curve_fragment = &raster_data.getCurveFragments()[0];
+            //         var boundary_fragment: *BoundaryFragment = try raster_data.addBoundaryFragment();
+            //         boundary_fragment.* = BoundaryFragment{
+            //             .pixel = first_curve_fragment.pixel,
+            //         };
+            //         var curve_fragment_offsets = RangeU32{};
+            //         var main_ray_winding: f32 = 0.0;
 
-        //             main_ray_winding += curve_fragment.calculateMainRayWinding();
-        //         }
-        //     }
+            //         const curve_fragments = raster_data.getCurveFragments();
+            //         for (curve_fragments, 0..) |*curve_fragment, curve_fragment_index| {
+            //             const y_changing = curve_fragment.pixel.y != boundary_fragment.pixel.y;
+            //             if (curve_fragment.pixel.x != boundary_fragment.pixel.x or curve_fragment.pixel.y != boundary_fragment.pixel.y) {
+            //                 curve_fragment_offsets.end = @intCast(curve_fragment_index);
+            //                 boundary_fragment.curve_fragment_offsets = curve_fragment_offsets;
+            //                 boundary_fragment = try raster_data.addBoundaryFragment();
+            //                 curve_fragment_offsets.start = curve_fragment_offsets.end;
+            //                 boundary_fragment.* = BoundaryFragment{
+            //                     .pixel = curve_fragment.pixel,
+            //                 };
+            //                 std.debug.assert(boundary_fragment.pixel.x >= 0);
+            //                 std.debug.assert(boundary_fragment.pixel.y >= 0);
+            //                 boundary_fragment.main_ray_winding = main_ray_winding;
 
-        //     {
-        //         const boundary_fragments = raster_data.getBoundaryFragments();
-        //         for (boundary_fragments) |*boundary_fragment| {
-        //             const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
+            //                 if (y_changing) {
+            //                     main_ray_winding = 0.0;
+            //                 }
+            //             }
 
-        //             for (0..16) |index| {
-        //                 boundary_fragment.winding[index] += boundary_fragment.main_ray_winding;
-        //             }
+            //             main_ray_winding += curve_fragment.calculateMainRayWinding();
+            //         }
+            //     }
 
-        //             for (curve_fragments) |curve_fragment| {
-        //                 // if (curve_fragment.pixel.x == 193 and curve_fragment.pixel.y == 167) {
-        //                 //     std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
-        //                 // }
-        //                 const masks = curve_fragment.calculateMasks(self.half_planes);
-        //                 for (0..16) |index| {
-        //                     const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-        //                     const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
-        //                     const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
-        //                     const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
-        //                     boundary_fragment.winding[index] += vertical_winding0 + vertical_winding1 + horizontal_winding;
-        //                 }
-        //             }
+            //     {
+            //         const boundary_fragments = raster_data.getBoundaryFragments();
+            //         for (boundary_fragments) |*boundary_fragment| {
+            //             const curve_fragments = raster_data.getCurveFragments()[boundary_fragment.curve_fragment_offsets.start..boundary_fragment.curve_fragment_offsets.end];
 
-        //             for (0..16) |index| {
-        //                 const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-        //                 boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
-        //             }
+            //             for (0..16) |index| {
+            //                 boundary_fragment.winding[index] += boundary_fragment.main_ray_winding;
+            //             }
 
-        //             // std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
-        //             //     boundary_fragment.pixel.x,
-        //             //     boundary_fragment.pixel.y,
-        //             //     boundary_fragment.stencil_mask,
-        //             // });
-        //         }
-        //     }
-        // }
+            //             for (curve_fragments) |curve_fragment| {
+            //                 // if (curve_fragment.pixel.x == 193 and curve_fragment.pixel.y == 167) {
+            //                 //     std.debug.print("\nHEY MainRay({})\n", .{boundary_fragment.main_ray_winding});
+            //                 // }
+            //                 const masks = curve_fragment.calculateMasks(self.half_planes);
+            //                 for (0..16) |index| {
+            //                     const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+            //                     const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
+            //                     const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
+            //                     const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
+            //                     boundary_fragment.winding[index] += vertical_winding0 + vertical_winding1 + horizontal_winding;
+            //                 }
+            //             }
+
+            //             for (0..16) |index| {
+            //                 const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+            //                 boundary_fragment.stencil_mask = boundary_fragment.stencil_mask | (@as(u16, @intFromBool(boundary_fragment.winding[index] != 0.0)) * bit_index);
+            //             }
+
+            //             // std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
+            //             //     boundary_fragment.pixel.x,
+            //             //     boundary_fragment.pixel.y,
+            //             //     boundary_fragment.stencil_mask,
+            //             // });
+            //         }
+            //     }
+        }
 
         // pub fn populateSpans(self: @This(), raster_data: *RasterData) !void {
         //     _ = self;
