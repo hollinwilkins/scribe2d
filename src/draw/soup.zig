@@ -21,21 +21,20 @@ const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
 
-const PathRecord = struct {
-    fill: Style.Fill,
-    subpath_offsets: RangeU32,
-};
-
-const SubpathRecord = struct {
-    item_offsets: RangeU32,
-};
-
-const PathRecordList = std.ArrayListUnmanaged(PathRecord);
-const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
-
 pub fn Soup(comptime T: type) type {
     return struct {
-        const ItemList = std.ArrayListUnmanaged(T);
+        pub const PathRecord = struct {
+            fill: Style.Fill,
+            subpath_offsets: RangeU32,
+        };
+
+        pub const SubpathRecord = struct {
+            item_offsets: RangeU32,
+        };
+
+        pub const PathRecordList = std.ArrayListUnmanaged(PathRecord);
+        pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
+        pub const ItemList = std.ArrayListUnmanaged(T);
 
         allocator: Allocator,
         path_records: PathRecordList = PathRecordList{},
