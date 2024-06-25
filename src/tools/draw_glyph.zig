@@ -67,8 +67,22 @@ pub fn main() !void {
     try scene.paths.copyPath(glyph_paths, 0);
     try scene.close();
 
-    // var line_soup = try draw.LineSoupEstimator.estimateSceneAlloc(allocator, scene);
-    // defer line_soup.deinit();
+    var flat_data = try draw.PathFlattener.flattenAlloc(
+        allocator,
+        scene.getMetadatas(),
+        scene.paths,
+        scene.getStyles(),
+        scene.getTransforms(),
+    );
+    defer flat_data.deinit();
+
+    std.debug.print("\n", .{});
+    std.debug.print("Line Soup:\n", .{});
+    std.debug.print("-----------------------------\n", .{});
+    for (flat_data.fill_lines.items.items) |line| {
+        std.debug.print("{}\n", .{line});
+    }
+    std.debug.print("-----------------------------\n", .{});
 
     const dimensions = core.DimensionsU32{
         .width = size * 3,
@@ -104,15 +118,6 @@ pub fn main() !void {
         .b = 1.0,
         .a = 1.0,
     });
-
-    var flat_data = try draw.PathFlattener.flattenAlloc(
-        allocator,
-        scene.getMetadatas(),
-        scene.paths,
-        scene.getStyles(),
-        scene.getTransforms(),
-    );
-    defer flat_data.deinit();
 
     var pen = draw.SoupPen.init(allocator, &rasterizer);
     try pen.draw(flat_data.fill_lines, scene.metadata.items, &texture);
