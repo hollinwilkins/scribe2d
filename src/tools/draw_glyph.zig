@@ -67,75 +67,75 @@ pub fn main() !void {
     try scene.paths.copyPath(glyph_paths, 0);
     try scene.close();
 
-    var line_soup = try draw.LineSoupEstimator.estimateSceneAlloc(allocator, scene);
-    defer line_soup.deinit();
+    // var line_soup = try draw.LineSoupEstimator.estimateSceneAlloc(allocator, scene);
+    // defer line_soup.deinit();
 
-    // const dimensions = core.DimensionsU32{
-    //     .width = size * 3,
-    //     .height = size,
-    // };
+    const dimensions = core.DimensionsU32{
+        .width = size * 3,
+        .height = size,
+    };
 
-    // var half_planes = try draw.HalfPlanesU16.init(allocator);
-    // defer half_planes.deinit();
+    var half_planes = try draw.HalfPlanesU16.init(allocator);
+    defer half_planes.deinit();
 
-    // const rasterizer = draw.LineSoupRasterizer.create(&half_planes);
+    const rasterizer = draw.LineSoupRasterizer.create(&half_planes);
 
-    // zstbi.init(allocator);
-    // defer zstbi.deinit();
+    zstbi.init(allocator);
+    defer zstbi.deinit();
 
-    // var image = try zstbi.Image.createEmpty(
-    //     dimensions.width,
-    //     dimensions.height,
-    //     3,
-    //     .{},
-    // );
-    // defer image.deinit();
+    var image = try zstbi.Image.createEmpty(
+        dimensions.width,
+        dimensions.height,
+        3,
+        .{},
+    );
+    defer image.deinit();
 
-    // var texture = draw.TextureUnmanaged{
-    //     .dimensions = dimensions,
-    //     .format = draw.TextureFormat.SrgbU8,
-    //     .bytes = image.data,
-    // };
+    var texture = draw.TextureUnmanaged{
+        .dimensions = dimensions,
+        .format = draw.TextureFormat.SrgbU8,
+        .bytes = image.data,
+    };
 
-    // std.debug.print("\n============== Boundary Texture\n\n", .{});
-    // texture.clear(draw.Color{
-    //     .r = 1.0,
-    //     .g = 1.0,
-    //     .b = 1.0,
-    //     .a = 1.0,
-    // });
+    std.debug.print("\n============== Boundary Texture\n\n", .{});
+    texture.clear(draw.Color{
+        .r = 1.0,
+        .g = 1.0,
+        .b = 1.0,
+        .a = 1.0,
+    });
 
-    // var flat_data = try draw.PathFlattener.flattenAlloc(
-    //     allocator,
-    //     scene.getMetadatas(),
-    //     scene.paths,
-    //     scene.getStyles(),
-    //     scene.getTransforms(),
-    // );
-    // defer flat_data.deinit();
+    var flat_data = try draw.PathFlattener.flattenAlloc(
+        allocator,
+        scene.getMetadatas(),
+        scene.paths,
+        scene.getStyles(),
+        scene.getTransforms(),
+    );
+    defer flat_data.deinit();
 
-    // var pen = draw.SoupPen.init(allocator, &rasterizer);
-    // try pen.draw(flat_data.fill_lines, scene.metadata.items, &texture);
+    var pen = draw.SoupPen.init(allocator, &rasterizer);
+    try pen.draw(flat_data.fill_lines, scene.metadata.items, &texture);
 
-    // for (0..texture.dimensions.height) |y| {
-    //     std.debug.print("{:0>4}: ", .{y});
-    //     for (0..texture.dimensions.height) |x| {
-    //         const pixel = texture.getPixelUnsafe(core.PointU32{
-    //             .x = @intCast(x),
-    //             .y = @intCast(y),
-    //         });
+    for (0..texture.dimensions.height) |y| {
+        std.debug.print("{:0>4}: ", .{y});
+        for (0..texture.dimensions.height) |x| {
+            const pixel = texture.getPixelUnsafe(core.PointU32{
+                .x = @intCast(x),
+                .y = @intCast(y),
+            });
 
-    //         if (pixel.r < 1.0) {
-    //             std.debug.print("#", .{});
-    //         } else {
-    //             std.debug.print(";", .{});
-    //         }
-    //     }
+            if (pixel.r < 1.0) {
+                std.debug.print("#", .{});
+            } else {
+                std.debug.print(";", .{});
+            }
+        }
 
-    //     std.debug.print("\n", .{});
-    // }
+        std.debug.print("\n", .{});
+    }
 
-    // std.debug.print("==============\n", .{});
+    std.debug.print("==============\n", .{});
 
-    // try image.writeToFile("/tmp/output.png", .png);
+    try image.writeToFile("/tmp/output.png", .png);
 }

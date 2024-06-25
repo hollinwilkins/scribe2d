@@ -50,7 +50,7 @@ pub const SoupPen = struct {
 
             for (path_records, 0..) |path_record, path_record_index| {
                 const soup_path_record = line_soup.path_records.items[path_record_index];
-                const color = soup_path_record.fill.color;
+                const color = soup_path_record.fill.?.color;
                 const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
                 const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
 
