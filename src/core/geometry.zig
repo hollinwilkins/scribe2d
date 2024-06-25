@@ -256,6 +256,13 @@ pub fn Transform(comptime T: type) type {
                     .y = y,
                 };
             }
+
+            pub fn applyScale(self: @This(), point: P) P {
+                return PointF32{
+                    .x = self.coefficients[0] * point.x + self.coefficients[2] * point.y,
+                    .y = self.coefficients[1] * point.x + self.coefficients[3] * point.y,
+                };
+            }
         };
 
         const P = Point(T);

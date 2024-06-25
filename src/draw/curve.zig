@@ -153,11 +153,6 @@ pub const Line = struct {
         };
     }
 
-    pub fn estimateLineItems(_: PointF32, _: PointF32) u32 {
-        // a line will get flattened to a single line
-        return 1;
-    }
-
     pub fn translate(self: Line, point: PointF32) Line {
         return Line{
             .start = self.start.add(point),
