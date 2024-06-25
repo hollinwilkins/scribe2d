@@ -54,6 +54,10 @@ pub const Paths = struct {
         is_end: bool = false,
         is_open: bool = false,
         cap: Cap = .none,
+
+        pub fn isCapped(self: @This()) bool {
+            return self.cap != .none;
+        }
     };
 
     const PathRecordList = std.ArrayListUnmanaged(PathRecord);
@@ -267,6 +271,11 @@ pub const Paths = struct {
 
     fn addSubpathRecords(self: *@This(), n: usize) ![]SubpathRecord {
         return try self.subpath_records.addManyAsSlice(self.allocator, n);
+    }
+
+    pub fn isSubpathCapped(self: @This(), subpath_record: SubpathRecord) bool {
+        const first_curve_record = self.curve_records.items[subpath_record.curve_offsets.start];
+        return first_curve_record.isCapped();
     }
 
     fn addCurveRecord(self: *@This(), kind: CurveRecord.Kind) !*CurveRecord {
