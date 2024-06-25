@@ -35,14 +35,14 @@ pub const SoupPen = struct {
         _ = self; // nothing needed for now
     }
 
-    pub fn draw(
+    pub fn drawDebug(
         self: @This(),
         line_soup: LineSoup,
         metadatas: []const PathMetadata,
         texture: *TextureUnmanaged,
-    ) !void {
+    ) !soup_raster.LineRasterData {
         var raster_data = try self.rasterizer.rasterizeAlloc(self.allocator, line_soup);
-        defer raster_data.deinit();
+        errdefer raster_data.deinit();
 
         for (metadatas) |metadata| {
             const blend = DEFAULT_BLEND;
@@ -85,5 +85,17 @@ pub const SoupPen = struct {
                 }
             }
         }
+
+        return raster_data;
+    }
+
+    pub fn draw(
+        self: @This(),
+        line_soup: LineSoup,
+        metadatas: []const PathMetadata,
+        texture: *TextureUnmanaged,
+    ) !void {
+        var raster_data = try self.drawDebug(line_soup, metadatas, texture);
+        defer raster_data.deinit();
     }
 };

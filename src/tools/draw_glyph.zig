@@ -110,8 +110,6 @@ pub fn main() !void {
         .format = draw.TextureFormat.SrgbU8,
         .bytes = image.data,
     };
-
-    std.debug.print("\n============== Boundary Texture\n\n", .{});
     texture.clear(draw.Color{
         .r = 1.0,
         .g = 1.0,
@@ -120,7 +118,26 @@ pub fn main() !void {
     });
 
     var pen = draw.SoupPen.init(allocator, &rasterizer);
-    try pen.draw(flat_data.fill_lines, scene.metadata.items, &texture);
+    var raster_data = try pen.drawDebug(flat_data.fill_lines, scene.metadata.items, &texture);
+    defer raster_data.deinit();
+
+    std.debug.print("\n", .{});
+    std.debug.print("Grid Intersections:\n", .{});
+    std.debug.print("-----------------------------\n", .{});
+    for (raster_data.grid_intersections.items) |grid_intersection| {
+        std.debug.print("{}\n", .{grid_intersection});
+    }
+    std.debug.print("-----------------------------\n", .{});
+
+    std.debug.print("\n", .{});
+    std.debug.print("Boundary Fragments:\n", .{});
+    std.debug.print("-----------------------------\n", .{});
+    for (raster_data.boundary_fragments.items) |boundary_fragment| {
+        std.debug.print("{}\n", .{boundary_fragment});
+    }
+    std.debug.print("-----------------------------\n", .{});
+
+    std.debug.print("\n============== Boundary Texture\n\n", .{});
 
     for (0..texture.dimensions.height) |y| {
         std.debug.print("{:0>4}: ", .{y});

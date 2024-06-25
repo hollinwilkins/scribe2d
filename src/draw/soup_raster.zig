@@ -331,6 +331,8 @@ pub fn RasterData(comptime T: type) type {
     };
 }
 
+pub const LineRasterData = RasterData(Line);
+
 pub fn SoupRasterizer(comptime T: type) type {
     const S = Soup(T);
     const RD = RasterData(T);
