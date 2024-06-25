@@ -52,7 +52,6 @@ pub const SoupPen = struct {
                 const soup_path_record = line_soup.path_records.items[path_record_index];
                 const color = soup_path_record.fill.?.color;
                 const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
-                const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
 
                 for (merge_fragments) |merge_fragment| {
                     const pixel = merge_fragment.pixel;
@@ -74,6 +73,7 @@ pub const SoupPen = struct {
                     }
                 }
 
+                const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
                 for (spans) |span| {
                     for (0..span.x_range.size()) |x_offset| {
                         const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));

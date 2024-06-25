@@ -58,7 +58,7 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.fill = draw.Style.Fill{
         .color = draw.Color{
-            .r = 1.0,
+            .r = 0.0,
             .g = 0.0,
             .b = 0.0,
             .a = 1.0,
