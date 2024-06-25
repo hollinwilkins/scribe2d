@@ -197,11 +197,13 @@ pub const PathFlattener = struct {
 
             for (paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end]) |path| {
                 if (style.fill) |fill| {
-                    try fill_lines.openPath(fill);
+                    const path_record = try fill_lines.openPath();
+                    path_record.fill = fill;
                 }
 
                 if (style.stroke) |stroke| {
-                    try stroke_lines.openPath(stroke.toFill());
+                    const path_record = try stroke_lines.openPath();
+                    path_record.fill = stroke.toFill();
                 }
 
                 for (paths.subpath_records.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
@@ -250,7 +252,7 @@ pub const PathFlattener = struct {
                                     };
 
                                     try drawCap(
-                                        stroke.cap,
+                                        stroke.start_cap,
                                         cubic_points.point0,
                                         cubic_points.point0.sub(n),
                                         cubic_points.point0.add(n),
@@ -321,7 +323,7 @@ pub const PathFlattener = struct {
                                 if (curve.cap == .end) {
                                     // Draw end cap
                                     try drawCap(
-                                        stroke.cap,
+                                        stroke.end_cap,
                                         cubic_points.point3,
                                         cubic_points.point3.add(n_prev),
                                         cubic_points.point3.sub(n_prev),

@@ -73,6 +73,13 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn divScalar(self: @This(), scalar: T) @This() {
+            return @This(){
+                .x = self.x / scalar,
+                .y = self.y / scalar,
+            };
+        }
+
         pub fn min(self: @This(), other: @This()) @This() {
             return @This(){
                 .x = @min(self.x, other.x),
@@ -119,7 +126,7 @@ pub fn Point(comptime T: type) type {
             const cos_theta = std.math.cos(theta);
             const sin_theta = std.math.sin(theta);
 
-            return @This() {
+            return @This(){
                 .x = (self.x * cos_theta) - (self.y * sin_theta),
                 .y = (self.y * cos_theta) + (self.x * sin_theta),
             };
@@ -241,6 +248,65 @@ pub const RectI16 = Rect(i16);
 pub const RectI32 = Rect(i32);
 pub const RectU32 = Rect(u32);
 
+pub fn Quaternion(comptime T: type) type {
+    const P = Point(T);
+
+    return struct {
+        x: T = 0,
+        y: T = 0,
+        z: T = 0,
+
+        pub fn create(x: T, y: T, z: T) @This() {
+            return @This(){
+                .x = x,
+                .y = y,
+                .z = z,
+            };
+        }
+
+        pub fn createAxisAngle(axis: P, angle: T) @This() {
+            const half_angle: T = angle * 0.5;
+            const s = std.math.sin(half_angle);
+            const c = std.math.cos(half_angle);
+            const v = axis.mulScalar(s);
+
+            return create(v.x, v.y, c);
+        }
+
+        pub fn createScaledAxis(axis: P) @This() {
+            const length = axis.length();
+            if (length == 0) {
+                return @This(){};
+            } else {
+                return createAxisAngle(axis.divScalar(length), length);
+            }
+        }
+
+        pub fn toAxes(self: @This(), axes: *[2]P) []P {
+            const x = self.x;
+            const y = self.y;
+            const z = self.z;
+            const x2 = x + x;
+            const y2 = y + y;
+            const xx = x * x2;
+            const xy = x * y2;
+            const yy = y * y2;
+
+            axes[0] = P{
+                .x = 1.0 - yy,
+                .y = xy + z,
+            };
+
+            axes[1] = P{
+                .x = xy - z,
+                .y = 1.0 - xx,
+            };
+
+            return axes;
+        }
+    };
+}
+
 pub fn Transform(comptime T: type) type {
     return struct {
         pub const Matrix = struct {
@@ -277,17 +343,14 @@ pub fn Transform(comptime T: type) type {
 
         const P = Point(T);
         const Scale = Point(T);
-        const Rotation = Point(T);
+        const Rotation = Quaternion(T);
         const Translation = Point(T);
 
         scale: Scale = Scale{
             .x = 1.0,
             .y = 1.0,
         },
-        rotation: Rotation = Rotation{
-            .x = 0.0,
-            .y = 0.0,
-        },
+        rotate: Rotation = Rotation{},
         translate: Translation = Translation{},
 
         pub fn apply(self: @This(), point: P) P {
@@ -297,21 +360,20 @@ pub fn Transform(comptime T: type) type {
             };
         }
 
-        // pub fn toMatrix(self: @This()) Matrix {
-        // // let (x_axis, y_axis, z_axis) = Self::quat_to_axes(rotation);
-        // // Self::from_cols(
-        // //     x_axis.mul(scale.x),
-        // //     y_axis.mul(scale.y),
-        // //     z_axis.mul(scale.z),
-        // //     Vec4::from((translation, 1.0)),
-        // // )
+        pub fn toMatrix(self: @This()) Matrix {
+            var axes_buffer: [2]P = [_]P{undefined} ** 2;
+            const axes = self.rotate.toAxes(&axes_buffer);
 
-        //     return Matrix{
-        //         .coefficients = [_]T{
-        //             scale.x * 
-        //         },
-        //     };
-        // }
+            const x_axis = axes[0].mulScalar(self.scale.x);
+            const y_axis = axes[1].mulScalar(self.scale.y);
+
+            return Matrix{
+                .coefficients = [_]T{
+                    x_axis.x, y_axis.x, self.translate.x,
+                    x_axis.y, y_axis.y, self.translate.y,
+                },
+            };
+        }
     };
 }
 

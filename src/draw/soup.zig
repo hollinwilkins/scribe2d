@@ -47,15 +47,13 @@ pub const ArcEstimate = struct {
     length: f32 = 0.0,
 };
 
-pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
+pub const SubpathEstimate = struct {
+    fill: ?Estimate = null,
+    items: ?Estimate = null,
+};
+
+pub fn Soup(comptime T: type) type {
     return struct {
-        const SoupSelf = @This();
-
-        pub const SubpathEstimate = struct {
-            fill: ?Estimate = null,
-            items: ?Estimate = null,
-        };
-
         pub const PathRecord = struct {
             fill: ?Style.Fill = null,
             subpath_offsets: RangeU32,
@@ -82,16 +80,6 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
             };
         }
 
-        pub fn initScene(allocator: Allocator, scene: Scene) !@This() {
-            return try Estimator.estimateAlloc(
-                allocator,
-                scene.metadata.items,
-                scene.styles.items,
-                scene.transforms.items,
-                scene.paths,
-            );
-        }
-
         pub fn deinit(self: *@This()) void {
             self.path_records.deinit(self.allocator);
             self.subpath_records.deinit(self.allocator);
@@ -111,7 +99,7 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
             return self.items.items;
         }
 
-        pub fn openPath(self: *@This()) !void {
+        pub fn openPath(self: *@This()) !*PathRecord {
             const path = try self.path_records.addOne(self.allocator);
             path.* = PathRecord{
                 .subpath_offsets = RangeU32{
@@ -119,6 +107,7 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
                     .end = @intCast(self.subpath_records.items.len),
                 },
             };
+            return path;
         }
 
         pub fn closePath(self: *@This()) !void {
@@ -146,174 +135,190 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
         pub fn addItem(self: *@This()) !*T {
             return try self.items.addOne(self.allocator);
         }
+    };
+}
 
-        pub const Estimator = struct {
-            const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
+pub const LineSoup = Soup(Line);
 
-            pub fn estimateAlloc(
-                allocator: Allocator,
-                metadatas: []const PathMetadata,
-                styles: []const Style,
-                transforms: []const TransformF32,
-                paths: Paths,
-            ) !SoupSelf {
-                var soup = SoupSelf.init(allocator);
-                errdefer soup.deinit();
+pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
+    const S = Soup(T);
 
-                for (metadatas) |metadata| {
-                    const style = styles[metadata.style_index];
-                    const transform = transforms[metadata.transform_index].toMatrix();
-                    _ = transform;
+    return struct {
+        const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
-                    const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
-                    for (path_records) |path_record| {
-                        const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-                        for (subpath_records) |subpath_record| {
-                            if (style.isFilled()) {}
+        pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !S {
+            return try estimateAlloc(
+                allocator,
+                scene.metadata.items,
+                scene.styles.items,
+                scene.transforms.items,
+                scene.paths,
+            );
+        }
 
-                            if (style.isStroked()) {
-                                if (paths.isSubpathCapped(subpath_record)) {
-                                    // subpath is capped, so the stroke will be a single subpath
-                                } else {
-                                    // subpath is not capped, so the stroke will be two subpaths
-                                }
+        pub fn estimateAlloc(
+            allocator: Allocator,
+            metadatas: []const PathMetadata,
+            styles: []const Style,
+            transforms: []const TransformF32,
+            paths: Paths,
+        ) !S {
+            var soup = S.init(allocator);
+            errdefer soup.deinit();
+
+            for (metadatas) |metadata| {
+                const style = styles[metadata.style_index];
+                const transform = transforms[metadata.transform_index].toMatrix();
+                _ = transform;
+
+                const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
+                for (path_records) |path_record| {
+                    const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                    for (subpath_records) |subpath_record| {
+                        if (style.isFilled()) {}
+
+                        if (style.isStroked()) {
+                            if (paths.isSubpathCapped(subpath_record)) {
+                                // subpath is capped, so the stroke will be a single subpath
+                            } else {
+                                // subpath is not capped, so the stroke will be two subpaths
                             }
                         }
                     }
                 }
-
-                return soup;
             }
 
-            fn estimateSubpath(
-                paths: Paths,
-                subpath_record: Paths.SubpathRecord,
-                style: Style,
-                transform: TransformF32.Matrix,
-            ) SubpathEstimate {
-                if (!(style.isFilled() or style.isStroked())) {
-                    return SubpathEstimate{};
-                }
+            return soup;
+        }
 
-                var intersections: u32 = 0;
-                var items: u32 = 0;
-                var joins: u32 = 0;
-                var lines: u32 = 0;
-                var quadratics: u32 = 0;
-                var last_point: ?PointF32 = null;
-
-                const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-                for (curve_records) |curve_record| {
-                    switch (curve_record.kind) {
-                        .line => {
-                            const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
-                            last_point = points[1];
-                            intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineIntersections(points[0], points[1], transform)));
-                            joins += 1;
-                            lines += 1;
-                            items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
-                        },
-                        .quadratic_bezier => {
-                            const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
-                            last_point = points[2];
-                            intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadIntersections(points[0], points[1], points[2], transform)));
-                            joins += 1;
-                            quadratics += 1;
-                            items += @as(u32, @intFromFloat(Wang.quadratic(
-                                RSQRT_OF_TOL,
-                                points[0],
-                                points[1],
-                                points[2],
-                                transform,
-                            )));
-                        },
-                    }
-                }
-
-                var estimate = SubpathEstimate{};
-                const base_estimate = Estimate{
-                    .intersections = intersections,
-                    .items = items,
-                };
-                if (style.isFilled()) {
-                    estimate.fill = base_estimate;
-                }
-
-                if (style.stroke) |stroke| {
-                    const scaled_width = stroke.width * transform.getScale();
-                    const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
-
-                    const start_cap_estimate = estimateStrokeCaps(stroke.start_cap, scaled_width, 1);
-                    const end_cap_estimate = estimateStrokeCaps(stroke.end_cap, scaled_width, 1);
-                    const join_estimate = estimateStrokeJoins(stroke.join, scaled_width, stroke.miter_limit, joins);
-
-                    const stroke_estimate = base_estimate.mulScalar(offset_fudge).add(start_cap_estimate.add(end_cap_estimate).add(join_estimate));
-                    estimate.stroke = stroke_estimate;
-                }
-
-                return estimate;
+        fn estimateSubpath(
+            paths: Paths,
+            subpath_record: Paths.SubpathRecord,
+            style: Style,
+            transform: TransformF32.Matrix,
+        ) SubpathEstimate {
+            if (!(style.isFilled() or style.isStroked())) {
+                return SubpathEstimate{};
             }
 
-            fn estimateStrokeCaps(cap: Style.Cap, scaled_width: f32, count: u32) Estimate {
-                switch (cap) {
-                    .butt => {
-                        return Estimate{
-                            .intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count,
-                            .items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count,
-                        };
+            var intersections: u32 = 0;
+            var items: u32 = 0;
+            var joins: u32 = 0;
+            var lines: u32 = 0;
+            var quadratics: u32 = 0;
+            var last_point: ?PointF32 = null;
+
+            const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            for (curve_records) |curve_record| {
+                switch (curve_record.kind) {
+                    .line => {
+                        const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                        last_point = points[1];
+                        intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineIntersections(points[0], points[1], transform)));
+                        joins += 1;
+                        lines += 1;
+                        items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
                     },
-                    .square => {
-                        var intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count;
-                        intersections += 2 * @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(0.5 * scaled_width))) * count;
-                        var items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count;
-                        items += 2 * @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(0.5 * scaled_width))) * count;
-                        return Estimate{
-                            .intersections = intersections,
-                            .items = items,
-                        };
-                    },
-                    .round => {
-                        const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
-                        return Estimate{
-                            .intersections = @intFromFloat(EstimatorImpl.estimateLineLengthItems(arc_estimate.length)),
-                            .items = arc_estimate.items,
-                        };
+                    .quadratic_bezier => {
+                        const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                        last_point = points[2];
+                        intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadIntersections(points[0], points[1], points[2], transform)));
+                        joins += 1;
+                        quadratics += 1;
+                        items += @as(u32, @intFromFloat(Wang.quadratic(
+                            RSQRT_OF_TOL,
+                            points[0],
+                            points[1],
+                            points[2],
+                            transform,
+                        )));
                     },
                 }
             }
 
-            fn estimateStrokeJoins(join: Style.Join, scaled_width: f32, miter_limit: f32, count: u32) Estimate {
-                var estimate = Estimate{
-                    .intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count,
-                    .items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count,
-                };
-
-                switch (join) {
-                    .bevel => {
-                        estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count;
-                        estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count;
-                    },
-                    .miter => {
-                        const max_miter_len = scaled_width * miter_limit;
-                        estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(max_miter_len))) * 2 * count;
-                        estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(max_miter_len))) * 2 * count;
-                    },
-                    .round => {
-                        const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
-                        estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(arc_estimate.length))) * arc_estimate.items * count;
-                        estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(arc_estimate.length))) * arc_estimate.items * count;
-                    },
-                }
-
-                return estimate;
+            var estimate = SubpathEstimate{};
+            const base_estimate = Estimate{
+                .intersections = intersections,
+                .items = items,
+            };
+            if (style.isFilled()) {
+                estimate.fill = base_estimate;
             }
-        };
+
+            if (style.stroke) |stroke| {
+                const scaled_width = stroke.width * transform.getScale();
+                const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
+
+                const start_cap_estimate = estimateStrokeCaps(stroke.start_cap, scaled_width, 1);
+                const end_cap_estimate = estimateStrokeCaps(stroke.end_cap, scaled_width, 1);
+                const join_estimate = estimateStrokeJoins(stroke.join, scaled_width, stroke.miter_limit, joins);
+
+                const stroke_estimate = base_estimate.mulScalar(offset_fudge).add(start_cap_estimate.add(end_cap_estimate).add(join_estimate));
+                estimate.stroke = stroke_estimate;
+            }
+
+            return estimate;
+        }
+
+        fn estimateStrokeCaps(cap: Style.Cap, scaled_width: f32, count: u32) Estimate {
+            switch (cap) {
+                .butt => {
+                    return Estimate{
+                        .intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count,
+                        .items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count,
+                    };
+                },
+                .square => {
+                    var intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count;
+                    intersections += 2 * @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(0.5 * scaled_width))) * count;
+                    var items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count;
+                    items += 2 * @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(0.5 * scaled_width))) * count;
+                    return Estimate{
+                        .intersections = intersections,
+                        .items = items,
+                    };
+                },
+                .round => {
+                    const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
+                    return Estimate{
+                        .intersections = @intFromFloat(EstimatorImpl.estimateLineLengthItems(arc_estimate.length)),
+                        .items = arc_estimate.items,
+                    };
+                },
+            }
+        }
+
+        fn estimateStrokeJoins(join: Style.Join, scaled_width: f32, miter_limit: f32, count: u32) Estimate {
+            var estimate = Estimate{
+                .intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count,
+                .items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count,
+            };
+
+            switch (join) {
+                .bevel => {
+                    estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count;
+                    estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count;
+                },
+                .miter => {
+                    const max_miter_len = scaled_width * miter_limit;
+                    estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(max_miter_len))) * 2 * count;
+                    estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(max_miter_len))) * 2 * count;
+                },
+                .round => {
+                    const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
+                    estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(arc_estimate.length))) * arc_estimate.items * count;
+                    estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(arc_estimate.length))) * arc_estimate.items * count;
+                },
+            }
+
+            return estimate;
+        }
     };
 }
 
-pub const LineSoup = Soup(Line, LineItemEstimator);
+pub const LineSoupEstimator = SoupEstimator(Line, LineEstimatorImpl);
 
-pub const LineItemEstimator = struct {
+pub const LineEstimatorImpl = struct {
     pub fn estimateLineItems(_: PointF32, _: PointF32, _: TransformF32.Matrix) f32 {
         return 1.0;
     }

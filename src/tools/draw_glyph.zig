@@ -67,7 +67,7 @@ pub fn main() !void {
     try scene.paths.copyPath(glyph_paths, 0);
     try scene.close();
 
-    var line_soup = try draw.LineSoup.initScene(allocator, scene);
+    var line_soup = try draw.LineSoupEstimator.estimateSceneAlloc(allocator, scene);
     defer line_soup.deinit();
 
     // const dimensions = core.DimensionsU32{
