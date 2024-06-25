@@ -4,6 +4,7 @@ const path_module = @import("./path.zig");
 const pen = @import("./pen.zig");
 const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
+const scene_module = @import("./scene.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -20,6 +21,7 @@ const CubicPoints = euler.CubicPoints;
 const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
+const Scene = scene_module.Scene;
 
 pub const Estimate = struct {
     intersections: u32 = 0,
@@ -78,6 +80,16 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
             return @This(){
                 .allocator = allocator,
             };
+        }
+
+        pub fn initScene(allocator: Allocator, scene: Scene) !@This() {
+            return try Estimator.estimateAlloc(
+                allocator,
+                scene.metadata.items,
+                scene.styles.items,
+                scene.transforms.items,
+                scene.paths,
+            );
         }
 
         pub fn deinit(self: *@This()) void {
@@ -142,15 +154,15 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
                 allocator: Allocator,
                 metadatas: []const PathMetadata,
                 styles: []const Style,
-                transforms: []const TransformF32.Matrix,
+                transforms: []const TransformF32,
                 paths: Paths,
-            ) SoupSelf {
+            ) !SoupSelf {
                 var soup = SoupSelf.init(allocator);
                 errdefer soup.deinit();
 
                 for (metadatas) |metadata| {
                     const style = styles[metadata.style_index];
-                    const transform = transforms[metadata.transform_index];
+                    const transform = transforms[metadata.transform_index].toMatrix();
                     _ = transform;
 
                     const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];

@@ -244,7 +244,7 @@ pub const RectU32 = Rect(u32);
 pub fn Transform(comptime T: type) type {
     return struct {
         pub const Matrix = struct {
-            coefficients: [6]T,
+            coefficients: [6]T = [_]T{undefined} ** 6,
 
             pub fn apply(self: @This(), point: P) P {
                 const z = self.coefficients;
@@ -277,11 +277,16 @@ pub fn Transform(comptime T: type) type {
 
         const P = Point(T);
         const Scale = Point(T);
+        const Rotation = Point(T);
         const Translation = Point(T);
 
         scale: Scale = Scale{
             .x = 1.0,
             .y = 1.0,
+        },
+        rotation: Rotation = Rotation{
+            .x = 0.0,
+            .y = 0.0,
         },
         translate: Translation = Translation{},
 
@@ -291,6 +296,22 @@ pub fn Transform(comptime T: type) type {
                 .y = (self.scale.y * (point.y + self.translate.y)),
             };
         }
+
+        // pub fn toMatrix(self: @This()) Matrix {
+        // // let (x_axis, y_axis, z_axis) = Self::quat_to_axes(rotation);
+        // // Self::from_cols(
+        // //     x_axis.mul(scale.x),
+        // //     y_axis.mul(scale.y),
+        // //     z_axis.mul(scale.z),
+        // //     Vec4::from((translation, 1.0)),
+        // // )
+
+        //     return Matrix{
+        //         .coefficients = [_]T{
+        //             scale.x * 
+        //         },
+        //     };
+        // }
     };
 }
 

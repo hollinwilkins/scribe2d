@@ -43,6 +43,8 @@ pub const Scene = struct {
         self.paths.deinit();
     }
 
+    // pub fn toSoupAlloc
+
     pub fn getMetadatas(self: @This()) []const PathMetadata {
         return self.metadata.items;
     }
