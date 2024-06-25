@@ -286,7 +286,7 @@ pub fn RasterData(comptime T: type) type {
         }
 
         pub fn openPathRecordSpans(self: *@This(), path_record: *PathRecord) void {
-            path_record.span_offsets.start = @intCast(self.merge_fragments.items.len);
+            path_record.span_offsets.start = @intCast(self.spans.items.len);
         }
 
         pub fn closePathRecordSubpaths(self: *@This(), path_record: *PathRecord) void {
@@ -302,7 +302,7 @@ pub fn RasterData(comptime T: type) type {
         }
 
         pub fn closePathRecordSpans(self: *@This(), path_record: *PathRecord) void {
-            path_record.span_offsets.end = @intCast(self.merge_fragments.items.len);
+            path_record.span_offsets.end = @intCast(self.spans.items.len);
         }
 
         pub fn openSubpathRecordIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
