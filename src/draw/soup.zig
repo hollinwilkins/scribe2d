@@ -100,17 +100,41 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub const Estimator = struct {
-            pub fn estimateAlloc(allocator: Allocator, paths: Paths) SoupSelf {
+            pub const SubpathEstimate = struct {
+                intersections: u32 = 0,
+                items: u32 = 0,
+                join_items: u32 = 0,
+                cap_items: u32 = 0,
+            };
+
+            pub fn estimateAlloc(
+                allocator: Allocator,
+                metadatas: []const PathMetadata,
+                styles: []const Style,
+                transforms: []const TransformF32,
+                paths: Paths,
+            ) SoupSelf {
                 var soup = SoupSelf.init(allocator);
                 errdefer soup.deinit();
 
-                for (paths.path_records.items) |path_record| {
-                    const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-                    for (subpath_records) |subpath_record| {
-                        if (paths.isSubpathCapped(subpath_record)) {
-                            // subpath is capped, so the stroke will be a single subpath
-                        } else {
-                            // subpath is not capped, so the stroke will be two subpaths
+                for (metadatas) |metadata| {
+                    const style = styles[metadata.style_index];
+                    const transform = transforms[metadata.transform_index];
+                    _ = transform;
+
+                    const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
+                    for (path_records) |path_record| {
+                        const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                        for (subpath_records) |subpath_record| {
+                            if (style.isFilled()) {}
+
+                            if (style.isStroked()) {
+                                if (paths.isSubpathCapped(subpath_record)) {
+                                    // subpath is capped, so the stroke will be a single subpath
+                                } else {
+                                    // subpath is not capped, so the stroke will be two subpaths
+                                }
+                            }
                         }
                     }
                 }
@@ -118,10 +142,13 @@ pub fn Soup(comptime T: type) type {
                 return soup;
             }
 
-            fn tallySubpath(paths: Paths, subpath_record: Paths.SubpathRecord) u32 {
-                var join_tally: u32 = 0;
-                var line_tally: u32 = 0;
-                var quadratic_tally: u32 = 0;
+            fn estimateSubpath(paths: Paths, subpath_record: Paths.SubpathRecord, style: Style, transform: TransformF32) SubpathEstimate {
+                var estimate = SubpathEstimate{};
+                var intersections: u32 = 0;
+                var items: u32 = 0;
+                var joins: u32 = 0;
+                var lines: u32 = 0;
+                var quadratics: u32 = 0;
                 var last_point: ?PointF32 = null;
 
                 const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
@@ -130,19 +157,44 @@ pub fn Soup(comptime T: type) type {
                         .line => {
                             const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
                             last_point = points[1];
-
-                            join_tally += 1;
-                            line_tally += 1;
-
-
-                            // last_pt = Some(p0);
-                            // joins += 1;
-                            // lineto_lines += 1;
-                            // segments += count_segments_for_line(first_pt.unwrap(), last_pt.unwrap(), t);
+                            intersections += estimateLineIntersections(points[0], points[1], transform);
+                            joins += 1;
+                            lines += 1;
+                            items += T.estimateLineItems(points[0], points[1]);
                         },
-                        .quadratic_bezier => {},
+                        .quadratic_bezier => {
+                            const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                            last_point = points[2];
+                            // intersections += estimateLineIntersections(points[0], points[1], transform);
+                            // joins += 1;
+                            // lines += 1;
+                            // items += T.estimateLineItems(points[0], points[1]);
+                        },
                     }
                 }
+
+                return estimate;
+            }
+
+            fn estimateLineIntersections(p0: PointF32, p1: PointF32, transform: TransformF32) u32 {
+                const dxdy = transformScale(transform, p0.sub(p1));
+                const x_intersections = @as(u32, @intFromFloat(@ceil(dxdy.x)));
+                const y_intersections = @as(u32, @intFromFloat(@ceil(dxdy.y)));
+                // add 2 for virtual intersections
+                return @max(1, x_intersections + y_intersections + 2);
+            }
+
+            fn estimateLineCrossings(p0: PointF32, p1: PointF32, transform: TransformF32) u32 {
+                const dxdy = transformScale(transform, p0.sub(p1));
+                const segments = @ceil(@ceil(@abs(dxdy.x)) * 0.0625) + @ceil(@ceil(@abs(dxdy.y)) * 0.0625);
+                return @max(1, @as(u32, @intFromFloat(segments)));
+            }
+
+            fn transformScale(t: TransformF32, point: PointF32) PointF32 {
+                return PointF32{
+                    .x = t.coefficients[0] * point.x + t.coefficients[2] * point.y,
+                    .y = t.coefficients[1] * point.x + t.coefficients[3] * point.y,
+                };
             }
         };
     };
