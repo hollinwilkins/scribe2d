@@ -423,12 +423,12 @@ pub fn SoupRasterizer(comptime T: type) type {
                     .point = start_point,
                 }).fitToGrid());
 
-                for (0..@as(usize, @intCast(bounds.getWidth()))) |x_offset| {
+                for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
                     const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
                     try scanX(raster_data, grid_x, item, scan_bounds);
                 }
 
-                for (0..@as(usize, @intCast(bounds.getHeight()))) |y_offset| {
+                for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
                     const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
                     try scanY(raster_data, grid_y, item, scan_bounds);
                 }
@@ -482,6 +482,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                     {
                         const ao = try raster_data.addBoundaryFragment();
                         ao.* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, next_grid_intersection });
+                        std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
                     }
                 }
             }
