@@ -23,8 +23,10 @@ const EulerSegment = euler.EulerSegment;
 
 pub fn Soup(comptime T: type) type {
     return struct {
+        const SoupSelf = @This();
+
         pub const PathRecord = struct {
-            fill: Style.Fill,
+            fill: ?Style.Fill = null,
             subpath_offsets: RangeU32,
         };
 
@@ -65,10 +67,9 @@ pub fn Soup(comptime T: type) type {
             return self.items.items;
         }
 
-        pub fn openPath(self: *@This(), fill: Style.Fill) !void {
+        pub fn openPath(self: *@This()) !void {
             const path = try self.path_records.addOne(self.allocator);
             path.* = PathRecord{
-                .fill = fill,
                 .subpath_offsets = RangeU32{
                     .start = @intCast(self.subpath_records.items.len),
                     .end = @intCast(self.subpath_records.items.len),
@@ -97,6 +98,53 @@ pub fn Soup(comptime T: type) type {
         pub fn addItem(self: *@This()) !*T {
             return try self.items.addOne(self.allocator);
         }
+
+        pub const Estimator = struct {
+            pub fn estimateAlloc(allocator: Allocator, paths: Paths) SoupSelf {
+                var soup = SoupSelf.init(allocator);
+                errdefer soup.deinit();
+
+                for (paths.path_records.items) |path_record| {
+                    const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                    for (subpath_records) |subpath_record| {
+                        if (paths.isSubpathCapped(subpath_record)) {
+                            // subpath is capped, so the stroke will be a single subpath
+                        } else {
+                            // subpath is not capped, so the stroke will be two subpaths
+                        }
+                    }
+                }
+
+                return soup;
+            }
+
+            fn tallySubpath(paths: Paths, subpath_record: Paths.SubpathRecord) u32 {
+                var join_tally: u32 = 0;
+                var line_tally: u32 = 0;
+                var quadratic_tally: u32 = 0;
+                var last_point: ?PointF32 = null;
+
+                const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                for (curve_records) |curve_record| {
+                    switch (curve_record.kind) {
+                        .line => {
+                            const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                            last_point = points[1];
+
+                            join_tally += 1;
+                            line_tally += 1;
+
+
+                            // last_pt = Some(p0);
+                            // joins += 1;
+                            // lineto_lines += 1;
+                            // segments += count_segments_for_line(first_pt.unwrap(), last_pt.unwrap(), t);
+                        },
+                        .quadratic_bezier => {},
+                    }
+                }
+            }
+        };
     };
 }
 

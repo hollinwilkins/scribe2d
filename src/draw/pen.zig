@@ -28,7 +28,7 @@ pub const Style = struct {
     };
 
     pub const Fill = struct {
-        color: Color,
+        color: Color = Color.BLACK,
     };
 
     pub const Stroke = struct {
