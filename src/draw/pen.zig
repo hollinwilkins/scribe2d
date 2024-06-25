@@ -34,7 +34,8 @@ pub const Style = struct {
     pub const Stroke = struct {
         color: Color = Color.BLACK,
         width: f32 = 1.0,
-        cap: Cap = .butt,
+        start_cap: Cap = .butt,
+        end_cap: Cap = .butt,
         join: Join = .round,
         miter_limit: f32 = 4.0,
 

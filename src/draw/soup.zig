@@ -21,13 +21,37 @@ const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
 
+pub const Estimate = struct {
+    intersections: u32 = 0,
+    items: u32 = 0,
+
+    pub fn add(self: @This(), other: @This()) @This() {
+        return @This(){
+            .intersections = self.intersections + other.intersections,
+            .items = self.items + other.items,
+        };
+    }
+
+    pub fn mulScalar(self: @This(), value: f32) @This() {
+        return @This(){
+            .intersections = @intFromFloat(@as(f32, @floatFromInt(self.intersections)) * value),
+            .items = @intFromFloat(@as(f32, @floatFromInt(self.items)) * value),
+        };
+    }
+};
+
+pub const ArcEstimate = struct {
+    items: u32 = 0,
+    length: f32 = 0.0,
+};
+
 pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
     return struct {
         const SoupSelf = @This();
 
         pub const SubpathEstimate = struct {
-            intersections: u32 = 0,
-            items: u32 = 0,
+            fill: ?Estimate = null,
+            items: ?Estimate = null,
         };
 
         pub const PathRecord = struct {
@@ -118,7 +142,7 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
                 allocator: Allocator,
                 metadatas: []const PathMetadata,
                 styles: []const Style,
-                transforms: []const TransformF32,
+                transforms: []const TransformF32.Matrix,
                 paths: Paths,
             ) SoupSelf {
                 var soup = SoupSelf.init(allocator);
@@ -149,7 +173,16 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
                 return soup;
             }
 
-            fn estimateSubpath(paths: Paths, subpath_record: Paths.SubpathRecord, style: Style, transform: TransformF32) SubpathEstimate {
+            fn estimateSubpath(
+                paths: Paths,
+                subpath_record: Paths.SubpathRecord,
+                style: Style,
+                transform: TransformF32.Matrix,
+            ) SubpathEstimate {
+                if (!(style.isFilled() or style.isStroked())) {
+                    return SubpathEstimate{};
+                }
+
                 var intersections: u32 = 0;
                 var items: u32 = 0;
                 var joins: u32 = 0;
@@ -185,15 +218,82 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
                     }
                 }
 
-                return SubpathEstimate{};
+                var estimate = SubpathEstimate{};
+                const base_estimate = Estimate{
+                    .intersections = intersections,
+                    .items = items,
+                };
+                if (style.isFilled()) {
+                    estimate.fill = base_estimate;
+                }
+
+                if (style.stroke) |stroke| {
+                    const scaled_width = stroke.width * transform.getScale();
+                    const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
+
+                    const start_cap_estimate = estimateStrokeCaps(stroke.start_cap, scaled_width, 1);
+                    const end_cap_estimate = estimateStrokeCaps(stroke.end_cap, scaled_width, 1);
+                    const join_estimate = estimateStrokeJoins(stroke.join, scaled_width, stroke.miter_limit, joins);
+
+                    const stroke_estimate = base_estimate.mulScalar(offset_fudge).add(start_cap_estimate.add(end_cap_estimate).add(join_estimate));
+                    estimate.stroke = stroke_estimate;
+                }
+
+                return estimate;
             }
 
-            fn estimateLineIntersections(p0: PointF32, p1: PointF32, transform: TransformF32) u32 {
-                const dxdy = transform.applyScale(p0.sub(p1));
-                const x_intersections = @as(u32, @intFromFloat(@ceil(dxdy.x)));
-                const y_intersections = @as(u32, @intFromFloat(@ceil(dxdy.y)));
-                // add 2 for virtual intersections
-                return @max(1, x_intersections + y_intersections + 2);
+            fn estimateStrokeCaps(cap: Style.Cap, scaled_width: f32, count: u32) Estimate {
+                switch (cap) {
+                    .butt => {
+                        return Estimate{
+                            .intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count,
+                            .items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count,
+                        };
+                    },
+                    .square => {
+                        var intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count;
+                        intersections += 2 * @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(0.5 * scaled_width))) * count;
+                        var items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count;
+                        items += 2 * @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(0.5 * scaled_width))) * count;
+                        return Estimate{
+                            .intersections = intersections,
+                            .items = items,
+                        };
+                    },
+                    .round => {
+                        const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
+                        return Estimate{
+                            .intersections = @intFromFloat(EstimatorImpl.estimateLineLengthItems(arc_estimate.length)),
+                            .items = arc_estimate.items,
+                        };
+                    },
+                }
+            }
+
+            fn estimateStrokeJoins(join: Style.Join, scaled_width: f32, miter_limit: f32, count: u32) Estimate {
+                var estimate = Estimate{
+                    .intersections = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count,
+                    .items = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count,
+                };
+
+                switch (join) {
+                    .bevel => {
+                        estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(scaled_width))) * count;
+                        estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width))) * count;
+                    },
+                    .miter => {
+                        const max_miter_len = scaled_width * miter_limit;
+                        estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(max_miter_len))) * 2 * count;
+                        estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(max_miter_len))) * 2 * count;
+                    },
+                    .round => {
+                        const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
+                        estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthIntersections(arc_estimate.length))) * arc_estimate.items * count;
+                        estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(arc_estimate.length))) * arc_estimate.items * count;
+                    },
+                }
+
+                return estimate;
             }
         };
     };
@@ -202,11 +302,15 @@ pub fn Soup(comptime T: type, comptime EstimatorImpl: type) type {
 pub const LineSoup = Soup(Line, LineItemEstimator);
 
 pub const LineItemEstimator = struct {
-    pub fn estimateLineItems(_: PointF32, _: PointF32, _: TransformF32) f32 {
+    pub fn estimateLineItems(_: PointF32, _: PointF32, _: TransformF32.Matrix) f32 {
         return 1.0;
     }
 
-    pub fn estimateLineIntersections(p0: PointF32, p1: PointF32, transform: TransformF32) f32 {
+    pub fn estimateLineLengthItems(_: f32) f32 {
+        return 1.0;
+    }
+
+    pub fn estimateLineIntersections(p0: PointF32, p1: PointF32, transform: TransformF32.Matrix) f32 {
         const dxdy = transform.applyScale(p0.sub(p1));
         const segments = @floor(@abs(dxdy.x)) + @floor(@abs(dxdy.y));
         return @max(1.0, segments);
@@ -216,7 +320,7 @@ pub const LineItemEstimator = struct {
         return @max(1.0, @floor(scaled_width) * 2.0);
     }
 
-    pub fn estimateQuadraticIntersections(p0: PointF32, p1: PointF32, p2: PointF32, transform: TransformF32) f32 {
+    pub fn estimateQuadraticIntersections(p0: PointF32, p1: PointF32, p2: PointF32, transform: TransformF32.Matrix) f32 {
         return estimateCubicIntersections(
             p0,
             p1.lerp(p0, 0.333333),
@@ -226,7 +330,7 @@ pub const LineItemEstimator = struct {
         );
     }
 
-    pub fn estimateCubicIntersections(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, transform: TransformF32) f32 {
+    pub fn estimateCubicIntersections(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, transform: TransformF32.Matrix) f32 {
         const pt0 = transform.applyScale(p0);
         const pt1 = transform.applyScale(p1);
         const pt2 = transform.applyScale(p2);
@@ -239,6 +343,19 @@ pub const LineItemEstimator = struct {
         // Length of the control polygon
         const poly_len = (p1.sub(p0)).length() + (p2.sub(p1)).length() + (p3.sub(p2)).length();
         return 0.5 * (chord_len + poly_len);
+    }
+
+    fn estimateArc(scaled_width: f32) ArcEstimate {
+        const MIN_THETA: f32 = 1e-6;
+        const TOL: f32 = 0.25;
+        const radius = @max(TOL, scaled_width * 0.5);
+        const theta = @max(MIN_THETA, (2.0 * std.math.acos(1.0 - TOL / radius)));
+        const arc_lines = @max(2, @as(u32, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
+
+        return ArcEstimate{
+            .items = arc_lines,
+            .length = 2.0 * std.math.sin(theta) * radius,
+        };
     }
 };
 
@@ -255,13 +372,13 @@ pub const Wang = struct {
     //
     const SQRT_OF_DEGREE_TERM_QUAD: f32 = 0.5;
 
-    pub fn quadratic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32, transform: TransformF32) f32 {
+    pub fn quadratic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32, transform: TransformF32.Matrix) f32 {
         const v = transform.applyScale(p1.add(p0).add(p2).mulScalar(-2.0));
         const m = v.length();
         return @ceil(SQRT_OF_DEGREE_TERM_QUAD * std.math.sqrt(m) * rsqrt_of_tol);
     }
 
-    pub fn cubic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, transform: TransformF32) f32 {
+    pub fn cubic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, transform: TransformF32.Matrix) f32 {
         const v1 = transform.applyScale(p1.add(p0).add(p2).mulScalar(-2.0));
         const v2 = transform.applyScale(p2.add(p1).add(p3).mulScalar(-2.0));
         const m = @max(v1.length(), v2.length());

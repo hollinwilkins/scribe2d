@@ -263,6 +263,16 @@ pub fn Transform(comptime T: type) type {
                     .y = self.coefficients[1] * point.x + self.coefficients[3] * point.y,
                 };
             }
+
+            pub fn getScale(self: @This()) T {
+                const c = self.coefficients;
+                const v1x = c[0] + c[3];
+                const v2x = c[0] - c[3];
+                const v1y = c[1] - c[2];
+                const v2y = c[1] - c[2];
+
+                return std.math.sqrt(v1x * v1x + v1y * v1y) + (v2x * v2x + v2y * v2y);
+            }
         };
 
         const P = Point(T);
