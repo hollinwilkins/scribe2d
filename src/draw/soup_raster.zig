@@ -389,6 +389,8 @@ pub fn SoupRasterizer(comptime T: type) type {
             return raster_data;
         }
 
+        // TODO: this can be made more efficient by getting rid of the sort
+        //       in order to do this, need preallocation of buffers though
         pub fn populateGridIntersections(
             self: @This(),
             raster_data: *RD,

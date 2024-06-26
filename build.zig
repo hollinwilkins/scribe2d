@@ -52,22 +52,6 @@ pub fn build(b: *std.Build) void {
     const run_draw_glyph_step = b.step("draw_glyph", "Run the draw_glyph tool");
     run_draw_glyph_step.dependOn(&run_draw_glyph.step);
 
-    const flattener_exe = b.addExecutable(.{
-        .name = "flattener",
-        .root_source_file = b.path("src/tools/flattener.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    flattener_exe.root_module.addImport("scriobh", &lib.root_module);
-    b.installArtifact(flattener_exe);
-    const run_flattener = b.addRunArtifact(flattener_exe);
-    run_flattener.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_flattener.addArgs(args);
-    }
-    const run_flattener_step = b.step("flattener", "Run the flattener tool");
-    run_flattener_step.dependOn(&run_flattener.step);
-
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
