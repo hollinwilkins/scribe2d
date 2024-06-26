@@ -57,6 +57,9 @@ pub fn Soup(comptime T: type) type {
             curve_records: []const CurveRecord,
             curve_estimates: []const Estimate,
             items: []const T,
+            fill_jobs: []const Fill,
+            stroke_uncapped_jobs: []const StrokeUncapped,
+            stroke_capped_jobs: []const StrokeCapped,
         };
 
         pub const PathRecord = struct {
@@ -71,10 +74,31 @@ pub fn Soup(comptime T: type) type {
             item_offsets: RangeU32,
         };
 
+        pub const Fill = struct {
+            // index in the source Paths struct for the curve data
+            source_curve_index: u32,
+            curve_index: u32,
+        };
+        pub const StrokeUncapped = struct {
+            // index in the source Paths struct for the curve data
+            source_curve_index: u32,
+            left_curve_index: u32,
+            right_curve_index: u32,
+        };
+        pub const StrokeCapped = struct {
+            // index in the source Paths struct for the curve data
+            source_curve_index: u32,
+            left_curve_index: u32,
+            right_curve_index: u32,
+        };
+
         pub const PathRecordList = std.ArrayListUnmanaged(PathRecord);
         pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
         pub const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
         pub const EstimateList = std.ArrayListUnmanaged(Estimate);
+        pub const FillList = std.ArrayListUnmanaged(Fill);
+        pub const StrokeUncappedList = std.ArrayListUnmanaged(StrokeUncapped);
+        pub const StrokeCappedList = std.ArrayListUnmanaged(StrokeCapped);
         pub const ItemList = std.ArrayListUnmanaged(T);
 
         allocator: Allocator,
@@ -82,6 +106,9 @@ pub fn Soup(comptime T: type) type {
         subpath_records: SubpathRecordList = SubpathRecordList{},
         curve_records: CurveRecordList = CurveRecordList{},
         curve_estimates: EstimateList = EstimateList{},
+        fill_jobs: FillList = FillList{},
+        stroke_uncapped_jobs: StrokeUncappedList = StrokeUncappedList{},
+        stroke_capped_jobs: StrokeCappedList = StrokeCappedList{},
         items: ItemList = ItemList{},
 
         pub fn init(allocator: Allocator) @This() {
@@ -95,6 +122,9 @@ pub fn Soup(comptime T: type) type {
             self.subpath_records.deinit(self.allocator);
             self.curve_records.deinit(self.allocator);
             self.curve_estimates.deinit(self.allocator);
+            self.fill_jobs.deinit(self.allocator);
+            self.stroke_uncapped_jobs.deinit(self.allocator);
+            self.stroke_capped_jobs.deinit(self.allocator);
             self.items.deinit(self.allocator);
         }
 
@@ -105,6 +135,9 @@ pub fn Soup(comptime T: type) type {
                 .curve_records = self.curve_records.items,
                 .curve_estimates = self.curve_estimates.items,
                 .items = self.items.items,
+                .fill_jobs = self.fill_jobs.items,
+                .stroke_uncapped_jobs = self.stroke_uncapped_jobs.items,
+                .stroke_capped_jobs = self.stroke_capped_jobs.items,
             };
         }
 
@@ -167,6 +200,30 @@ pub fn Soup(comptime T: type) type {
 
         pub fn addItems(self: *@This(), n: usize) ![]T {
             return try self.items.addManyAsSlice(self.allocator, n);
+        }
+
+        pub fn addFillJob(self: *@This()) !*Fill {
+            return try self.fill_jobs.addOne(self.allocator);
+        }
+
+        pub fn addFillJobs(self: *@This(), n: usize) ![]T {
+            return try self.fill_jobs.addManyAsSlice(self.allocator, n);
+        }
+
+        pub fn addStrokeUncappedJob(self: *@This()) !*Fill {
+            return try self.stroke_uncapped_jobs.addOne(self.allocator);
+        }
+
+        pub fn addStrokeUncappedJobs(self: *@This(), n: usize) ![]T {
+            return try self.stroke_uncapped_jobs.addManyAsSlice(self.allocator, n);
+        }
+
+        pub fn addStrokeCappedJob(self: *@This()) !*Fill {
+            return try self.stroke_capped_jobs.addOne(self.allocator);
+        }
+
+        pub fn addStrokeCappedJobs(self: *@This(), n: usize) ![]T {
+            return try self.stroke_capped_jobs.addManyAsSlice(self.allocator, n);
         }
     };
 }
