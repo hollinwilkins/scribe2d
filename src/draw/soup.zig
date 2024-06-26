@@ -47,6 +47,7 @@ pub fn Soup(comptime T: type) type {
         pub const Encoding = struct {
             path_records: []const PathRecord,
             subpath_records: []const SubpathRecord,
+            curve_records: []const CurveRecord,
             curve_estimates: []const Estimate,
             items: []const T,
         };
@@ -56,18 +57,23 @@ pub fn Soup(comptime T: type) type {
         };
 
         pub const SubpathRecord = struct {
-            estimate: Estimate = Estimate{},
+            curve_offsets: RangeU32,
+        };
+
+        pub const CurveRecord = struct {
             item_offsets: RangeU32,
         };
 
         pub const PathRecordList = std.ArrayListUnmanaged(PathRecord);
         pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
+        pub const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
         pub const EstimateList = std.ArrayListUnmanaged(Estimate);
         pub const ItemList = std.ArrayListUnmanaged(T);
 
         allocator: Allocator,
         path_records: PathRecordList = PathRecordList{},
         subpath_records: SubpathRecordList = SubpathRecordList{},
+        curve_records: CurveRecordList = CurveRecordList{},
         curve_estimates: EstimateList = EstimateList{},
         items: ItemList = ItemList{},
 
@@ -80,6 +86,7 @@ pub fn Soup(comptime T: type) type {
         pub fn deinit(self: *@This()) void {
             self.path_records.deinit(self.allocator);
             self.subpath_records.deinit(self.allocator);
+            self.curve_records.deinit(self.allocator);
             self.curve_estimates.deinit(self.allocator);
             self.items.deinit(self.allocator);
         }
@@ -88,21 +95,10 @@ pub fn Soup(comptime T: type) type {
             return Encoding{
                 .path_records = self.path_records.items,
                 .subpath_records = self.subpath_records.items,
+                .curve_records = self.curve_records.items,
                 .curve_estimates = self.curve_estimates.items,
                 .items = self.items.items,
             };
-        }
-
-        pub fn getPathRecords(self: @This()) []const PathRecord {
-            return self.path_records.items;
-        }
-
-        pub fn getSubpathRecords(self: @This()) []const SubpathRecord {
-            return self.subpath_records.items;
-        }
-
-        pub fn getItems(self: @This()) []const T {
-            return self.items.items;
         }
 
         pub fn openPath(self: *@This()) !*PathRecord {
@@ -123,16 +119,31 @@ pub fn Soup(comptime T: type) type {
         pub fn openSubpath(self: *@This()) !*SubpathRecord {
             const subpath = try self.subpath_records.addOne(self.allocator);
             subpath.* = SubpathRecord{
-                .item_offsets = RangeU32{
-                    .start = @intCast(self.items.items.len),
-                    .end = @intCast(self.items.items.len),
+                .curve_offsets = RangeU32{
+                    .start = @intCast(self.curve_records.items.len),
+                    .end = @intCast(self.curve_records.items.len),
                 },
             };
             return subpath;
         }
 
         pub fn closeSubpath(self: *@This()) void {
-            self.subpath_records.items[self.subpath_records.items.len - 1].item_offsets.end = @intCast(self.items.items.len);
+            self.subpath_records.items[self.subpath_records.items.len - 1].curve_offsets.end = @intCast(self.curve_records.items.len);
+        }
+
+        pub fn openCurve(self: *@This()) !*CurveRecord {
+            const curve = try self.curve_records.addOne(self.allocator);
+            curve.* = CurveRecord{
+                .item_offsets = RangeU32{
+                    .start = @intCast(self.items.items.len),
+                    .end = @intCast(self.items.items.len),
+                },
+            };
+            return curve;
+        }
+
+        pub fn closeCurve(self: *@This()) void {
+            self.curve_records.items[self.curve_records.items.len - 1].item_offsets.end = @intCast(self.items.items.len);
         }
 
         pub fn addCurveEstimate(self: *@This()) !*Estimate {
