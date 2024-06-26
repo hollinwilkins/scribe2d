@@ -18,7 +18,7 @@ const PointF32 = core.PointF32;
 const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
-const Paths = path_module.Paths;
+const PathsData = path_module.PathsData;
 const Style = pen.Style;
 const Line = curve_module.Line;
 const CubicPoints = euler.CubicPoints;
@@ -147,9 +147,9 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
     }
 }
 
-fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) NeighborSegment {
+fn readNeighborSegment(paths: PathsData, curve_range: RangeU32, index: u32) NeighborSegment {
     const index_shifted = (index - curve_range.start) % curve_range.end + curve_range.start;
-    const curve_record = paths.getCurveRecordUnsafe(index_shifted);
+    const curve_record = paths.curve_records[index_shifted];
     const cubic_points = paths.getCubicPoints(curve_record);
     const tangent = cubicStartTangent(
         cubic_points.point0,
@@ -205,7 +205,7 @@ pub const PathFlattener = struct {
         metadatas: []const PathMetadata,
         styles: []const Style,
         transforms: []const TransformF32.Matrix,
-        paths: Paths,
+        paths: PathsData,
     ) !LineSoupEncoding {
         var encoding = try LineSoupEstimator.estimateAlloc(
             allocator,
@@ -216,8 +216,11 @@ pub const PathFlattener = struct {
         );
         errdefer encoding.deinit();
 
-        var fill_index: usize = 0;
-        var stroke_index: usize = 0;
+        var fill_path_index: usize = 0;
+        var fill_subpath_index: usize = 0;
+        var stroke_path_index: usize = 0;
+        var stroke_subpath_index: usize = 0;
+
         for (metadatas) |metadata| {
             const style = styles[metadata.style_index];
             const transform = transforms[metadata.transform_index];
@@ -226,49 +229,34 @@ pub const PathFlattener = struct {
             for (path_records) |path_record| {
                 var fill_path_record: ?*LineSoup.PathRecord = null;
                 if (style.isFilled()) {
-                    fill_path_record = encoding.fill.path_records.items[fill_index];
-                    fill_index += 1;
+                    fill_path_record = encoding.fill.path_records.items[fill_path_index];
+                    fill_path_index += 1;
+                }
+
+                var stroke_path_record: ?*LineSoup.PathRecord = null;
+                if (style.isStroked()) {
+                    stroke_path_record = encoding.stroke.path_records.items[stroke_path_index];
+                    stroke_path_index += 1;
                 }
 
                 const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                 for (subpath_records) |subpath_record| {
-                    const subpath_estimate = estimateSubpath(paths, subpath_record, style, transform);
-
                     if (style.isFilled()) {
-                        _ = try flat_data.fill.openSubpath();
-                        _ = try flat_data.fill.addItems(subpath_estimate.fill.items);
-                        (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                        flat_data.fill.closeSubpath();
+                        const fill_subpath_record = encoding.fill.subpath_records.items[fill_subpath_index];
+                        fill_subpath_index += 1;
                     }
 
                     if (style.stroke) |stroke| {
                         if (paths.isSubpathCapped(subpath_record)) {
                             // subpath is capped, so the stroke will be a single subpath
-                            const stroke_path_record = try flat_data.stroke.openPath();
-                            stroke_path_record.fill = stroke.toFill();
-
-                            _ = try flat_data.stroke.openSubpath();
-                            _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items * 2);
-                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                            flat_data.stroke.closeSubpath();
-
-                            flat_data.stroke.closePath();
+                            const stroke_subpath_record = encoding.stroke.subpath_records.items[stroke_subpath_index];
+                            stroke_subpath_index += 1;
                         } else {
                             // subpath is not capped, so the stroke will be two subpaths
-                            const stroke_path_record = try flat_data.stroke.openPath();
-                            stroke_path_record.fill = stroke.toFill();
-
-                            _ = try flat_data.stroke.openSubpath();
-                            _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
-                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                            flat_data.stroke.closeSubpath();
-
-                            _ = try flat_data.stroke.openSubpath();
-                            _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
-                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                            flat_data.stroke.closeSubpath();
-
-                            flat_data.stroke.closePath();
+                            const stroke_subpath_record0 = encoding.stroke.subpath_records.items[stroke_subpath_index];
+                            stroke_subpath_index += 1;
+                            const stroke_subpath_record1 = encoding.stroke.subpath_records.items[stroke_subpath_index];
+                            stroke_subpath_index += 1;
                         }
                     }
                 }
