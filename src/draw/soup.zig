@@ -51,18 +51,6 @@ pub const Estimate = struct {
 
 pub fn Soup(comptime T: type) type {
     return struct {
-        pub const Encoding = struct {
-            path_records: []const PathRecord,
-            subpath_records: []const SubpathRecord,
-            curve_records: []const CurveRecord,
-            curve_estimates: []const Estimate,
-            base_estimates: []const Estimate,
-            items: []const T,
-            fill_jobs: []const Fill,
-            stroke_uncapped_jobs: []const StrokeUncapped,
-            stroke_capped_jobs: []const StrokeCapped,
-        };
-
         pub const PathRecord = struct {
             subpath_offsets: RangeU32,
         };
@@ -77,17 +65,20 @@ pub fn Soup(comptime T: type) type {
 
         pub const Fill = struct {
             // index in the source Paths struct for the curve data
+            metadata_index: u32,
             source_curve_index: u32,
             curve_index: u32,
         };
         pub const StrokeUncapped = struct {
             // index in the source Paths struct for the curve data
+            metadata_index: u32,
             source_curve_index: u32,
             left_curve_index: u32,
             right_curve_index: u32,
         };
         pub const StrokeCapped = struct {
             // index in the source Paths struct for the curve data
+            metadata_index: u32,
             source_curve_index: u32,
             left_curve_index: u32,
             right_curve_index: u32,
@@ -129,20 +120,6 @@ pub fn Soup(comptime T: type) type {
             self.stroke_uncapped_jobs.deinit(self.allocator);
             self.stroke_capped_jobs.deinit(self.allocator);
             self.items.deinit(self.allocator);
-        }
-
-        pub fn toEncoding(self: @This()) Encoding {
-            return Encoding{
-                .path_records = self.path_records.items,
-                .subpath_records = self.subpath_records.items,
-                .curve_records = self.curve_records.items,
-                .curve_estimates = self.curve_estimates.items,
-                .base_estimates = self.base_estimates.items,
-                .items = self.items.items,
-                .fill_jobs = self.fill_jobs.items,
-                .stroke_uncapped_jobs = self.stroke_uncapped_jobs.items,
-                .stroke_capped_jobs = self.stroke_capped_jobs.items,
-            };
         }
 
         pub fn openPath(self: *@This()) !*PathRecord {

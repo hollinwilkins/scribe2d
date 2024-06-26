@@ -73,7 +73,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     curve_index += 1;
                 }
             }
-            for (metadatas) |metadata| {
+            for (metadatas, 0..) |metadata, metadata_index| {
                 const style = styles[metadata.style_index];
 
                 if (style.isFilled()) {
@@ -106,6 +106,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 const curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
 
                                 fill_job.* = S.Fill{
+                                    .metadata_index = @intCast(metadata_index),
                                     .source_curve_index = source_curve_index,
                                     .curve_index = curve_index,
                                 };

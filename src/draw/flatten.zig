@@ -7,9 +7,8 @@ const pen = @import("./pen.zig");
 const curve_module = @import("./curve.zig");
 const scene_module = @import("./scene.zig");
 const euler = @import("./euler.zig");
-const soup = @import("./soup.zig");
+const soup_module = @import("./soup.zig");
 const soup_estimate = @import("./soup_estimate.zig");
-const encoding_module = @import("./encoding.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -25,8 +24,7 @@ const CubicPoints = euler.CubicPoints;
 const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
-const LineSoup = soup.LineSoup;
-const LineSoupEncoding = encoding_module.LineSoupEncoding;
+const LineSoup = soup_module.LineSoup;
 const LineSoupEstimator = soup_estimate.LineSoupEstimator;
 const Scene = scene_module.Scene;
 
@@ -190,7 +188,7 @@ pub const PathFlattener = struct {
     pub fn flattenSceneAlloc(
         allocator: Allocator,
         scene: Scene,
-    ) !LineSoupEncoding {
+    ) !LineSoup {
         return try flattenAlloc(
             allocator,
             scene.metadata.items,
@@ -206,101 +204,120 @@ pub const PathFlattener = struct {
         styles: []const Style,
         transforms: []const TransformF32.Matrix,
         paths: PathsData,
-    ) !LineSoupEncoding {
-        var encoder = try LineSoupEstimator.estimateAlloc(
+    ) !LineSoup {
+        var soup = try LineSoupEstimator.estimateAlloc(
             allocator,
             metadatas,
             styles,
             transforms,
             paths,
         );
-        errdefer encoder.deinit();
+        errdefer soup.deinit();
 
-        var fill_curve_index: usize = 0;
+        for (soup.fill_jobs.items) |fill_job| {
+            const cubic_points = paths.getCubicPoints(fill_job.source_curve_index);
+            const metadata = metadatas[fill_job.metadata_index];
+            const transform = transforms[metadata.transform_index];
+            const curve_record = &soup.curve_records.items[fill_job.curve_index];
+            const fill_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+
+            const line_count = try flattenEuler(
+                cubic_points,
+                transform,
+                0.0,
+                cubic_points.point0,
+                cubic_points.point3,
+                fill_items,
+            );
+
+            curve_record.item_offsets.end = curve_record.item_offsets.start + line_count;
+        }
+
+        // var fill_curve_index: usize = 0;
         // var stroke_path_index: usize = 0;
         // var stroke_subpath_index: usize = 0;
 
-        for (metadatas) |metadata| {
-            const style = styles[metadata.style_index];
-            const transform = transforms[metadata.transform_index];
+        // for (metadatas) |metadata| {
+        //     const style = styles[metadata.style_index];
+        //     const transform = transforms[metadata.transform_index];
 
-            const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
-            for (path_records) |path_record| {
-                if (style.isFilled()) {
-                    const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-                    for (subpath_records) |subpath_record| {
-                        const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-                        for (curve_records) |curve_record| {
-                            const fill_curve_record = encoder.fill.curve_records.items[fill_curve_index];
-                            fill_curve_index += 1;
+        //     const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
+        //     for (path_records) |path_record| {
+        //         if (style.isFilled()) {
+        //             const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+        //             for (subpath_records) |subpath_record| {
+        //                 const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+        //                 for (curve_records) |curve_record| {
+        //                     const fill_curve_record = encoder.fill.curve_records.items[fill_curve_index];
+        //                     fill_curve_index += 1;
 
-                            const cubic_points = paths.getCubicPoints(curve_record);
-                            const fill_items = encoder.fill.items[fill_curve_record.item_offsets.start..fill_curve_record.item_offsets.end];
+        //                     const cubic_points = paths.getCubicPoints(curve_record);
+        //                     const fill_items = encoder.fill.items[fill_curve_record.item_offsets.start..fill_curve_record.item_offsets.end];
 
-                            try flattenEuler(
-                                cubic_points,
-                                transform,
-                                0.0,
-                                cubic_points.point0,
-                                cubic_points.point3,
-                                fill_items,
-                            );
-                        }
-                    }
-                }
-            }
+        //                     try flattenEuler(
+        //                         cubic_points,
+        //                         transform,
+        //                         0.0,
+        //                         cubic_points.point0,
+        //                         cubic_points.point3,
+        //                         fill_items,
+        //                     );
+        //                 }
+        //             }
+        //         }
+        //     }
 
-            // var fill_path_record: ?*LineSoup.PathRecord = null;
-            // if (style.isFilled()) {
-            //     fill_path_record = encoding.fill.path_records.items[fill_path_index];
-            //     fill_path_index += 1;
-            // }
+        // var fill_path_record: ?*LineSoup.PathRecord = null;
+        // if (style.isFilled()) {
+        //     fill_path_record = encoding.fill.path_records.items[fill_path_index];
+        //     fill_path_index += 1;
+        // }
 
-            // var stroke_path_record: ?*LineSoup.PathRecord = null;
-            // if (style.isStroked()) {
-            //     stroke_path_record = encoding.stroke.path_records.items[stroke_path_index];
-            //     stroke_path_index += 1;
-            // }
+        // var stroke_path_record: ?*LineSoup.PathRecord = null;
+        // if (style.isStroked()) {
+        //     stroke_path_record = encoding.stroke.path_records.items[stroke_path_index];
+        //     stroke_path_index += 1;
+        // }
 
-            //             const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-            //             for (subpath_records) |subpath_record| {
-            //                 // const items = encoding.fill.items[subpath_record.item_offsets.start..subpath_record.item_offsets.end];
-            // //                     const cubic_points = paths.getCubicPoints(curve);
-            //                 if (fill_path_record) |fpr| {
+        //             const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+        //             for (subpath_records) |subpath_record| {
+        //                 // const items = encoding.fill.items[subpath_record.item_offsets.start..subpath_record.item_offsets.end];
+        // //                     const cubic_points = paths.getCubicPoints(curve);
+        //                 if (fill_path_record) |fpr| {
 
-            //                     try flattenEuler(
-            //                         cubic_points,
-            //                         transform,
-            //                         0.0,
-            //                         cubic_points.point0,
-            //                         cubic_points.point3,
-            //                         &fill_lines,
-            //                     );
-            //                 }
+        //                     try flattenEuler(
+        //                         cubic_points,
+        //                         transform,
+        //                         0.0,
+        //                         cubic_points.point0,
+        //                         cubic_points.point3,
+        //                         &fill_lines,
+        //                     );
+        //                 }
 
-            // if (style.isFilled()) {
-            //     const fill_subpath_record = encoding.fill.subpath_records.items[fill_subpath_index];
-            //     fill_subpath_index += 1;
-            // }
+        // if (style.isFilled()) {
+        //     const fill_subpath_record = encoding.fill.subpath_records.items[fill_subpath_index];
+        //     fill_subpath_index += 1;
+        // }
 
-            // if (style.stroke) |stroke| {
-            //     if (paths.isSubpathCapped(subpath_record)) {
-            //         // subpath is capped, so the stroke will be a single subpath
-            //         const stroke_subpath_record = encoding.stroke.subpath_records.items[stroke_subpath_index];
-            //         stroke_subpath_index += 1;
-            //     } else {
-            //         // subpath is not capped, so the stroke will be two subpaths
-            //         const stroke_subpath_record0 = encoding.stroke.subpath_records.items[stroke_subpath_index];
-            //         stroke_subpath_index += 1;
-            //         const stroke_subpath_record1 = encoding.stroke.subpath_records.items[stroke_subpath_index];
-            //         stroke_subpath_index += 1;
-            //     }
-            // }
-            // }
-            // }
-        }
+        // if (style.stroke) |stroke| {
+        //     if (paths.isSubpathCapped(subpath_record)) {
+        //         // subpath is capped, so the stroke will be a single subpath
+        //         const stroke_subpath_record = encoding.stroke.subpath_records.items[stroke_subpath_index];
+        //         stroke_subpath_index += 1;
+        //     } else {
+        //         // subpath is not capped, so the stroke will be two subpaths
+        //         const stroke_subpath_record0 = encoding.stroke.subpath_records.items[stroke_subpath_index];
+        //         stroke_subpath_index += 1;
+        //         const stroke_subpath_record1 = encoding.stroke.subpath_records.items[stroke_subpath_index];
+        //         stroke_subpath_index += 1;
+        //     }
+        // }
+        // }
+        // }
+        // }
 
-        return encoding;
+        return soup;
     }
 
     // pub fn flattenAlloc(
@@ -685,8 +702,8 @@ pub const PathFlattener = struct {
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
-        line_soup: *LineSoup,
-    ) !void {
+        lines: []Line,
+    ) !u32 {
         const p0 = transform.apply(cubic_points.point0);
         const p1 = transform.apply(cubic_points.point1);
         const p2 = transform.apply(cubic_points.point2);
@@ -724,6 +741,7 @@ pub const PathFlattener = struct {
         var last_t: f32 = 0.0;
         var lp0 = t_start;
 
+        var line_count: u32 = 0;
         while (true) {
             const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
             if (t0 == 1.0) {
@@ -832,9 +850,8 @@ pub const PathFlattener = struct {
 
                     const l0 = if (offset >= 0.0) lp0 else lp1;
                     const l1 = if (offset >= 0.0) lp1 else lp0;
-                    const line = try line_soup.addItem();
-                    line.start = transform.apply(l0);
-                    line.end = transform.apply(l1);
+                    lines[line_count] = Line.create(transform.apply(l0), transform.apply(l1));
+                    line_count += 1;
 
                     lp0 = lp1;
                 }
@@ -857,6 +874,8 @@ pub const PathFlattener = struct {
                 dt *= 0.5;
             }
         }
+
+        return line_count;
     }
 
     // Evaluate both the point and derivative of a cubic bezier.
