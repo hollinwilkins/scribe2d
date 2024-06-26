@@ -613,7 +613,7 @@ pub const PathFlattener = struct {
             const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
             var this_p1 = cd1.point;
             var this_q1 = cd1.derivative;
-            if (this_q1.dot(this_q1) < DERIV_THRESH_POW2) {
+            if (this_q1.lengthSquared() < DERIV_THRESH_POW2) {
                 const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - DERIV_EPS);
                 const new_p1 = cd2.point;
                 const new_q1 = cd2.derivative;
@@ -631,8 +631,8 @@ pub const PathFlattener = struct {
             if (cubic_params.err * scale <= tol or dt <= SUBDIV_LIMIT) {
                 const euler_params = EulerParams.create(cubic_params.th0, cubic_params.th1);
                 const es = EulerSegment{
-                    .start = this_p0,
-                    .end = this_p1,
+                    .p0 = this_p0,
+                    .p1 = this_p1,
                     .params = euler_params,
                 };
 
@@ -711,8 +711,8 @@ pub const PathFlattener = struct {
                     const l0 = if (offset >= 0.0) lp0 else lp1;
                     const l1 = if (offset >= 0.0) lp1 else lp0;
                     const line = try line_soup.addItem();
-                    line.start = l0;
-                    line.end = l1;
+                    line.start = transform.apply(l0);
+                    line.end = transform.apply(l1);
 
                     lp0 = lp1;
                 }

@@ -142,7 +142,7 @@ pub const EulerParams = struct {
     }
 
     pub fn evalTheta(self: @This(), t: f32) f32 {
-        return (0 + 0.5 * self.k1 * (t - 1.0)) * t - self.th0;
+        return (self.k0 + 0.5 * self.k1 * (t - 1.0)) * t - self.th0;
     }
 
     pub fn apply(self: @This(), t: f32) PointF32 {
@@ -209,17 +209,17 @@ pub const EulerParams = struct {
 };
 
 pub const EulerSegment = struct {
-    start: PointF32,
-    end: PointF32,
+    p0: PointF32,
+    p1: PointF32,
     params: EulerParams,
 
     pub fn applyOffset(self: EulerSegment, t: f32, normalized_offset: f32) PointF32 {
-        const chord = self.end.sub(self.start);
+        const chord = self.p1.sub(self.p0);
         const point = self.params.applyOffset(t, normalized_offset);
 
         return PointF32{
-            .x = self.start.x + chord.x * point.x - chord.y * point.y,
-            .y = self.start.y + chord.x * point.y + chord.y * point.x,
+            .x = self.p0.x + chord.x * point.x - chord.y * point.y,
+            .y = self.p0.y + chord.x * point.y + chord.y * point.x,
         };
     }
 };
