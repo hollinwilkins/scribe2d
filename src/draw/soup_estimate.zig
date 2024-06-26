@@ -159,9 +159,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                                 // calculate side with caps
                                 const right_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
-                                for (curve_records, left_curve_estimates, right_curve_estimates) |curve_record, base_estimate, *curve_estimate| {
-                                    _ = try soup.openCurve();
+                                for (right_curve_estimates, 0..) |*curve_estimate, offset| {
+                                    const curve_record = curve_records[curve_records.len - (1 + offset)];
+                                    const base_estimate = left_curve_estimates[left_curve_estimates.len - (1 + offset)];
+                                    curve_estimate.* = base_estimate;
                                     curve_estimate.* = base_estimate.add(estimateCurveCap(curve_record, stroke, scaled_width));
+                                    _ = try soup.openCurve();
                                     _ = try soup.addItems(curve_estimate.items);
                                     soup.closeCurve();
                                 }
@@ -183,9 +186,10 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                                 _ = try soup.openSubpath();
                                 const right_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
-                                for (left_curve_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
-                                    _ = try soup.openCurve();
+                                for (right_curve_estimates, 0..) |*curve_estimate, offset| {
+                                    const base_estimate = left_curve_estimates[left_curve_estimates.len - (1 + offset)];
                                     curve_estimate.* = base_estimate;
+                                    _ = try soup.openCurve();
                                     _ = try soup.addItems(curve_estimate.items);
                                     soup.closeCurve();
                                 }
