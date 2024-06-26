@@ -13,6 +13,18 @@ pub fn SoupEncoding(comptime T: type) type {
     const S = Soup(T);
 
     return struct {
+        fill: S.Encoding,
+        stroke: S.Encoding,
+    };
+}
+
+pub const LineSoupEncoding = SoupEncoding(Line);
+
+pub fn SoupEncoder(comptime T: type) type {
+    const S = Soup(T);
+    const SE = SoupEncoding(T);
+
+    return struct {
         fill: S,
         stroke: S,
 
@@ -23,6 +35,13 @@ pub fn SoupEncoding(comptime T: type) type {
             };
         }
 
+        pub fn toEncoding(self: @This()) SE {
+            return SE{
+                .fill = self.fill.toEncoding(),
+                .stroke = self.stroke.toEncoding(),
+            };
+        }
+
         pub fn deinit(self: *@This()) void {
             self.fill.deinit();
             self.stroke.deinit();
@@ -30,4 +49,4 @@ pub fn SoupEncoding(comptime T: type) type {
     };
 }
 
-pub const LineSoupEncoding = SoupEncoding(Line);
+pub const LineSoupEncoder = SoupEncoder(Line);

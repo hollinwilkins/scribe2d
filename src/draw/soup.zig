@@ -49,8 +49,14 @@ pub const SubpathEstimate = struct {
 
 pub fn Soup(comptime T: type) type {
     return struct {
+        pub const Encoding = struct {
+            path_records: []const PathRecord,
+            subpath_records: []const SubpathRecord,
+            subpath_estimates: []const SubpathEstimate,
+            items: []const T,
+        };
+
         pub const PathRecord = struct {
-            fill: ?Style.Fill = null,
             subpath_offsets: RangeU32,
         };
 
@@ -81,6 +87,15 @@ pub fn Soup(comptime T: type) type {
             self.subpath_records.deinit(self.allocator);
             self.subpath_estimates.deinit(self.allocator);
             self.items.deinit(self.allocator);
+        }
+
+        pub fn toEncoding(self: @This()) Encoding {
+            return Encoding{
+                .path_records = self.path_records.items,
+                .subpath_records = self.subpath_records.items,
+                .subpath_estimates = self.subpath_estimates.items,
+                .items = self.items.items,
+            };
         }
 
         pub fn getPathRecords(self: @This()) []const PathRecord {

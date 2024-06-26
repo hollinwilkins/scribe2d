@@ -29,6 +29,7 @@ const Soup = soup_module.Soup;
 const Estimate = soup_module.Estimate;
 const SubpathEstimate = soup_module.SubpathEstimate;
 const SoupEncoding = encoding_module.SoupEncoding;
+const SoupEncoder = encoding_module.SoupEncoder;
 
 pub const ArcEstimate = struct {
     items: u32 = 0,
@@ -37,7 +38,7 @@ pub const ArcEstimate = struct {
 
 pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
     const S = Soup(T);
-    const E = SoupEncoding(T);
+    const E = SoupEncoder(T);
 
     return struct {
         const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
