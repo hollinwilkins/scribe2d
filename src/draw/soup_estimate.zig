@@ -62,17 +62,24 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
             const base_estimates = try soup.addBaseEstimates(paths.curve_records.len);
 
-            {
-                var curve_index: usize = 0;
-                for (metadatas) |metadata| {
-                    const transform = transforms[metadata.transform_index];
+            for (metadatas) |metadata| {
+                if (metadata.path_offsets.size() == 0) {
+                    continue;
+                }
 
-                    const curve_record = paths.curve_records[curve_index];
-                    base_estimates[curve_index] = estimateCurveBase(paths, curve_record, transform);
+                const transform = transforms[metadata.transform_index];
+                const start_path_record = paths.path_records[metadata.path_offsets.start];
+                const end_path_record = paths.path_records[metadata.path_offsets.end - 1];
+                const start_subpath_record = paths.subpath_records[start_path_record.subpath_offsets.start];
+                const end_subpath_record = paths.subpath_records[end_path_record.subpath_offsets.end - 1];
+                const curve_records = paths.curve_records[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
+                const curve_estimates = base_estimates[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
 
-                    curve_index += 1;
+                for (curve_records, curve_estimates) |curve_record, *curve_estimate| {
+                    curve_estimate.* = estimateCurveBase(paths, curve_record, transform);
                 }
             }
+
             for (metadatas, 0..) |metadata, metadata_index| {
                 const style = styles[metadata.style_index];
 
@@ -101,6 +108,9 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                             | {
                                 fill_curve_estimate.* = base_estimate;
                                 _ = try soup.openCurve();
+
+                                std.debug.assert(fill_curve_estimate.items < 10000);
+
                                 _ = try soup.addItems(fill_curve_estimate.items);
                                 const source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
                                 const curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
