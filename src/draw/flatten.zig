@@ -186,7 +186,7 @@ pub const PathFlattener = struct {
         metadatas: []const PathMetadata,
         paths: Paths,
         styles: []const Style,
-        transforms: []const TransformF32,
+        transforms: []const TransformF32.Matrix,
     ) !FlatData {
         var stroke_lines = LineSoup.init(allocator);
         var fill_lines = LineSoup.init(allocator);
@@ -379,7 +379,7 @@ pub const PathFlattener = struct {
         tan_next: PointF32,
         n_prev: PointF32,
         n_next: PointF32,
-        transform: TransformF32,
+        transform: TransformF32.Matrix,
         line_soup: *LineSoup,
     ) !void {
         var front0 = p0.add(n_prev);
@@ -478,7 +478,7 @@ pub const PathFlattener = struct {
         cap0: PointF32,
         cap1: PointF32,
         offset_tangent: PointF32,
-        transform: TransformF32,
+        transform: TransformF32.Matrix,
         line_soup: *LineSoup,
     ) !void {
         if (cap_style == .round) {
@@ -521,7 +521,7 @@ pub const PathFlattener = struct {
         end: PointF32,
         center: PointF32,
         angle: f32,
-        transform: TransformF32,
+        transform: TransformF32.Matrix,
         line_soup: *LineSoup,
     ) !void {
         const MIN_THETA: f32 = 0.0001;
@@ -559,7 +559,7 @@ pub const PathFlattener = struct {
 
     fn flattenEuler(
         cubic_points: CubicPoints,
-        transform: TransformF32,
+        transform: TransformF32.Matrix,
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
@@ -569,7 +569,7 @@ pub const PathFlattener = struct {
         const p1 = transform.apply(cubic_points.point1);
         const p2 = transform.apply(cubic_points.point2);
         const p3 = transform.apply(cubic_points.point3);
-        const scale = transform.scale.length();
+        const scale = 0.5 * transform.getScale();
 
         var t_start: PointF32 = undefined;
         var t_end: PointF32 = undefined;

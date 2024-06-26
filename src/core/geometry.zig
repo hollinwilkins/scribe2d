@@ -327,7 +327,11 @@ pub fn Quaternion(comptime T: type) type {
 
 pub fn Transform(comptime T: type) type {
     return struct {
+        const SelfTransform = @This();
+
         pub const Matrix = struct {
+            pub const IDENTITY: Matrix = (SelfTransform{}).toMatrix();
+
             coefficients: [6]T = [_]T{undefined} ** 6,
 
             pub fn apply(self: @This(), point: P) P {
@@ -349,13 +353,20 @@ pub fn Transform(comptime T: type) type {
             }
 
             pub fn getScale(self: @This()) T {
+                // TODO: does this actually make sense?
                 const c = self.coefficients;
                 const v1x = c[0] + c[3];
                 const v2x = c[0] - c[3];
                 const v1y = c[1] - c[2];
-                const v2y = c[1] - c[2];
+                const v2y = c[1] + c[2];
 
-                return std.math.sqrt(v1x * v1x + v1y * v1y) + (v2x * v2x + v2y * v2y);
+                return (PointF32{
+                    .x = v1x,
+                    .y = v1y,
+                }).length() + (PointF32{
+                    .x = v2x,
+                    .y = v2y,
+                }).length();
             }
         };
 
@@ -387,8 +398,9 @@ pub fn Transform(comptime T: type) type {
 
             return Matrix{
                 .coefficients = [_]T{
-                    x_axis.x, y_axis.x, self.translate.x,
-                    x_axis.y, y_axis.y, self.translate.y,
+                    x_axis.x,         x_axis.y,
+                    y_axis.x,         y_axis.y,
+                    self.translate.x, self.translate.y,
                 },
             };
         }

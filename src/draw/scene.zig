@@ -13,7 +13,7 @@ const PathMetadata = path_module.PathMetadata;
 
 pub const Scene = struct {
     const StyleList = std.ArrayListUnmanaged(Style);
-    const TransformList = std.ArrayListUnmanaged(TransformF32);
+    const TransformList = std.ArrayListUnmanaged(TransformF32.Matrix);
     const PathMetadataList = std.ArrayListUnmanaged(PathMetadata);
 
     allocator: Allocator,
@@ -53,7 +53,7 @@ pub const Scene = struct {
         return self.styles.items;
     }
 
-    pub fn getTransforms(self: @This()) []const TransformF32 {
+    pub fn getTransforms(self: @This()) []const TransformF32.Matrix {
         return self.transforms.items;
     }
 
@@ -64,9 +64,9 @@ pub const Scene = struct {
         return style;
     }
 
-    pub fn pushTransform(self: *@This()) !*TransformF32 {
+    pub fn pushTransform(self: *@This()) !*TransformF32.Matrix {
         const transform = try self.transforms.addOne(self.allocator);
-        transform.* = TransformF32{};
+        transform.* = TransformF32.Matrix.IDENTITY;
         try self.pushMetadata();
         return transform;
     }
