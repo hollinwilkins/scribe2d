@@ -108,13 +108,11 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 fill_curve_estimate.* = base_estimate;
                                 _ = try soup.openCurve();
 
-                                std.debug.assert(fill_curve_estimate.items < 10000);
-
                                 _ = try soup.addItems(fill_curve_estimate.items);
                                 const source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
                                 const curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
 
-                                fill_job.* = S.Fill{
+                                fill_job.* = S.FillJob{
                                     .metadata_index = @intCast(metadata_index),
                                     .source_curve_index = source_curve_index,
                                     .curve_index = curve_index,

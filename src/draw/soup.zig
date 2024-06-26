@@ -63,20 +63,13 @@ pub fn Soup(comptime T: type) type {
             item_offsets: RangeU32,
         };
 
-        pub const Fill = struct {
+        pub const FillJob = struct {
             // index in the source Paths struct for the curve data
             metadata_index: u32,
             source_curve_index: u32,
             curve_index: u32,
         };
-        pub const StrokeUncapped = struct {
-            // index in the source Paths struct for the curve data
-            metadata_index: u32,
-            source_curve_index: u32,
-            left_curve_index: u32,
-            right_curve_index: u32,
-        };
-        pub const StrokeCapped = struct {
+        pub const StrokeJob = struct {
             // index in the source Paths struct for the curve data
             metadata_index: u32,
             source_curve_index: u32,
@@ -88,9 +81,8 @@ pub fn Soup(comptime T: type) type {
         pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
         pub const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
         pub const EstimateList = std.ArrayListUnmanaged(Estimate);
-        pub const FillList = std.ArrayListUnmanaged(Fill);
-        pub const StrokeUncappedList = std.ArrayListUnmanaged(StrokeUncapped);
-        pub const StrokeCappedList = std.ArrayListUnmanaged(StrokeCapped);
+        pub const FillJobList = std.ArrayListUnmanaged(FillJob);
+        pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
         pub const ItemList = std.ArrayListUnmanaged(T);
 
         allocator: Allocator,
@@ -99,9 +91,8 @@ pub fn Soup(comptime T: type) type {
         curve_records: CurveRecordList = CurveRecordList{},
         curve_estimates: EstimateList = EstimateList{},
         base_estimates: EstimateList = EstimateList{},
-        fill_jobs: FillList = FillList{},
-        stroke_uncapped_jobs: StrokeUncappedList = StrokeUncappedList{},
-        stroke_capped_jobs: StrokeCappedList = StrokeCappedList{},
+        fill_jobs: FillJobList = FillJobList{},
+        stroke_jobs: StrokeJobList = StrokeJobList{},
         items: ItemList = ItemList{},
 
         pub fn init(allocator: Allocator) @This() {
@@ -117,8 +108,7 @@ pub fn Soup(comptime T: type) type {
             self.curve_estimates.deinit(self.allocator);
             self.base_estimates.deinit(self.allocator);
             self.fill_jobs.deinit(self.allocator);
-            self.stroke_uncapped_jobs.deinit(self.allocator);
-            self.stroke_capped_jobs.deinit(self.allocator);
+            self.stroke_jobs.deinit(self.allocator);
             self.items.deinit(self.allocator);
         }
 
@@ -191,28 +181,20 @@ pub fn Soup(comptime T: type) type {
             return try self.items.addManyAsSlice(self.allocator, n);
         }
 
-        pub fn addFillJob(self: *@This()) !*Fill {
+        pub fn addFillJob(self: *@This()) !*FillJob {
             return try self.fill_jobs.addOne(self.allocator);
         }
 
-        pub fn addFillJobs(self: *@This(), n: usize) ![]Fill {
+        pub fn addFillJobs(self: *@This(), n: usize) ![]FillJob {
             return try self.fill_jobs.addManyAsSlice(self.allocator, n);
         }
 
-        pub fn addStrokeUncappedJob(self: *@This()) !*Fill {
-            return try self.stroke_uncapped_jobs.addOne(self.allocator);
+        pub fn addStrokeJob(self: *@This()) !*FillJob {
+            return try self.stroke_jobs.addOne(self.allocator);
         }
 
-        pub fn addStrokeUncappedJobs(self: *@This(), n: usize) ![]StrokeUncapped {
-            return try self.stroke_uncapped_jobs.addManyAsSlice(self.allocator, n);
-        }
-
-        pub fn addStrokeCappedJob(self: *@This()) !*Fill {
-            return try self.stroke_capped_jobs.addOne(self.allocator);
-        }
-
-        pub fn addStrokeCappedJobs(self: *@This(), n: usize) ![]StrokeCapped {
-            return try self.stroke_capped_jobs.addManyAsSlice(self.allocator, n);
+        pub fn addStrokeJobs(self: *@This(), n: usize) ![]StrokeJob {
+            return try self.stroke_jobs.addManyAsSlice(self.allocator, n);
         }
     };
 }
