@@ -48,18 +48,38 @@ pub const ArcEstimate = struct {
 };
 
 pub const SubpathEstimate = struct {
-    fill: ?Estimate = null,
-    items: ?Estimate = null,
+    fill: Estimate = Estimate{},
+    stroke: Estimate = Estimate{},
 };
 
 pub fn Soup(comptime T: type) type {
     return struct {
+        const SelfSoup = @This();
+
+        pub const FlatData = struct {
+            fill: SelfSoup,
+            stroke: SelfSoup,
+
+            pub fn init(allocator: Allocator) @This() {
+                return @This(){
+                    .fill = SelfSoup.init(allocator),
+                    .stroke = SelfSoup.init(allocator),
+                };
+            }
+
+            pub fn deinit(self: *@This()) void {
+                self.fill.deinit();
+                self.stroke.deinit();
+            }
+        };
+
         pub const PathRecord = struct {
             fill: ?Style.Fill = null,
             subpath_offsets: RangeU32,
         };
 
         pub const SubpathRecord = struct {
+            estimate: Estimate,
             item_offsets: RangeU32,
         };
 
@@ -114,7 +134,7 @@ pub fn Soup(comptime T: type) type {
             self.path_records.items[self.path_records.items.len - 1].subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
 
-        pub fn openSubpath(self: *@This()) !void {
+        pub fn openSubpath(self: *@This()) !*SubpathRecord {
             const subpath = try self.subpath_records.addOne(self.allocator);
             subpath.* = SubpathRecord{
                 .item_offsets = RangeU32{
@@ -122,6 +142,7 @@ pub fn Soup(comptime T: type) type {
                     .end = @intCast(self.items.items.len),
                 },
             };
+            return subpath;
         }
 
         pub fn closeSubpath(self: *@This()) !void {
@@ -135,18 +156,22 @@ pub fn Soup(comptime T: type) type {
         pub fn addItem(self: *@This()) !*T {
             return try self.items.addOne(self.allocator);
         }
+
+        pub fn addItems(self: *@This(), n: usize) ![]T {
+            return try self.items.addManyAsSlice(Allocator, n);
+        }
     };
 }
 
 pub const LineSoup = Soup(Line);
 
-pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
+pub fn FlatDataEstimator(comptime T: type, comptime EstimatorImpl: type) type {
     const S = Soup(T);
 
     return struct {
         const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
-        pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !S {
+        pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !S.FlatData {
             return try estimateAlloc(
                 allocator,
                 scene.metadata.items,
@@ -162,33 +187,73 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             styles: []const Style,
             transforms: []const TransformF32,
             paths: Paths,
-        ) !S {
-            var soup = S.init(allocator);
-            errdefer soup.deinit();
+        ) !S.FlatData {
+            var flat_data = S.FlatData.init(allocator);
+            errdefer flat_data.deinit();
 
             for (metadatas) |metadata| {
                 const style = styles[metadata.style_index];
                 const transform = transforms[metadata.transform_index].toMatrix();
-                _ = transform;
 
                 const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
                 for (path_records) |path_record| {
+                    var fill_path_record: ?*S.PathRecord = null;
+                    if (style.fill) |fill| {
+                        const fpr = try flat_data.fill.openPath();
+                        fpr.fill = fill;
+                        fill_path_record = fpr;
+                    }
+
                     const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                     for (subpath_records) |subpath_record| {
-                        if (style.isFilled()) {}
+                        const subpath_estimate = estimateSubpath(paths, subpath_record, style, transform);
 
-                        if (style.isStroked()) {
+                        if (style.isFilled()) {
+                            _ = try flat_data.fill.openSubpath();
+                            try flat_data.fill.addItems(subpath_estimate.fill.items);
+                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                            flat_data.fill.closeSubpath();
+                        }
+
+                        if (style.stroke) |stroke| {
                             if (paths.isSubpathCapped(subpath_record)) {
                                 // subpath is capped, so the stroke will be a single subpath
+                                const stroke_path_record = try flat_data.stroke.openPath();
+                                stroke_path_record.fill = stroke.toFill();
+
+                                _ = try flat_data.stroke.openSubpath();
+                                try flat_data.stroke.addItems(subpath_estimate.stroke.items * 2);
+                                (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                                flat_data.stroke.closeSubpath();
+
+                                flat_data.stroke.closePath();
                             } else {
                                 // subpath is not capped, so the stroke will be two subpaths
+                                const stroke_path_record = try flat_data.stroke.openPath();
+                                stroke_path_record.fill = stroke.toFill();
+
+                                _ = try flat_data.stroke.openSubpath();
+                                try flat_data.stroke.addItems(subpath_estimate.stroke.items);
+                                (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                                flat_data.stroke.closeSubpath();
+
+                                _ = try flat_data.stroke.openSubpath();
+                                try flat_data.stroke.addItems(subpath_estimate.stroke.items);
+                                (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                                flat_data.stroke.closeSubpath();
+
+                                flat_data.stroke.closePath();
                             }
                         }
+                    }
+
+                    if (style.isFilled()) {
+                        flat_data.fill.closePath();
                     }
                 }
             }
 
-            return soup;
+            return flat_data;
         }
 
         fn estimateSubpath(
@@ -316,7 +381,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
     };
 }
 
-pub const LineSoupEstimator = SoupEstimator(Line, LineEstimatorImpl);
+pub const LineFlatDataEstimator = FlatDataEstimator(Line, LineEstimatorImpl);
 
 pub const LineEstimatorImpl = struct {
     pub fn estimateLineItems(_: PointF32, _: PointF32, _: TransformF32.Matrix) f32 {
