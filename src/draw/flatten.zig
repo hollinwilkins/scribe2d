@@ -216,8 +216,7 @@ pub const PathFlattener = struct {
         );
         errdefer encoder.deinit();
 
-        var fill_path_index: usize = 0;
-        var fill_subpath_index: usize = 0;
+        var fill_curve_index: usize = 0;
         // var stroke_path_index: usize = 0;
         // var stroke_subpath_index: usize = 0;
 
@@ -228,18 +227,15 @@ pub const PathFlattener = struct {
             const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
             for (path_records) |path_record| {
                 if (style.isFilled()) {
-                    const fill_path_record = encoder.fill.path_records.items[fill_path_index];
-                    fill_path_index += 1;
-
                     const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                     for (subpath_records) |subpath_record| {
-                        const fill_subpath_record = encoder.fill.subpath_records.items[fill_subpath_index];
-                        fill_subpath_index += 1;
-
                         const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                         for (curve_records) |curve_record| {
+                            const fill_curve_record = encoder.fill.curve_records.items[fill_curve_index];
+                            fill_curve_index += 1;
+
                             const cubic_points = paths.getCubicPoints(curve_record);
-                            // var items = encoder.fill.items.items[]
+                            const fill_items = encoder.fill.items[fill_curve_record.item_offsets.start..fill_curve_record.item_offsets.end];
 
                             try flattenEuler(
                                 cubic_points,
@@ -247,7 +243,7 @@ pub const PathFlattener = struct {
                                 0.0,
                                 cubic_points.point0,
                                 cubic_points.point3,
-                                &fill_lines,
+                                fill_items,
                             );
                         }
                     }
