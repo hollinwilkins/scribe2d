@@ -62,26 +62,29 @@ pub fn main() !void {
     try scene.paths.copyPath(glyph_paths, 0);
     try scene.close();
 
-    var flat_data = try draw.PathFlattener.flattenAlloc(
-        allocator,
-        scene.getMetadatas(),
-        scene.paths,
-        scene.getStyles(),
-        scene.getTransforms(),
-    );
-    defer flat_data.deinit();
+    var encoding = try draw.LineSoupEstimator.estimateSceneAlloc(allocator, scene);
+    defer encoding.deinit();
 
-    std.debug.print("===================\n", .{});
-    std.debug.print("Lines:\n", .{});
-    for (flat_data.fill_lines.getItems()) |line| {
-        std.debug.print("{}\n", .{ line });
-    }
-    std.debug.print("===================\n", .{});
+    // var flat_data = try draw.PathFlattener.flattenAlloc(
+    //     allocator,
+    //     scene.getMetadatas(),
+    //     scene.paths,
+    //     scene.getStyles(),
+    //     scene.getTransforms(),
+    // );
+    // defer flat_data.deinit();
 
-    var half_planes = try draw.HalfPlanesU16.init(allocator);
-    defer half_planes.deinit();
+    // std.debug.print("===================\n", .{});
+    // std.debug.print("Lines:\n", .{});
+    // for (flat_data.fill_lines.getItems()) |line| {
+    //     std.debug.print("{}\n", .{ line });
+    // }
+    // std.debug.print("===================\n", .{});
 
-    var soup_rasterizer = draw.LineSoupRasterizer.create(&half_planes);
-    var raster_data = try soup_rasterizer.rasterizeAlloc(allocator, flat_data.fill_lines);
-    defer raster_data.deinit();
+    // var half_planes = try draw.HalfPlanesU16.init(allocator);
+    // defer half_planes.deinit();
+
+    // var soup_rasterizer = draw.LineSoupRasterizer.create(&half_planes);
+    // var raster_data = try soup_rasterizer.rasterizeAlloc(allocator, flat_data.fill_lines);
+    // defer raster_data.deinit();
 }

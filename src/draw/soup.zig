@@ -49,32 +49,13 @@ pub const SubpathEstimate = struct {
 
 pub fn Soup(comptime T: type) type {
     return struct {
-        const SelfSoup = @This();
-
-        pub const FlatData = struct {
-            fill: SelfSoup,
-            stroke: SelfSoup,
-
-            pub fn init(allocator: Allocator) @This() {
-                return @This(){
-                    .fill = SelfSoup.init(allocator),
-                    .stroke = SelfSoup.init(allocator),
-                };
-            }
-
-            pub fn deinit(self: *@This()) void {
-                self.fill.deinit();
-                self.stroke.deinit();
-            }
-        };
-
         pub const PathRecord = struct {
             fill: ?Style.Fill = null,
             subpath_offsets: RangeU32,
         };
 
         pub const SubpathRecord = struct {
-            estimate: Estimate,
+            estimate: Estimate = Estimate{},
             item_offsets: RangeU32,
         };
 
@@ -125,7 +106,7 @@ pub fn Soup(comptime T: type) type {
             return path;
         }
 
-        pub fn closePath(self: *@This()) !void {
+        pub fn closePath(self: *@This()) void {
             self.path_records.items[self.path_records.items.len - 1].subpath_offsets.end = @intCast(self.subpath_records.items.len);
         }
 
@@ -140,7 +121,7 @@ pub fn Soup(comptime T: type) type {
             return subpath;
         }
 
-        pub fn closeSubpath(self: *@This()) !void {
+        pub fn closeSubpath(self: *@This()) void {
             self.subpath_records.items[self.subpath_records.items.len - 1].item_offsets.end = @intCast(self.items.items.len);
         }
 
@@ -153,7 +134,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn addItems(self: *@This(), n: usize) ![]T {
-            return try self.items.addManyAsSlice(Allocator, n);
+            return try self.items.addManyAsSlice(self.allocator, n);
         }
     };
 }

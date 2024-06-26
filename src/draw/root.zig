@@ -3,6 +3,7 @@ pub const Error = error{
 };
 
 const path = @import("./path.zig");
+const encoding = @import("./encoding.zig");
 const flatten = @import("./flatten.zig");
 const scene = @import("./scene.zig");
 const raster = @import("./raster.zig");
@@ -24,6 +25,7 @@ pub const Segment = path.Segment;
 
 pub const Rasterizer = raster.Rasterizer;
 
+pub const LineSoupEncoding = encoding.LineSoupEncoding;
 pub const LineSoup = soup.LineSoup;
 pub const LineSoupEstimator = soup_estimate.LineSoupEstimator;
 pub const LineSoupRasterizer = soup_raster.LineSoupRasterizer;

@@ -208,11 +208,11 @@ pub const PathFlattener = struct {
 
                 for (paths.subpath_records.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
                     if (style.isFilled()) {
-                        try fill_lines.openSubpath();
+                        _ = try fill_lines.openSubpath();
                     }
 
                     if (style.isStroked()) {
-                        try stroke_lines.openSubpath();
+                        _ = try stroke_lines.openSubpath();
                     }
 
                     for (paths.curve_records.items[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
@@ -348,20 +348,20 @@ pub const PathFlattener = struct {
                     }
 
                     if (style.isFilled()) {
-                        try fill_lines.closeSubpath();
+                        fill_lines.closeSubpath();
                     }
 
                     if (style.isStroked()) {
-                        try stroke_lines.closeSubpath();
+                        stroke_lines.closeSubpath();
                     }
                 }
 
                 if (style.isFilled()) {
-                    try fill_lines.closePath();
+                    fill_lines.closePath();
                 }
 
                 if (style.isStroked()) {
-                    try stroke_lines.closePath();
+                    stroke_lines.closePath();
                 }
             }
         }

@@ -6,6 +6,7 @@ const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
 const scene_module = @import("./scene.zig");
 const soup_module = @import("./soup.zig");
+const encoding_module = @import("./encoding.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -26,6 +27,7 @@ const Scene = scene_module.Scene;
 const Soup = soup_module.Soup;
 const Estimate = soup_module.Estimate;
 const SubpathEstimate = soup_module.SubpathEstimate;
+const SoupEncoding = encoding_module.SoupEncoding;
 
 pub const ArcEstimate = struct {
     items: u32 = 0,
@@ -34,11 +36,12 @@ pub const ArcEstimate = struct {
 
 pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
     const S = Soup(T);
+    const E = SoupEncoding(T);
 
     return struct {
         const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
-        pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !S.FlatData {
+        pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !E {
             return try estimateAlloc(
                 allocator,
                 scene.metadata.items,
@@ -52,15 +55,15 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             allocator: Allocator,
             metadatas: []const PathMetadata,
             styles: []const Style,
-            transforms: []const TransformF32,
+            transforms: []const TransformF32.Matrix,
             paths: Paths,
-        ) !S.FlatData {
-            var flat_data = S.FlatData.init(allocator);
+        ) !E {
+            var flat_data = E.init(allocator);
             errdefer flat_data.deinit();
 
             for (metadatas) |metadata| {
                 const style = styles[metadata.style_index];
-                const transform = transforms[metadata.transform_index].toMatrix();
+                const transform = transforms[metadata.transform_index];
 
                 const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
                 for (path_records) |path_record| {
@@ -77,7 +80,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                         if (style.isFilled()) {
                             _ = try flat_data.fill.openSubpath();
-                            try flat_data.fill.addItems(subpath_estimate.fill.items);
+                            _ = try flat_data.fill.addItems(subpath_estimate.fill.items);
                             (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
                             flat_data.fill.closeSubpath();
                         }
@@ -89,7 +92,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 stroke_path_record.fill = stroke.toFill();
 
                                 _ = try flat_data.stroke.openSubpath();
-                                try flat_data.stroke.addItems(subpath_estimate.stroke.items * 2);
+                                _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items * 2);
                                 (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
                                 flat_data.stroke.closeSubpath();
 
@@ -100,12 +103,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 stroke_path_record.fill = stroke.toFill();
 
                                 _ = try flat_data.stroke.openSubpath();
-                                try flat_data.stroke.addItems(subpath_estimate.stroke.items);
+                                _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
                                 (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
                                 flat_data.stroke.closeSubpath();
 
                                 _ = try flat_data.stroke.openSubpath();
-                                try flat_data.stroke.addItems(subpath_estimate.stroke.items);
+                                _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
                                 (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
                                 flat_data.stroke.closeSubpath();
 
@@ -154,11 +157,11 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     .quadratic_bezier => {
                         const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
                         last_point = points[2];
-                        intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadIntersections(points[0], points[1], points[2], transform)));
+                        intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadraticIntersections(points[0], points[1], points[2], transform)));
                         joins += 1;
                         quadratics += 1;
                         items += @as(u32, @intFromFloat(Wang.quadratic(
-                            RSQRT_OF_TOL,
+                            @floatCast(RSQRT_OF_TOL),
                             points[0],
                             points[1],
                             points[2],
