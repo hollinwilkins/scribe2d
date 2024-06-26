@@ -40,6 +40,13 @@ pub const Estimate = struct {
             .items = @intFromFloat(@as(f32, @floatFromInt(self.items)) * value),
         };
     }
+
+    pub fn max(self: @This(), other: @This()) @This() {
+        return @This(){
+            .intersections = @max(self.intersections, other.intersections),
+            .items = @max(self.items, other.items),
+        };
+    }
 };
 
 pub fn Soup(comptime T: type) type {
