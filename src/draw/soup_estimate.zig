@@ -88,8 +88,13 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                             const subpath_base_estimates = encoding.base_estimates[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const fill_curve_estimates = try encoding.fill.addCurveEstimates(subpath_base_estimates.len);
-                            for (subpath_base_estimates, fill_curve_estimates) |base_estimate, *fill_curve_estimate| {
+                            for (
+                                subpath_base_estimates,
+                                fill_curve_estimates,
+                                subpath_record.curve_offsets.start..subpath_record.curve_offsets.end,
+                            ) |base_estimate, *fill_curve_estimate, source_curve_index| {
                                 fill_curve_estimate.* = base_estimate;
+                                const curve_index = encoding.fill.curve_records.items.len;
                                 _ = try encoding.fill.openCurve();
                                 _ = try encoding.fill.addItems(fill_curve_estimate.items);
                                 encoding.fill.closeCurve();

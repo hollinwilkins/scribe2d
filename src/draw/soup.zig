@@ -56,6 +56,7 @@ pub fn Soup(comptime T: type) type {
             subpath_records: []const SubpathRecord,
             curve_records: []const CurveRecord,
             curve_estimates: []const Estimate,
+            base_estimates: []const Estimate,
             items: []const T,
             fill_jobs: []const Fill,
             stroke_uncapped_jobs: []const StrokeUncapped,
@@ -106,6 +107,7 @@ pub fn Soup(comptime T: type) type {
         subpath_records: SubpathRecordList = SubpathRecordList{},
         curve_records: CurveRecordList = CurveRecordList{},
         curve_estimates: EstimateList = EstimateList{},
+        base_estimates: EstimateList = EstimateList{},
         fill_jobs: FillList = FillList{},
         stroke_uncapped_jobs: StrokeUncappedList = StrokeUncappedList{},
         stroke_capped_jobs: StrokeCappedList = StrokeCappedList{},
@@ -122,6 +124,7 @@ pub fn Soup(comptime T: type) type {
             self.subpath_records.deinit(self.allocator);
             self.curve_records.deinit(self.allocator);
             self.curve_estimates.deinit(self.allocator);
+            self.base_estimates.deinit(self.allocator);
             self.fill_jobs.deinit(self.allocator);
             self.stroke_uncapped_jobs.deinit(self.allocator);
             self.stroke_capped_jobs.deinit(self.allocator);
@@ -134,6 +137,7 @@ pub fn Soup(comptime T: type) type {
                 .subpath_records = self.subpath_records.items,
                 .curve_records = self.curve_records.items,
                 .curve_estimates = self.curve_estimates.items,
+                .base_estimates = self.base_estimates.items,
                 .items = self.items.items,
                 .fill_jobs = self.fill_jobs.items,
                 .stroke_uncapped_jobs = self.stroke_uncapped_jobs.items,
@@ -192,6 +196,14 @@ pub fn Soup(comptime T: type) type {
 
         pub fn addCurveEstimates(self: *@This(), n: usize) ![]Estimate {
             return try self.curve_estimates.addManyAsSlice(self.allocator, n);
+        }
+
+        pub fn addBaseEstimate(self: *@This()) !*Estimate {
+            return try self.base_estimates.addOne(self.allocator);
+        }
+
+        pub fn addBaseEstimates(self: *@This(), n: usize) ![]Estimate {
+            return try self.base_estimates.addManyAsSlice(self.allocator, n);
         }
 
         pub fn addItem(self: *@This()) !*T {
