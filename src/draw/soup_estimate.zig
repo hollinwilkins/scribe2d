@@ -16,6 +16,7 @@ const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
 const Paths = path_module.Paths;
+const PathsData = path_module.PathsData;
 const Style = pen.Style;
 const Line = curve_module.Line;
 const Arc = curve_module.Arc;
@@ -47,7 +48,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 scene.metadata.items,
                 scene.styles.items,
                 scene.transforms.items,
-                scene.paths,
+                scene.paths.toPathsData(),
             );
         }
 
@@ -56,78 +57,78 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             metadatas: []const PathMetadata,
             styles: []const Style,
             transforms: []const TransformF32.Matrix,
-            paths: Paths,
+            paths: PathsData,
         ) !E {
-            var flat_data = E.init(allocator);
-            errdefer flat_data.deinit();
+            var encoding = E.init(allocator);
+            errdefer encoding.deinit();
 
             for (metadatas) |metadata| {
                 const style = styles[metadata.style_index];
                 const transform = transforms[metadata.transform_index];
 
-                const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
+                const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
                 for (path_records) |path_record| {
                     var fill_path_record: ?*S.PathRecord = null;
                     if (style.fill) |fill| {
-                        const fpr = try flat_data.fill.openPath();
+                        const fpr = try encoding.fill.openPath();
                         fpr.fill = fill;
                         fill_path_record = fpr;
                     }
 
-                    const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                    const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                     for (subpath_records) |subpath_record| {
                         const subpath_estimate = estimateSubpath(paths, subpath_record, style, transform);
 
                         if (style.isFilled()) {
-                            _ = try flat_data.fill.openSubpath();
-                            _ = try flat_data.fill.addItems(subpath_estimate.fill.items);
-                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                            flat_data.fill.closeSubpath();
+                            _ = try encoding.fill.openSubpath();
+                            _ = try encoding.fill.addItems(subpath_estimate.fill.items);
+                            (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+                            encoding.fill.closeSubpath();
                         }
 
                         if (style.stroke) |stroke| {
                             if (paths.isSubpathCapped(subpath_record)) {
                                 // subpath is capped, so the stroke will be a single subpath
-                                const stroke_path_record = try flat_data.stroke.openPath();
+                                const stroke_path_record = try encoding.stroke.openPath();
                                 stroke_path_record.fill = stroke.toFill();
 
-                                _ = try flat_data.stroke.openSubpath();
-                                _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items * 2);
-                                (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                                flat_data.stroke.closeSubpath();
+                                _ = try encoding.stroke.openSubpath();
+                                _ = try encoding.stroke.addItems(subpath_estimate.stroke.items * 2);
+                                (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+                                encoding.stroke.closeSubpath();
 
-                                flat_data.stroke.closePath();
+                                encoding.stroke.closePath();
                             } else {
                                 // subpath is not capped, so the stroke will be two subpaths
-                                const stroke_path_record = try flat_data.stroke.openPath();
+                                const stroke_path_record = try encoding.stroke.openPath();
                                 stroke_path_record.fill = stroke.toFill();
 
-                                _ = try flat_data.stroke.openSubpath();
-                                _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
-                                (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                                flat_data.stroke.closeSubpath();
+                                _ = try encoding.stroke.openSubpath();
+                                _ = try encoding.stroke.addItems(subpath_estimate.stroke.items);
+                                (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+                                encoding.stroke.closeSubpath();
 
-                                _ = try flat_data.stroke.openSubpath();
-                                _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
-                                (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
-                                flat_data.stroke.closeSubpath();
+                                _ = try encoding.stroke.openSubpath();
+                                _ = try encoding.stroke.addItems(subpath_estimate.stroke.items);
+                                (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+                                encoding.stroke.closeSubpath();
 
-                                flat_data.stroke.closePath();
+                                encoding.stroke.closePath();
                             }
                         }
                     }
 
                     if (style.isFilled()) {
-                        flat_data.fill.closePath();
+                        encoding.fill.closePath();
                     }
                 }
             }
 
-            return flat_data;
+            return encoding;
         }
 
         fn estimateSubpath(
-            paths: Paths,
+            paths: PathsData,
             subpath_record: Paths.SubpathRecord,
             style: Style,
             transform: TransformF32.Matrix,
@@ -143,11 +144,11 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             var quadratics: u32 = 0;
             var last_point: ?PointF32 = null;
 
-            const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
             for (curve_records) |curve_record| {
                 switch (curve_record.kind) {
                     .line => {
-                        const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                        const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
                         last_point = points[1];
                         intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineIntersections(points[0], points[1], transform)));
                         joins += 1;
@@ -155,7 +156,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                         items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
                     },
                     .quadratic_bezier => {
-                        const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                        const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
                         last_point = points[2];
                         intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadraticIntersections(points[0], points[1], points[2], transform)));
                         joins += 1;

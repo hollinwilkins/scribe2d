@@ -5,8 +5,11 @@ const core = @import("../core/root.zig");
 const path_module = @import("./path.zig");
 const pen = @import("./pen.zig");
 const curve_module = @import("./curve.zig");
+const scene_module = @import("./scene.zig");
 const euler = @import("./euler.zig");
 const soup = @import("./soup.zig");
+const soup_estimate = @import("./soup_estimate.zig");
+const encoding_module = @import("./encoding.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -23,6 +26,9 @@ const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
 const LineSoup = soup.LineSoup;
+const LineSoupEncoding = encoding_module.LineSoupEncoding;
+const LineSoupEstimator = soup_estimate.LineSoupEstimator;
+const Scene = scene_module.Scene;
 
 /// Threshold below which a derivative is considered too small.
 pub const DERIV_THRESH: f32 = 1e-6;
@@ -181,196 +187,287 @@ pub const PathFlattener = struct {
         path_index: u32,
     };
 
+    pub fn flattenSceneAlloc(
+        allocator: Allocator,
+        scene: Scene,
+    ) !LineSoupEncoding {
+        return try flattenAlloc(
+            allocator,
+            scene.metadata.items,
+            scene.styles.items,
+            scene.transforms.items,
+            scene.paths,
+        );
+    }
+
     pub fn flattenAlloc(
         allocator: Allocator,
         metadatas: []const PathMetadata,
-        paths: Paths,
         styles: []const Style,
         transforms: []const TransformF32.Matrix,
-    ) !FlatData {
-        var stroke_lines = LineSoup.init(allocator);
-        var fill_lines = LineSoup.init(allocator);
+        paths: Paths,
+    ) !LineSoupEncoding {
+        var encoding = try LineSoupEstimator.estimateAlloc(
+            allocator,
+            metadatas,
+            styles,
+            transforms,
+            paths,
+        );
+        errdefer encoding.deinit();
 
+        var fill_index: usize = 0;
+        var stroke_index: usize = 0;
         for (metadatas) |metadata| {
             const style = styles[metadata.style_index];
             const transform = transforms[metadata.transform_index];
 
-            for (paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end]) |path| {
-                if (style.fill) |fill| {
-                    const path_record = try fill_lines.openPath();
-                    path_record.fill = fill;
-                }
-
-                if (style.stroke) |stroke| {
-                    const path_record = try stroke_lines.openPath();
-                    path_record.fill = stroke.toFill();
-                }
-
-                for (paths.subpath_records.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
-                    if (style.isFilled()) {
-                        _ = try fill_lines.openSubpath();
-                    }
-
-                    if (style.isStroked()) {
-                        _ = try stroke_lines.openSubpath();
-                    }
-
-                    for (paths.curve_records.items[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
-                        const cubic_points = paths.getCubicPoints(curve);
-
-                        if (style.isFilled()) {
-                            try flattenEuler(
-                                cubic_points,
-                                transform,
-                                0.0,
-                                cubic_points.point0,
-                                cubic_points.point3,
-                                &fill_lines,
-                            );
-                        }
-
-                        if (style.stroke) |stroke| {
-                            const offset = 0.5 * stroke.width;
-                            const offset_point = PointF32{
-                                .x = offset,
-                                .y = offset,
-                            };
-
-                            if (!curve.is_open) {
-                                if (curve.cap == .start) {
-                                    // Draw start cap
-                                    const tangent = cubicStartTangent(
-                                        cubic_points.point0,
-                                        cubic_points.point1,
-                                        cubic_points.point2,
-                                        cubic_points.point3,
-                                    );
-                                    const offset_tangent = tangent.normalizeUnsafe().mulScalar(offset);
-                                    const n = PointF32{
-                                        .x = -offset_tangent.y,
-                                        .y = offset_tangent.x,
-                                    };
-
-                                    try drawCap(
-                                        stroke.start_cap,
-                                        cubic_points.point0,
-                                        cubic_points.point0.sub(n),
-                                        cubic_points.point0.add(n),
-                                        offset_tangent.negate(),
-                                        transform,
-                                        &stroke_lines,
-                                    );
-                                }
-
-                                const neighbor = readNeighborSegment(paths, subpath.curve_offsets, @intCast(curve_index + 1));
-                                var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
-                                var tan_next = neighbor.tangent;
-                                var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
-
-                                if (tan_start.dot(tan_start) < euler.TANGENT_THRESH_POW2) {
-                                    tan_start = PointF32{
-                                        .x = euler.TANGENT_THRESH,
-                                        .y = 0.0,
-                                    };
-                                }
-
-                                if (tan_prev.dot(tan_prev) < euler.TANGENT_THRESH_POW2) {
-                                    tan_prev = PointF32{
-                                        .x = euler.TANGENT_THRESH,
-                                        .y = 0.0,
-                                    };
-                                }
-
-                                if (tan_next.dot(tan_next) < euler.TANGENT_THRESH_POW2) {
-                                    tan_next = PointF32{
-                                        .x = euler.TANGENT_THRESH,
-                                        .y = 0.0,
-                                    };
-                                }
-
-                                const n_start = offset_point.mul(PointF32{
-                                    .x = -tan_start.y,
-                                    .y = tan_start.x,
-                                }).normalizeUnsafe();
-                                const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
-                                const n_prev = PointF32{
-                                    .x = -offset_tangent.y,
-                                    .y = offset_tangent.x,
-                                };
-                                const tan_next_norm = tan_next.normalizeUnsafe();
-                                const n_next = offset_point.mul(PointF32{
-                                    .x = -tan_next_norm.y,
-                                    .y = tan_next_norm.x,
-                                });
-
-                                try flattenEuler(
-                                    cubic_points,
-                                    transform,
-                                    offset,
-                                    cubic_points.point0.add(n_start),
-                                    cubic_points.point3.add(n_prev),
-                                    &stroke_lines,
-                                );
-                                try flattenEuler(
-                                    cubic_points,
-                                    transform,
-                                    -offset,
-                                    cubic_points.point0.sub(n_start),
-                                    cubic_points.point3.sub(n_prev),
-                                    &stroke_lines,
-                                );
-
-                                if (curve.cap == .end) {
-                                    // Draw end cap
-                                    try drawCap(
-                                        stroke.end_cap,
-                                        cubic_points.point3,
-                                        cubic_points.point3.add(n_prev),
-                                        cubic_points.point3.sub(n_prev),
-                                        offset_tangent,
-                                        transform,
-                                        &stroke_lines,
-                                    );
-                                } else {
-                                    try drawJoin(
-                                        stroke,
-                                        cubic_points.point3,
-                                        tan_prev,
-                                        tan_next,
-                                        n_prev,
-                                        n_next,
-                                        transform,
-                                        &stroke_lines,
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                    if (style.isFilled()) {
-                        fill_lines.closeSubpath();
-                    }
-
-                    if (style.isStroked()) {
-                        stroke_lines.closeSubpath();
-                    }
-                }
-
+            const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
+            for (path_records) |path_record| {
+                var fill_path_record: ?*LineSoup.PathRecord = null;
                 if (style.isFilled()) {
-                    fill_lines.closePath();
+                    fill_path_record = encoding.fill.path_records.items[fill_index];
+                    fill_index += 1;
                 }
 
-                if (style.isStroked()) {
-                    stroke_lines.closePath();
+                const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                for (subpath_records) |subpath_record| {
+                    const subpath_estimate = estimateSubpath(paths, subpath_record, style, transform);
+
+                    if (style.isFilled()) {
+                        _ = try flat_data.fill.openSubpath();
+                        _ = try flat_data.fill.addItems(subpath_estimate.fill.items);
+                        (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                        flat_data.fill.closeSubpath();
+                    }
+
+                    if (style.stroke) |stroke| {
+                        if (paths.isSubpathCapped(subpath_record)) {
+                            // subpath is capped, so the stroke will be a single subpath
+                            const stroke_path_record = try flat_data.stroke.openPath();
+                            stroke_path_record.fill = stroke.toFill();
+
+                            _ = try flat_data.stroke.openSubpath();
+                            _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items * 2);
+                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                            flat_data.stroke.closeSubpath();
+
+                            flat_data.stroke.closePath();
+                        } else {
+                            // subpath is not capped, so the stroke will be two subpaths
+                            const stroke_path_record = try flat_data.stroke.openPath();
+                            stroke_path_record.fill = stroke.toFill();
+
+                            _ = try flat_data.stroke.openSubpath();
+                            _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
+                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                            flat_data.stroke.closeSubpath();
+
+                            _ = try flat_data.stroke.openSubpath();
+                            _ = try flat_data.stroke.addItems(subpath_estimate.stroke.items);
+                            (try flat_data.fill.addSubpathEstimate()).* = subpath_estimate;
+                            flat_data.stroke.closeSubpath();
+
+                            flat_data.stroke.closePath();
+                        }
+                    }
                 }
             }
         }
 
-        return FlatData{
-            .fill_lines = fill_lines,
-            .stroke_lines = stroke_lines,
-        };
+        return encoding;
     }
+
+    // pub fn flattenAlloc(
+    //     allocator: Allocator,
+    //     metadatas: []const PathMetadata,
+    //     paths: Paths,
+    //     styles: []const Style,
+    //     transforms: []const TransformF32.Matrix,
+    // ) !FlatData {
+    //     var stroke_lines = LineSoup.init(allocator);
+    //     var fill_lines = LineSoup.init(allocator);
+
+    //     for (metadatas) |metadata| {
+    //         const style = styles[metadata.style_index];
+    //         const transform = transforms[metadata.transform_index];
+
+    //         for (paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end]) |path| {
+    //             if (style.fill) |fill| {
+    //                 const path_record = try fill_lines.openPath();
+    //                 path_record.fill = fill;
+    //             }
+
+    //             if (style.stroke) |stroke| {
+    //                 const path_record = try stroke_lines.openPath();
+    //                 path_record.fill = stroke.toFill();
+    //             }
+
+    //             for (paths.subpath_records.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
+    //                 if (style.isFilled()) {
+    //                     _ = try fill_lines.openSubpath();
+    //                 }
+
+    //                 if (style.isStroked()) {
+    //                     _ = try stroke_lines.openSubpath();
+    //                 }
+
+    //                 for (paths.curve_records.items[subpath.curve_offsets.start..subpath.curve_offsets.end], 0..) |curve, curve_index| {
+    //                     const cubic_points = paths.getCubicPoints(curve);
+
+    //                     if (style.isFilled()) {
+    //                         try flattenEuler(
+    //                             cubic_points,
+    //                             transform,
+    //                             0.0,
+    //                             cubic_points.point0,
+    //                             cubic_points.point3,
+    //                             &fill_lines,
+    //                         );
+    //                     }
+
+    //                     if (style.stroke) |stroke| {
+    //                         const offset = 0.5 * stroke.width;
+    //                         const offset_point = PointF32{
+    //                             .x = offset,
+    //                             .y = offset,
+    //                         };
+
+    //                         if (!curve.is_open) {
+    //                             if (curve.cap == .start) {
+    //                                 // Draw start cap
+    //                                 const tangent = cubicStartTangent(
+    //                                     cubic_points.point0,
+    //                                     cubic_points.point1,
+    //                                     cubic_points.point2,
+    //                                     cubic_points.point3,
+    //                                 );
+    //                                 const offset_tangent = tangent.normalizeUnsafe().mulScalar(offset);
+    //                                 const n = PointF32{
+    //                                     .x = -offset_tangent.y,
+    //                                     .y = offset_tangent.x,
+    //                                 };
+
+    //                                 try drawCap(
+    //                                     stroke.start_cap,
+    //                                     cubic_points.point0,
+    //                                     cubic_points.point0.sub(n),
+    //                                     cubic_points.point0.add(n),
+    //                                     offset_tangent.negate(),
+    //                                     transform,
+    //                                     &stroke_lines,
+    //                                 );
+    //                             }
+
+    //                             const neighbor = readNeighborSegment(paths, subpath.curve_offsets, @intCast(curve_index + 1));
+    //                             var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+    //                             var tan_next = neighbor.tangent;
+    //                             var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+
+    //                             if (tan_start.dot(tan_start) < euler.TANGENT_THRESH_POW2) {
+    //                                 tan_start = PointF32{
+    //                                     .x = euler.TANGENT_THRESH,
+    //                                     .y = 0.0,
+    //                                 };
+    //                             }
+
+    //                             if (tan_prev.dot(tan_prev) < euler.TANGENT_THRESH_POW2) {
+    //                                 tan_prev = PointF32{
+    //                                     .x = euler.TANGENT_THRESH,
+    //                                     .y = 0.0,
+    //                                 };
+    //                             }
+
+    //                             if (tan_next.dot(tan_next) < euler.TANGENT_THRESH_POW2) {
+    //                                 tan_next = PointF32{
+    //                                     .x = euler.TANGENT_THRESH,
+    //                                     .y = 0.0,
+    //                                 };
+    //                             }
+
+    //                             const n_start = offset_point.mul(PointF32{
+    //                                 .x = -tan_start.y,
+    //                                 .y = tan_start.x,
+    //                             }).normalizeUnsafe();
+    //                             const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
+    //                             const n_prev = PointF32{
+    //                                 .x = -offset_tangent.y,
+    //                                 .y = offset_tangent.x,
+    //                             };
+    //                             const tan_next_norm = tan_next.normalizeUnsafe();
+    //                             const n_next = offset_point.mul(PointF32{
+    //                                 .x = -tan_next_norm.y,
+    //                                 .y = tan_next_norm.x,
+    //                             });
+
+    //                             try flattenEuler(
+    //                                 cubic_points,
+    //                                 transform,
+    //                                 offset,
+    //                                 cubic_points.point0.add(n_start),
+    //                                 cubic_points.point3.add(n_prev),
+    //                                 &stroke_lines,
+    //                             );
+    //                             try flattenEuler(
+    //                                 cubic_points,
+    //                                 transform,
+    //                                 -offset,
+    //                                 cubic_points.point0.sub(n_start),
+    //                                 cubic_points.point3.sub(n_prev),
+    //                                 &stroke_lines,
+    //                             );
+
+    //                             if (curve.cap == .end) {
+    //                                 // Draw end cap
+    //                                 try drawCap(
+    //                                     stroke.end_cap,
+    //                                     cubic_points.point3,
+    //                                     cubic_points.point3.add(n_prev),
+    //                                     cubic_points.point3.sub(n_prev),
+    //                                     offset_tangent,
+    //                                     transform,
+    //                                     &stroke_lines,
+    //                                 );
+    //                             } else {
+    //                                 try drawJoin(
+    //                                     stroke,
+    //                                     cubic_points.point3,
+    //                                     tan_prev,
+    //                                     tan_next,
+    //                                     n_prev,
+    //                                     n_next,
+    //                                     transform,
+    //                                     &stroke_lines,
+    //                                 );
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+
+    //                 if (style.isFilled()) {
+    //                     fill_lines.closeSubpath();
+    //                 }
+
+    //                 if (style.isStroked()) {
+    //                     stroke_lines.closeSubpath();
+    //                 }
+    //             }
+
+    //             if (style.isFilled()) {
+    //                 fill_lines.closePath();
+    //             }
+
+    //             if (style.isStroked()) {
+    //                 stroke_lines.closePath();
+    //             }
+    //         }
+    //     }
+
+    //     return FlatData{
+    //         .fill_lines = fill_lines,
+    //         .stroke_lines = stroke_lines,
+    //     };
+    // }
 
     fn drawJoin(
         stroke: Style.Stroke,

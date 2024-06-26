@@ -25,6 +25,18 @@ pub const PathMetadata = struct {
     path_offsets: RangeU32 = RangeU32{},
 };
 
+pub const PathsData = struct {
+    path_records: []const Paths.PathRecord,
+    subpath_records: []const Paths.SubpathRecord,
+    curve_records: []const Paths.CurveRecord,
+    points: []const PointF32,
+
+    pub fn isSubpathCapped(self: @This(), subpath_record: Paths.SubpathRecord) bool {
+        const first_curve_record = self.curve_records[subpath_record.curve_offsets.start];
+        return first_curve_record.isCapped();
+    }
+};
+
 pub const Paths = struct {
     pub const PathRecord = struct {
         subpath_offsets: RangeU32,
@@ -82,6 +94,15 @@ pub const Paths = struct {
         self.subpath_records.deinit(self.allocator);
         self.curve_records.deinit(self.allocator);
         self.points.deinit(self.allocator);
+    }
+
+    pub fn toPathsData(self: @This()) PathsData {
+        return PathsData{
+            .path_records = self.path_records.items,
+            .subpath_records = self.subpath_records.items,
+            .curve_records = self.curve_records.items,
+            .points = self.points.items,
+        };
     }
 
     pub fn getPathRecords(self: @This()) []const PathRecord {
