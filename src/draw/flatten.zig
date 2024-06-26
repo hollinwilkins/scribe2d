@@ -596,7 +596,7 @@ pub const PathFlattener = struct {
 
         // We want to avoid near zero derivatives, so the general technique is to
         // detect, then sample a nearby t value if it fails to meet the threshold.
-        if (last_q.dot(last_q) < DERIV_THRESH_POW2) {
+        if (last_q.lengthSquared() < DERIV_THRESH_POW2) {
             last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, DERIV_EPS).derivative;
         }
         var last_t: f32 = 0.0;
@@ -743,8 +743,10 @@ pub const PathFlattener = struct {
         const mm = m * m;
         const mt = m * t;
         const tt = t * t;
-        const p = p0.mulScalar(mm * m).add((p1.mulScalar(3.0 * mm).add(p2).mulScalar(3.0 * mt).add(p3).mulScalar(tt)).mulScalar(t));
-        const q = (p1.sub(p0)).mulScalar(mm).add(p2.sub(p1)).mulScalar(2.0 * mt).add(p3.sub(p2)).mulScalar(tt);
+        // p = p0 * (mm * m) + (p1 * (3.0 * mm) + p2 * (3.0 * mt) + p3 * tt) * t;
+        const p = p0.mulScalar(mm * m).add(p1.mulScalar(3.0 * mm).add(p2.mulScalar(3.0 * mt)).add(p3.mulScalar(tt)).mulScalar(t));
+        // q = (p - p0) * mm + (p2 - p1) * (2.0 * mt) + (p3 - p2) * tt;
+        const q = p.sub(p0).mulScalar(mm).add(p2.sub(p1).mulScalar(2.0 * mt)).add(p3.sub(p2).mulScalar(tt));
 
         return CubicAndDeriv{
             .point = p,

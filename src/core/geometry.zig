@@ -48,6 +48,10 @@ pub fn Point(comptime T: type) type {
             return std.math.hypot(self.x, self.y);
         }
 
+        pub fn lengthSquared(self: @This()) f32 {
+            return self.dot(self);
+        }
+
         pub fn negate(self: @This()) @This() {
             return @This(){
                 .x = -self.x,
