@@ -39,18 +39,19 @@ pub const SoupPen = struct {
         self: @This(),
         line_soup: LineSoup,
         metadatas: []const PathMetadata,
+        styles: []const Style,
         texture: *TextureUnmanaged,
     ) !soup_raster.LineRasterData {
         var raster_data = try self.rasterizer.rasterizeAlloc(self.allocator, line_soup);
         errdefer raster_data.deinit();
 
         for (metadatas) |metadata| {
+            const style = styles[metadata.style_index];
             const blend = DEFAULT_BLEND;
             const path_records = raster_data.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
 
-            for (path_records, 0..) |path_record, path_record_index| {
-                const soup_path_record = line_soup.path_records.items[path_record_index];
-                const color = soup_path_record.fill.?.color;
+            for (path_records) |path_record| {
+                const color = style.fill.?.color;
                 const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
 
                 for (merge_fragments) |merge_fragment| {

@@ -403,7 +403,7 @@ pub fn SoupRasterizer(comptime T: type) type {
 
             const soup_curve_records = raster_data.soup.curve_records.items[soup_subpath_record.curve_offsets.start..soup_subpath_record.curve_offsets.end];
             for (soup_curve_records) |soup_curve_record| {
-                const soup_items = raster_data.soup.getItems()[soup_curve_record.item_offsets.start..soup_curve_record.item_offsets.end];
+                const soup_items = raster_data.soup.items.items[soup_curve_record.item_offsets.start..soup_curve_record.item_offsets.end];
                 for (soup_items) |item| {
                     const start_intersection_index = raster_data.grid_intersections.items.len;
                     const start_point: PointF32 = item.applyT(0.0);

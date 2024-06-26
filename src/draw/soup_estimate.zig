@@ -85,7 +85,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                         for (subpath_records) |subpath_record| {
                             const soup_subpath_record = try soup.openSubpath();
 
-                            const subpath_base_estimates = soup.base_estimates[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                            const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const fill_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
                             const fill_jobs = try soup.addFillJobs(subpath_base_estimates.len);
                             for (
