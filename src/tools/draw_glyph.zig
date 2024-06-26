@@ -34,23 +34,9 @@ pub fn main() !void {
     var builder = draw.PathBuilder.create(&glyph_paths);
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
-    _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
+    // _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     const bounds = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
     _ = bounds;
-
-    std.debug.print("\n", .{});
-    std.debug.print("Curves:\n", .{});
-    std.debug.print("-----------------------------\n", .{});
-    const path = glyph_paths.getPathRecords()[0];
-    const subpath_records = glyph_paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
-    for (subpath_records, 0..) |subpath_record, subpath_index| {
-        const curve_records = glyph_paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-        for (curve_records, 0..) |curve_record, curve_index| {
-            const curve = glyph_paths.getCurve(curve_record);
-            std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
-        }
-    }
-    std.debug.print("-----------------------------\n", .{});
 
     var scene = try draw.Scene.init(allocator);
     defer scene.deinit();
@@ -75,14 +61,6 @@ pub fn main() !void {
         scene.getTransforms(),
     );
     defer flat_data.deinit();
-
-    std.debug.print("\n", .{});
-    std.debug.print("Line Soup:\n", .{});
-    std.debug.print("-----------------------------\n", .{});
-    for (flat_data.fill_lines.items.items) |line| {
-        std.debug.print("{}\n", .{line});
-    }
-    std.debug.print("-----------------------------\n", .{});
 
     const dimensions = core.DimensionsU32{
         .width = size * 3,
@@ -121,24 +99,45 @@ pub fn main() !void {
     var raster_data = try pen.drawDebug(flat_data.fill_lines, scene.metadata.items, &texture);
     defer raster_data.deinit();
 
-    std.debug.print("\n", .{});
-    std.debug.print("Grid Intersections:\n", .{});
-    std.debug.print("-----------------------------\n", .{});
-    for (raster_data.grid_intersections.items) |grid_intersection| {
-        std.debug.print("{}\n", .{grid_intersection});
-    }
-    std.debug.print("-----------------------------\n", .{});
+    // std.debug.print("\n", .{});
+    // std.debug.print("Curves:\n", .{});
+    // std.debug.print("-----------------------------\n", .{});
+    // const path = glyph_paths.getPathRecords()[0];
+    // const subpath_records = glyph_paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
+    // for (subpath_records, 0..) |subpath_record, subpath_index| {
+    //     const curve_records = glyph_paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+    //     for (curve_records, 0..) |curve_record, curve_index| {
+    //         const curve = glyph_paths.getCurve(curve_record);
+    //         std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
+    //     }
+    // }
+    // std.debug.print("-----------------------------\n", .{});
 
-    std.debug.print("\n", .{});
-    std.debug.print("Boundary Fragments:\n", .{});
-    std.debug.print("-----------------------------\n", .{});
-    for (raster_data.boundary_fragments.items) |boundary_fragment| {
-        std.debug.print("{}\n", .{boundary_fragment});
-    }
-    std.debug.print("-----------------------------\n", .{});
+    // std.debug.print("\n", .{});
+    // std.debug.print("Line Soup:\n", .{});
+    // std.debug.print("-----------------------------\n", .{});
+    // for (flat_data.fill_lines.items.items) |line| {
+    //     std.debug.print("{}\n", .{line});
+    // }
+    // std.debug.print("-----------------------------\n", .{});
+
+    // std.debug.print("\n", .{});
+    // std.debug.print("Grid Intersections:\n", .{});
+    // std.debug.print("-----------------------------\n", .{});
+    // for (raster_data.grid_intersections.items) |grid_intersection| {
+    //     std.debug.print("{}\n", .{grid_intersection});
+    // }
+    // std.debug.print("-----------------------------\n", .{});
+
+    // std.debug.print("\n", .{});
+    // std.debug.print("Boundary Fragments:\n", .{});
+    // std.debug.print("-----------------------------\n", .{});
+    // for (raster_data.boundary_fragments.items) |boundary_fragment| {
+    //     std.debug.print("{}\n", .{boundary_fragment});
+    // }
+    // std.debug.print("-----------------------------\n", .{});
 
     std.debug.print("\n============== Boundary Texture\n\n", .{});
-
     for (0..texture.dimensions.height) |y| {
         std.debug.print("{:0>4}: ", .{y});
         for (0..texture.dimensions.height) |x| {

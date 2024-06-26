@@ -76,11 +76,14 @@ pub const SoupPen = struct {
                 const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
                 for (spans) |span| {
                     for (0..span.x_range.size()) |x_offset| {
-                        const x = @as(u32, @intCast(span.x_range.start)) + @as(u32, @intCast(x_offset));
-                        texture.setPixelUnsafe(core.PointU32{
-                            .x = @intCast(x),
-                            .y = @intCast(span.y),
-                        }, color);
+                        const x = @as(i32, @intCast(span.x_range.start)) + @as(i32, @intCast(x_offset));
+
+                        if (x >= 0 and span.y >= 0) {
+                            texture.setPixelUnsafe(core.PointU32{
+                                .x = @intCast(x),
+                                .y = @intCast(span.y),
+                            }, color);
+                        }
                     }
                 }
             }

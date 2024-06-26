@@ -334,6 +334,8 @@ pub fn RasterData(comptime T: type) type {
 pub const LineRasterData = RasterData(Line);
 
 pub fn SoupRasterizer(comptime T: type) type {
+    const GRID_POINT_TOLERANCE: f32 = 1e-6;
+
     const S = Soup(T);
     const RD = RasterData(T);
 
@@ -474,7 +476,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                 for (grid_intersections, 0..) |*grid_intersection, index| {
                     const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
 
-                    if (std.meta.eql(grid_intersection.intersection.point, next_grid_intersection.intersection.point)) {
+                    if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
                         // skip if exactly the same point
                         continue;
                     }
@@ -534,8 +536,6 @@ pub fn SoupRasterizer(comptime T: type) type {
                         merge_fragment.* = MergeFragment{
                             .pixel = boundary_fragment.pixel,
                         };
-                        std.debug.assert(merge_fragment.pixel.x >= 0);
-                        std.debug.assert(merge_fragment.pixel.y >= 0);
                         merge_fragment.main_ray_winding = main_ray_winding;
 
                         if (y_changing) {
@@ -604,8 +604,6 @@ pub fn SoupRasterizer(comptime T: type) type {
                                 .end = merge_fragment.pixel.x,
                             },
                         };
-
-                        std.debug.assert(ao.y >= 0);
                     }
                 }
 

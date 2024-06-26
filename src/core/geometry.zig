@@ -12,6 +12,20 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn approxEqAbs(self: @This(), other: @This(), tolerance: T) bool {
+            return std.math.approxEqAbs(
+                T,
+                self.x,
+                other.x,
+                tolerance,
+            ) and std.math.approxEqAbs(
+                T,
+                self.y,
+                other.y,
+                tolerance,
+            );
+        }
+
         pub fn normalize(self: @This()) ?@This() {
             if (self.x == 0 and self.y == 0) {
                 return null;
