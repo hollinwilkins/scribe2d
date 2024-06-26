@@ -6,7 +6,6 @@ const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
 const scene_module = @import("./scene.zig");
 const soup_module = @import("./soup.zig");
-const encoding_module = @import("./encoding.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -29,8 +28,6 @@ const Soup = soup_module.Soup;
 const Estimate = soup_module.Estimate;
 const SubpathEstimate = soup_module.SubpathEstimate;
 const CurveEstimate = soup_module.CurveEstimate;
-const SoupEncoding = encoding_module.SoupEncoding;
-const SoupEncoder = encoding_module.SoupEncoder;
 
 pub const ArcEstimate = struct {
     items: u32 = 0,
@@ -38,7 +35,7 @@ pub const ArcEstimate = struct {
 };
 
 pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
-    const E = SoupEncoder(T);
+    const S = Soup(T);
 
     return struct {
         const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
@@ -59,21 +56,23 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             styles: []const Style,
             transforms: []const TransformF32.Matrix,
             paths: PathsData,
-        ) !E {
-            var encoding = E.init(allocator);
-            errdefer encoding.deinit();
+        ) !S {
+            var soup = S.init(allocator);
+            errdefer soup.deinit();
 
-            const base_estimates = try encoding.addBaseEstimates(paths.curve_records.len);
-            var curve_index: usize = 0;
-            for (metadatas) |metadata| {
-                const transform = transforms[metadata.transform_index];
+            const base_estimates = try soup.addBaseEstimates(paths.curve_records.len);
 
-                const curve_record = paths.curve_records[curve_index];
-                base_estimates[curve_index] = estimateCurveBase(paths, curve_record, transform);
+            {
+                var curve_index: usize = 0;
+                for (metadatas) |metadata| {
+                    const transform = transforms[metadata.transform_index];
 
-                curve_index += 1;
+                    const curve_record = paths.curve_records[curve_index];
+                    base_estimates[curve_index] = estimateCurveBase(paths, curve_record, transform);
+
+                    curve_index += 1;
+                }
             }
-
             for (metadatas) |metadata| {
                 const style = styles[metadata.style_index];
 
@@ -81,109 +80,123 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
 
                     for (path_records) |path_record| {
-                        _ = try encoding.fill.openPath();
+                        _ = try soup.openPath();
                         const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records) |subpath_record| {
-                            _ = try encoding.fill.openSubpath();
+                            const soup_subpath_record = try soup.openSubpath();
 
-                            const subpath_base_estimates = encoding.base_estimates[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-                            const fill_curve_estimates = try encoding.fill.addCurveEstimates(subpath_base_estimates.len);
+                            const subpath_base_estimates = soup.base_estimates[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                            const fill_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
+                            const fill_jobs = try soup.addFillJobs(subpath_base_estimates.len);
                             for (
                                 subpath_base_estimates,
                                 fill_curve_estimates,
-                                subpath_record.curve_offsets.start..subpath_record.curve_offsets.end,
-                            ) |base_estimate, *fill_curve_estimate, source_curve_index| {
+                                fill_jobs,
+                                0..,
+                            ) |
+                                base_estimate,
+                                *fill_curve_estimate,
+                                *fill_job,
+                                curve_offset,
+                            | {
                                 fill_curve_estimate.* = base_estimate;
-                                const curve_index = encoding.fill.curve_records.items.len;
-                                _ = try encoding.fill.openCurve();
-                                _ = try encoding.fill.addItems(fill_curve_estimate.items);
-                                encoding.fill.closeCurve();
+                                _ = try soup.openCurve();
+                                _ = try soup.addItems(fill_curve_estimate.items);
+                                const source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
+                                const curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
+
+                                fill_job.* = S.Fill{
+                                    .source_curve_index = source_curve_index,
+                                    .curve_index = curve_index,
+                                };
+
+                                soup.closeCurve();
                             }
 
-                            encoding.fill.closeSubpath();
+                            soup.closeSubpath();
                         }
-                        encoding.fill.closePath();
+                        soup.closePath();
                     }
                 }
             }
 
-            for (metadatas) |metadata| {
-                const style = styles[metadata.style_index];
-                const transform = transforms[metadata.transform_index];
+            // for (metadatas) |metadata| {
+            //     const style = styles[metadata.style_index];
+            //     const transform = transforms[metadata.transform_index];
 
-                if (style.stroke) |stroke| {
-                    const fill = stroke.toFill();
-                    const scaled_width = stroke.width * transform.getScale();
-                    const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
+            //     if (style.stroke) |stroke| {
+            //         const fill = stroke.toFill();
+            //         const scaled_width = stroke.width * transform.getScale();
+            //         const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
 
-                    const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
-                    for (path_records) |path_record| {
-                        const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-                        for (subpath_records) |subpath_record| {
-                            const stroke_path_record = try encoding.stroke.openPath();
-                            stroke_path_record.fill = fill;
+            //         const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
+            //         for (path_records) |path_record| {
+            //             const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+            //             for (subpath_records) |subpath_record| {
+            //                 const stroke_path_record = try encoding.stroke.openPath();
+            //                 stroke_path_record.fill = fill;
 
-                            const subpath_base_estimates = encoding.base_estimates[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-                            if (paths.isSubpathCapped(subpath_record)) {
-                                // subpath is capped, so the stroke will be a single subpath
-                                _ = try encoding.stroke.openSubpath();
+            //                 const subpath_base_estimates = encoding.base_estimates[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            //                 if (paths.isSubpathCapped(subpath_record)) {
+            //                     // subpath is capped, so the stroke will be a single subpath
+            //                     _ = try encoding.stroke.openSubpath();
 
-                                const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-                                const left_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
+            //                     const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            //                     const left_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
 
-                                // need two curve records per each curve record in source
-                                // calculate side without caps
-                                for (subpath_base_estimates, left_stroke_curve_estimates) |base_estimate, *stroke_curve_estimate| {
-                                    _ = try encoding.stroke.openCurve();
-                                    stroke_curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(
-                                        estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit),
-                                    );
-                                    _ = try encoding.fill.addItems(stroke_curve_estimate.items);
-                                    encoding.stroke.closeCurve();
-                                }
+            //                     // need two curve records per each curve record in source
+            //                     // calculate side without caps
+            //                     for (subpath_base_estimates, left_stroke_curve_estimates) |base_estimate, *stroke_curve_estimate| {
+            //                         _ = try encoding.stroke.openCurve();
+            //                         stroke_curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(
+            //                             estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit),
+            //                         );
+            //                         _ = try encoding.fill.addItems(stroke_curve_estimate.items);
+            //                         encoding.stroke.closeCurve();
+            //                     }
 
-                                // calculate side with caps
-                                const right_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
-                                for (curve_records, left_stroke_curve_estimates, right_stroke_curve_estimates) |curve_record, base_estimate, *stroke_curve_estimate| {
-                                    _ = try encoding.stroke.openCurve();
-                                    stroke_curve_estimate.* = base_estimate.add(estimateCurveCap(curve_record, stroke, scaled_width));
-                                    _ = try encoding.fill.addItems(stroke_curve_estimate.items);
-                                    encoding.stroke.closeCurve();
-                                }
+            //                     // calculate side with caps
+            //                     const right_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
+            //                     for (curve_records, left_stroke_curve_estimates, right_stroke_curve_estimates) |curve_record, base_estimate, *stroke_curve_estimate| {
+            //                         _ = try encoding.stroke.openCurve();
+            //                         stroke_curve_estimate.* = base_estimate.add(estimateCurveCap(curve_record, stroke, scaled_width));
+            //                         _ = try encoding.fill.addItems(stroke_curve_estimate.items);
+            //                         encoding.stroke.closeCurve();
+            //                     }
 
-                                encoding.stroke.closeSubpath();
-                            } else {
-                                // subpath is not capped, so the stroke will be two subpaths
-                                _ = try encoding.stroke.openSubpath();
-                                const left_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
-                                for (subpath_base_estimates, left_stroke_curve_estimates) |base_estimate, *stroke_curve_estimate| {
-                                    _ = try encoding.stroke.openCurve();
-                                    stroke_curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(
-                                        estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit),
-                                    );
-                                    _ = try encoding.fill.addItems(stroke_curve_estimate.items);
-                                    encoding.stroke.closeCurve();
-                                }
-                                encoding.stroke.closeSubpath();
+            //                     encoding.stroke.closeSubpath();
+            //                 } else {
+            //                     // subpath is not capped, so the stroke will be two subpaths
+            //                     _ = try encoding.stroke.openSubpath();
+            //                     const left_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
+            //                     for (subpath_base_estimates, left_stroke_curve_estimates) |base_estimate, *stroke_curve_estimate| {
+            //                         _ = try encoding.stroke.openCurve();
+            //                         stroke_curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(
+            //                             estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit),
+            //                         );
+            //                         _ = try encoding.fill.addItems(stroke_curve_estimate.items);
+            //                         encoding.stroke.closeCurve();
+            //                     }
+            //                     encoding.stroke.closeSubpath();
 
-                                _ = try encoding.stroke.openSubpath();
-                                const right_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
-                                for (left_stroke_curve_estimates, right_stroke_curve_estimates) |base_estimate, *stroke_curve_estimate| {
-                                    _ = try encoding.stroke.openCurve();
-                                    stroke_curve_estimate.* = base_estimate;
-                                    _ = try encoding.fill.addItems(stroke_curve_estimate.items);
-                                    encoding.stroke.closeCurve();
-                                }
-                                encoding.stroke.closeSubpath();
-                            }
+            //                     _ = try encoding.stroke.openSubpath();
+            //                     const right_stroke_curve_estimates = try encoding.stroke.addCurveEstimates(subpath_base_estimates.len);
+            //                     for (left_stroke_curve_estimates, right_stroke_curve_estimates) |base_estimate, *stroke_curve_estimate| {
+            //                         _ = try encoding.stroke.openCurve();
+            //                         stroke_curve_estimate.* = base_estimate;
+            //                         _ = try encoding.fill.addItems(stroke_curve_estimate.items);
+            //                         encoding.stroke.closeCurve();
+            //                     }
+            //                     encoding.stroke.closeSubpath();
+            //                 }
 
-                            encoding.stroke.closePath();
-                        }
-                    }
-                }
-            }
+            //                 encoding.stroke.closePath();
+            //             }
+            //         }
+            //     }
+            // }
 
-            return encoding;
+            return soup;
         }
 
         fn estimateCurveBase(

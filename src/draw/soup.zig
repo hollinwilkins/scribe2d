@@ -218,7 +218,7 @@ pub fn Soup(comptime T: type) type {
             return try self.fill_jobs.addOne(self.allocator);
         }
 
-        pub fn addFillJobs(self: *@This(), n: usize) ![]T {
+        pub fn addFillJobs(self: *@This(), n: usize) ![]Fill {
             return try self.fill_jobs.addManyAsSlice(self.allocator, n);
         }
 
@@ -226,7 +226,7 @@ pub fn Soup(comptime T: type) type {
             return try self.stroke_uncapped_jobs.addOne(self.allocator);
         }
 
-        pub fn addStrokeUncappedJobs(self: *@This(), n: usize) ![]T {
+        pub fn addStrokeUncappedJobs(self: *@This(), n: usize) ![]StrokeUncapped {
             return try self.stroke_uncapped_jobs.addManyAsSlice(self.allocator, n);
         }
 
@@ -234,7 +234,7 @@ pub fn Soup(comptime T: type) type {
             return try self.stroke_capped_jobs.addOne(self.allocator);
         }
 
-        pub fn addStrokeCappedJobs(self: *@This(), n: usize) ![]T {
+        pub fn addStrokeCappedJobs(self: *@This(), n: usize) ![]StrokeCapped {
             return try self.stroke_capped_jobs.addManyAsSlice(self.allocator, n);
         }
     };
