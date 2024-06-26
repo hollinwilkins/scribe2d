@@ -135,6 +135,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     for (path_records) |path_record| {
                         const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records) |subpath_record| {
+                            const curve_record_len = subpath_record.curve_offsets.size();
                             const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
 
@@ -142,9 +143,9 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                             if (paths.isSubpathCapped(subpath_record)) {
                                 // subpath is capped, so the stroke will be a single subpath
-                                _ = try soup.openSubpath();
+                                const soup_subpath_record = try soup.openSubpath();
 
-                                const left_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
+                                const left_curve_estimates = try soup.addCurveEstimates(curve_record_len);
 
                                 // need two curve records per each curve record in source
                                 // calculate side without caps
@@ -158,7 +159,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 }
 
                                 // calculate side with caps
-                                const right_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
+                                const right_curve_estimates = try soup.addCurveEstimates(curve_record_len);
                                 for (right_curve_estimates, 0..) |*curve_estimate, offset| {
                                     const curve_record = curve_records[curve_records.len - (1 + offset)];
                                     const base_estimate = left_curve_estimates[left_curve_estimates.len - (1 + offset)];
@@ -170,10 +171,22 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 }
 
                                 soup.closeSubpath();
+
+                                const stroke_jobs = try soup.addStrokeJobs(curve_record_len);
+                                for (stroke_jobs, 0..) |*stroke_job, offset| {
+                                    const left_curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
+                                    const right_curve_index = soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
+                                    stroke_job.* = S.StrokeJob{
+                                        .metadata_index = metadata_index,
+                                        .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
+                                        .left_curve_index = left_curve_index,
+                                        .right_curve_index = right_curve_index,
+                                    };
+                                }
                             } else {
                                 // subpath is not capped, so the stroke will be two subpaths
-                                _ = try soup.openSubpath();
-                                const left_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
+                                const left_soup_subpath_record = try soup.openSubpath();
+                                const left_curve_estimates = try soup.addCurveEstimates(curve_record_len);
                                 for (subpath_base_estimates, left_curve_estimates) |base_estimate, *curve_estimate| {
                                     _ = try soup.openCurve();
                                     curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(
@@ -184,8 +197,8 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 }
                                 soup.closeSubpath();
 
-                                _ = try soup.openSubpath();
-                                const right_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
+                                const right_soup_subpath_record = try soup.openSubpath();
+                                const right_curve_estimates = try soup.addCurveEstimates(curve_record_len);
                                 for (right_curve_estimates, 0..) |*curve_estimate, offset| {
                                     const base_estimate = left_curve_estimates[left_curve_estimates.len - (1 + offset)];
                                     curve_estimate.* = base_estimate;
@@ -194,6 +207,18 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     soup.closeCurve();
                                 }
                                 soup.closeSubpath();
+
+                                const stroke_jobs = try soup.addStrokeJobs(curve_record_len);
+                                for (stroke_jobs, 0..) |*stroke_job, offset| {
+                                    const left_curve_index = left_soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
+                                    const right_curve_index = right_soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
+                                    stroke_job.* = S.StrokeJob{
+                                        .metadata_index = metadata_index,
+                                        .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
+                                        .left_curve_index = left_curve_index,
+                                        .right_curve_index = right_curve_index,
+                                    };
+                                }
                             }
 
                             soup.closePath();
