@@ -7,6 +7,7 @@ const flatten = @import("./flatten.zig");
 const scene = @import("./scene.zig");
 const raster = @import("./raster.zig");
 const soup = @import("./soup.zig");
+const soup_estimate = @import("./soup_estimate.zig");
 const soup_raster = @import("./soup_raster.zig");
 const soup_pen = @import("./soup_pen.zig");
 const texture = @import("./texture.zig");
@@ -24,7 +25,7 @@ pub const Segment = path.Segment;
 pub const Rasterizer = raster.Rasterizer;
 
 pub const LineSoup = soup.LineSoup;
-pub const LineSoupEstimator = soup.LineSoupEstimator;
+pub const LineSoupEstimator = soup_estimate.LineSoupEstimator;
 pub const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
 
 pub const SoupPen = soup_pen.SoupPen;
