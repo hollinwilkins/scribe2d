@@ -82,47 +82,63 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                         // const scaled_width = stroke.width * transform.getScale();
                         // const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
                         const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-                        for (curve_records) |curve_record| {
-                            const base_estimate = estimateCurveBase(paths, curve_record, style, transform);
+                        const curve_estimates = try encoding.addBaseEstimates(curve_records.len);
+                        for (curve_records, curve_estimates) |curve_record, *curve_estimate| {
+                            curve_estimate.* = estimateCurveBase(paths, curve_record, style, transform);
                         }
 
                         if (style.isFilled()) {
                             _ = try encoding.fill.openSubpath();
-                            _ = try encoding.fill.addItems(subpath_estimate.fill.items);
-                            (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+
+                            const fill_curve_estimates = try encoding.fill.addCurveEstimates(curve_estimates.len);
+                            for (curve_estimates, fill_curve_estimates) |curve_estimate, *fill_curve_estimate| {
+                                fill_curve_estimate.* = curve_estimate;
+                                _ = try encoding.fill.openCurve();
+                                _ = try encoding.fill.addItems(curve_estimate.items);
+                                encoding.fill.closeCurve();
+                            }
+
                             encoding.fill.closeSubpath();
                         }
 
                         if (style.stroke) |stroke| {
                             if (paths.isSubpathCapped(subpath_record)) {
                                 // subpath is capped, so the stroke will be a single subpath
-                                const stroke_path_record = try encoding.stroke.openPath();
-                                stroke_path_record.fill = stroke.toFill();
-
-                                _ = try encoding.stroke.openSubpath();
-                                _ = try encoding.stroke.addItems(subpath_estimate.stroke.items * 2);
-                                (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
-                                encoding.stroke.closeSubpath();
-
-                                encoding.stroke.closePath();
                             } else {
                                 // subpath is not capped, so the stroke will be two subpaths
-                                const stroke_path_record = try encoding.stroke.openPath();
-                                stroke_path_record.fill = stroke.toFill();
-
-                                _ = try encoding.stroke.openSubpath();
-                                _ = try encoding.stroke.addItems(subpath_estimate.stroke.items);
-                                (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
-                                encoding.stroke.closeSubpath();
-
-                                _ = try encoding.stroke.openSubpath();
-                                _ = try encoding.stroke.addItems(subpath_estimate.stroke.items);
-                                (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
-                                encoding.stroke.closeSubpath();
-
-                                encoding.stroke.closePath();
                             }
                         }
+
+                        // if (style.stroke) |stroke| {
+                        //     if (paths.isSubpathCapped(subpath_record)) {
+                        //         // subpath is capped, so the stroke will be a single subpath
+                        //         const stroke_path_record = try encoding.stroke.openPath();
+                        //         stroke_path_record.fill = stroke.toFill();
+
+                        //         _ = try encoding.stroke.openSubpath();
+                        //         _ = try encoding.stroke.addItems(subpath_estimate.stroke.items * 2);
+                        //         (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+                        //         encoding.stroke.closeSubpath();
+
+                        //         encoding.stroke.closePath();
+                        //     } else {
+                        //         // subpath is not capped, so the stroke will be two subpaths
+                        //         const stroke_path_record = try encoding.stroke.openPath();
+                        //         stroke_path_record.fill = stroke.toFill();
+
+                        //         _ = try encoding.stroke.openSubpath();
+                        //         _ = try encoding.stroke.addItems(subpath_estimate.stroke.items);
+                        //         (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+                        //         encoding.stroke.closeSubpath();
+
+                        //         _ = try encoding.stroke.openSubpath();
+                        //         _ = try encoding.stroke.addItems(subpath_estimate.stroke.items);
+                        //         (try encoding.fill.addSubpathEstimate()).* = subpath_estimate;
+                        //         encoding.stroke.closeSubpath();
+
+                        //         encoding.stroke.closePath();
+                        //     }
+                        // }
                     }
 
                     if (style.isFilled()) {
@@ -163,56 +179,29 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             return estimate;
         }
 
-        fn estimateCurve(
-            paths: PathsData,
+        fn estimateCurveStroke(
+            base_estimate: Estimate,
+            stroke: Style.Stroke,
             curve_record: Paths.CurveRecord,
-            style: Style,
-            transform: TransformF32.Matrix,
             scaled_width: f32,
             offset_fudge: f32,
-        ) CurveEstimate {
-            var estimate = CurveEstimate{};
+        ) Estimate {
+            var estimate = Estimate{};
+            estimate = base_estimate.mulScalar(offset_fudge);
 
-            switch (curve_record.kind) {
-                .line => {
-                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
-                    estimate.base.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineIntersections(points[0], points[1], transform)));
-                    estimate.base.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
+            switch (curve_record.cap) {
+                .start => {
+                    estimate = estimate.add(estimateStrokeCaps(stroke.start_cap, scaled_width, 1));
                 },
-                .quadratic_bezier => {
-                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
-                    estimate.base.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadraticIntersections(points[0], points[1], points[2], transform)));
-                    estimate.base.items += @as(u32, @intFromFloat(Wang.quadratic(
-                        @floatCast(RSQRT_OF_TOL),
-                        points[0],
-                        points[1],
-                        points[2],
-                        transform,
-                    )));
+                .end => {
+                    estimate = estimate.add(estimateStrokeCaps(stroke.end_cap, scaled_width, 1));
+                },
+                .none => {
+                    // do nothing
                 },
             }
 
-            if (style.isFilled()) {
-                estimate.fill = estimate.base;
-            }
-
-            if (style.stroke) |stroke| {
-                estimate.stroke = estimate.base.mulScalar(offset_fudge);
-
-                switch (curve_record.cap) {
-                    .start => {
-                        estimate.stroke = estimate.stroke.add(estimateStrokeCaps(stroke.start_cap, scaled_width, 1));
-                    },
-                    .end => {
-                        estimate.stroke = estimate.stroke.add(estimateStrokeCaps(stroke.end_cap, scaled_width, 1));
-                    },
-                    .none => {
-                        // do nothing
-                    },
-                }
-
-                estimate.stroke = estimate.stroke.add(estimateStrokeJoins(stroke.join, scaled_width, stroke.miter_limit, 1));
-            }
+            estimate = estimate.add(estimateStrokeJoins(stroke.join, scaled_width, stroke.miter_limit, 1));
 
             return estimate;
         }
