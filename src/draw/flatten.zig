@@ -194,7 +194,7 @@ pub const PathFlattener = struct {
             scene.metadata.items,
             scene.styles.items,
             scene.transforms.items,
-            scene.paths,
+            scene.paths.toPathsData(),
         );
     }
 
@@ -215,7 +215,8 @@ pub const PathFlattener = struct {
         errdefer soup.deinit();
 
         for (soup.fill_jobs.items) |fill_job| {
-            const cubic_points = paths.getCubicPoints(fill_job.source_curve_index);
+            const source_curve_record = paths.curve_records[fill_job.source_curve_index];
+            const cubic_points = paths.getCubicPoints(source_curve_record);
             const metadata = metadatas[fill_job.metadata_index];
             const transform = transforms[metadata.transform_index];
             const curve_record = &soup.curve_records.items[fill_job.curve_index];
@@ -724,7 +725,7 @@ pub const PathFlattener = struct {
         // line segments may result in loss of watertightness. The parallel curves of zero
         // length lines add nothing to stroke outlines, but we still may need to draw caps.
         if (std.meta.eql(p0, p1) and std.meta.eql(p0, p2) and std.meta.eql(p0, p3)) {
-            return;
+            return 0;
         }
 
         const tol: f32 = 0.25;

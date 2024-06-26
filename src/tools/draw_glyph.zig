@@ -53,17 +53,8 @@ pub fn main() !void {
     try scene.paths.copyPath(glyph_paths, 0);
     try scene.close();
 
-    var soup = try draw.LineSoupEstimator.estimateSceneAlloc(allocator, scene);
+    var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, scene);
     defer soup.deinit();
-
-    // var flat_data = try draw.PathFlattener.flattenAlloc(
-    //     allocator,
-    //     scene.getMetadatas(),
-    //     scene.paths,
-    //     scene.getStyles(),
-    //     scene.getTransforms(),
-    // );
-    // defer flat_data.deinit();
 
     const dimensions = core.DimensionsU32{
         .width = size * 3,
