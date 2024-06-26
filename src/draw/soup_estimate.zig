@@ -28,6 +28,7 @@ const Scene = scene_module.Scene;
 const Soup = soup_module.Soup;
 const Estimate = soup_module.Estimate;
 const SubpathEstimate = soup_module.SubpathEstimate;
+const CurveEstimate = soup_module.CurveEstimate;
 const SoupEncoding = encoding_module.SoupEncoding;
 const SoupEncoder = encoding_module.SoupEncoder;
 
@@ -78,7 +79,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                     const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                     for (subpath_records) |subpath_record| {
-                        const subpath_estimate = estimateSubpath(paths, subpath_record, style, transform);
+                        // const scaled_width = stroke.width * transform.getScale();
+                        // const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
+                        const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                        for (curve_records) |curve_record| {
+                            const base_estimate = estimateCurveBase(paths, curve_record, style, transform);
+                        }
 
                         if (style.isFilled()) {
                             _ = try encoding.fill.openSubpath();
@@ -128,70 +134,84 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             return encoding;
         }
 
-        fn estimateSubpath(
+        fn estimateCurveBase(
             paths: PathsData,
-            subpath_record: Paths.SubpathRecord,
+            curve_record: Paths.CurveRecord,
+            transform: TransformF32.Matrix,
+        ) Estimate {
+            var estimate = Estimate{};
+
+            switch (curve_record.kind) {
+                .line => {
+                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                    estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineIntersections(points[0], points[1], transform)));
+                    estimate.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
+                },
+                .quadratic_bezier => {
+                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                    estimate.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadraticIntersections(points[0], points[1], points[2], transform)));
+                    estimate.items += @as(u32, @intFromFloat(Wang.quadratic(
+                        @floatCast(RSQRT_OF_TOL),
+                        points[0],
+                        points[1],
+                        points[2],
+                        transform,
+                    )));
+                },
+            }
+
+            return estimate;
+        }
+
+        fn estimateCurve(
+            paths: PathsData,
+            curve_record: Paths.CurveRecord,
             style: Style,
             transform: TransformF32.Matrix,
-        ) SubpathEstimate {
-            if (!(style.isFilled() or style.isStroked())) {
-                return SubpathEstimate{};
+            scaled_width: f32,
+            offset_fudge: f32,
+        ) CurveEstimate {
+            var estimate = CurveEstimate{};
+
+            switch (curve_record.kind) {
+                .line => {
+                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                    estimate.base.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineIntersections(points[0], points[1], transform)));
+                    estimate.base.items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
+                },
+                .quadratic_bezier => {
+                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                    estimate.base.intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadraticIntersections(points[0], points[1], points[2], transform)));
+                    estimate.base.items += @as(u32, @intFromFloat(Wang.quadratic(
+                        @floatCast(RSQRT_OF_TOL),
+                        points[0],
+                        points[1],
+                        points[2],
+                        transform,
+                    )));
+                },
             }
 
-            var intersections: u32 = 0;
-            var items: u32 = 0;
-            var joins: u32 = 0;
-            var lines: u32 = 0;
-            var quadratics: u32 = 0;
-            var last_point: ?PointF32 = null;
-
-            const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-            for (curve_records) |curve_record| {
-                switch (curve_record.kind) {
-                    .line => {
-                        const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
-                        last_point = points[1];
-                        intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateLineIntersections(points[0], points[1], transform)));
-                        joins += 1;
-                        lines += 1;
-                        items += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
-                    },
-                    .quadratic_bezier => {
-                        const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
-                        last_point = points[2];
-                        intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateQuadraticIntersections(points[0], points[1], points[2], transform)));
-                        joins += 1;
-                        quadratics += 1;
-                        items += @as(u32, @intFromFloat(Wang.quadratic(
-                            @floatCast(RSQRT_OF_TOL),
-                            points[0],
-                            points[1],
-                            points[2],
-                            transform,
-                        )));
-                    },
-                }
-            }
-
-            var estimate = SubpathEstimate{};
-            const base_estimate = Estimate{
-                .intersections = intersections,
-                .items = items,
-            };
             if (style.isFilled()) {
-                estimate.fill = base_estimate;
+                estimate.fill = estimate.base;
             }
 
             if (style.stroke) |stroke| {
-                const scaled_width = stroke.width * transform.getScale();
-                const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
+                estimate.stroke = estimate.base.mulScalar(offset_fudge);
 
-                const start_cap_estimate = estimateStrokeCaps(stroke.start_cap, scaled_width, 1);
-                const end_cap_estimate = estimateStrokeCaps(stroke.end_cap, scaled_width, 1);
-                const join_estimate = estimateStrokeJoins(stroke.join, scaled_width, stroke.miter_limit, joins);
+                switch (curve_record.cap) {
+                    .start => {
+                        estimate.stroke = estimate.stroke.add(estimateStrokeCaps(stroke.start_cap, scaled_width, 1));
+                    },
+                    .end => {
+                        estimate.stroke = estimate.stroke.add(estimateStrokeCaps(stroke.end_cap, scaled_width, 1));
+                    },
+                    .none => {
+                        // do nothing
+                    },
+                }
 
-                const stroke_estimate = base_estimate.mulScalar(offset_fudge).add(start_cap_estimate.add(end_cap_estimate).add(join_estimate));
-                estimate.stroke = stroke_estimate;
+                estimate.stroke = estimate.stroke.add(estimateStrokeJoins(stroke.join, scaled_width, stroke.miter_limit, 1));
             }
 
             return estimate;

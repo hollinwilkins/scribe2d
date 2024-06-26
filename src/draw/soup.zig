@@ -42,17 +42,12 @@ pub const Estimate = struct {
     }
 };
 
-pub const SubpathEstimate = struct {
-    fill: Estimate = Estimate{},
-    stroke: Estimate = Estimate{},
-};
-
 pub fn Soup(comptime T: type) type {
     return struct {
         pub const Encoding = struct {
             path_records: []const PathRecord,
             subpath_records: []const SubpathRecord,
-            subpath_estimates: []const SubpathEstimate,
+            curve_estimates: []const Estimate,
             items: []const T,
         };
 
@@ -67,13 +62,13 @@ pub fn Soup(comptime T: type) type {
 
         pub const PathRecordList = std.ArrayListUnmanaged(PathRecord);
         pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
-        pub const SubpathEstimateList = std.ArrayListUnmanaged(SubpathEstimate);
+        pub const EstimateList = std.ArrayListUnmanaged(Estimate);
         pub const ItemList = std.ArrayListUnmanaged(T);
 
         allocator: Allocator,
         path_records: PathRecordList = PathRecordList{},
         subpath_records: SubpathRecordList = SubpathRecordList{},
-        subpath_estimates: SubpathEstimateList = SubpathEstimateList{},
+        curve_estimates: EstimateList = EstimateList{},
         items: ItemList = ItemList{},
 
         pub fn init(allocator: Allocator) @This() {
@@ -85,7 +80,7 @@ pub fn Soup(comptime T: type) type {
         pub fn deinit(self: *@This()) void {
             self.path_records.deinit(self.allocator);
             self.subpath_records.deinit(self.allocator);
-            self.subpath_estimates.deinit(self.allocator);
+            self.curve_estimates.deinit(self.allocator);
             self.items.deinit(self.allocator);
         }
 
@@ -93,7 +88,7 @@ pub fn Soup(comptime T: type) type {
             return Encoding{
                 .path_records = self.path_records.items,
                 .subpath_records = self.subpath_records.items,
-                .subpath_estimates = self.subpath_estimates.items,
+                .curve_estimates = self.curve_estimates.items,
                 .items = self.items.items,
             };
         }
@@ -140,8 +135,12 @@ pub fn Soup(comptime T: type) type {
             self.subpath_records.items[self.subpath_records.items.len - 1].item_offsets.end = @intCast(self.items.items.len);
         }
 
-        pub fn addSubpathEstimate(self: *@This()) !*SubpathEstimate {
-            return try self.subpath_estimates.addOne(self.allocator);
+        pub fn addCurveEstimate(self: *@This()) !*Estimate {
+            return try self.curve_estimates.addOne(self.allocator);
+        }
+
+        pub fn addCurveEstimates(self: *@This(), n: usize) ![]Estimate {
+            return try self.curve_estimates.addManyAsSlice(self.allocator, n);
         }
 
         pub fn addItem(self: *@This()) !*T {
