@@ -40,7 +40,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
     return struct {
         const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
-        pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !E {
+        pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !S {
             return try estimateAlloc(
                 allocator,
                 scene.metadata.items,
