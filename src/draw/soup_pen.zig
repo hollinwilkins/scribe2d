@@ -38,55 +38,48 @@ pub const SoupPen = struct {
     pub fn drawDebug(
         self: @This(),
         line_soup: LineSoup,
-        metadatas: []const PathMetadata,
-        styles: []const Style,
         texture: *TextureUnmanaged,
     ) !soup_raster.LineRasterData {
         var raster_data = try self.rasterizer.rasterizeAlloc(self.allocator, line_soup);
         errdefer raster_data.deinit();
 
-        for (metadatas) |metadata| {
-            const style = styles[metadata.style_index];
-            _ = style;
-            const blend = DEFAULT_BLEND;
-            const path_records = raster_data.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
+        const blend = DEFAULT_BLEND;
 
-            for (path_records) |path_record| {
-                // const color = style.fill.?.color;
-                const color = Color.BLACK;
-                const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+        for (raster_data.path_records.items) |path_record| {
+            // const color = style.fill.?.color;
+            const color = Color.BLACK;
+            const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
 
-                for (merge_fragments) |merge_fragment| {
-                    const pixel = merge_fragment.pixel;
-                    if (pixel.x >= 0 and pixel.y >= 0) {
-                        const intensity = merge_fragment.getIntensity();
-                        const texture_pixel = PointU32{
-                            .x = @intCast(pixel.x),
-                            .y = @intCast(pixel.y),
-                        };
-                        const fragment_color = Color{
-                            .r = color.r,
-                            .g = color.g,
-                            .b = color.b,
-                            .a = color.a * intensity,
-                        };
-                        const texture_color = texture.getPixelUnsafe(texture_pixel);
-                        const blend_color = blend.blend(fragment_color, texture_color);
-                        texture.setPixelUnsafe(texture_pixel, blend_color);
-                    }
+            for (merge_fragments) |merge_fragment| {
+                const pixel = merge_fragment.pixel;
+                if (pixel.x >= 0 and pixel.y >= 0) {
+                    const intensity = merge_fragment.getIntensity();
+                    const texture_pixel = PointU32{
+                        .x = @intCast(pixel.x),
+                        .y = @intCast(pixel.y),
+                    };
+                    const fragment_color = Color{
+                        .r = color.r,
+                        .g = color.g,
+                        .b = color.b,
+                        .a = color.a * intensity,
+                    };
+                    const texture_color = texture.getPixelUnsafe(texture_pixel);
+                    const blend_color = blend.blend(fragment_color, texture_color);
+                    texture.setPixelUnsafe(texture_pixel, blend_color);
                 }
+            }
 
-                const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
-                for (spans) |span| {
-                    for (0..span.x_range.size()) |x_offset| {
-                        const x = @as(i32, @intCast(span.x_range.start)) + @as(i32, @intCast(x_offset));
+            const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
+            for (spans) |span| {
+                for (0..span.x_range.size()) |x_offset| {
+                    const x = @as(i32, @intCast(span.x_range.start)) + @as(i32, @intCast(x_offset));
 
-                        if (x >= 0 and span.y >= 0) {
-                            texture.setPixelUnsafe(core.PointU32{
-                                .x = @intCast(x),
-                                .y = @intCast(span.y),
-                            }, color);
-                        }
+                    if (x >= 0 and span.y >= 0) {
+                        texture.setPixelUnsafe(core.PointU32{
+                            .x = @intCast(x),
+                            .y = @intCast(span.y),
+                        }, color);
                     }
                 }
             }

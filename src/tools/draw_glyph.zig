@@ -44,6 +44,7 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
+        .width = 2.0,
     };
     // style.fill = draw.Style.Fill{
     //     .color = draw.Color.BLACK,
@@ -80,11 +81,17 @@ pub fn main() !void {
     std.debug.print("Line Soup:\n", .{});
     std.debug.print("-----------------------------\n", .{});
     var line_count: usize = 0;
-    for (soup.curve_records.items) |curve_record| {
-        const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
-        for (lines) |line| {
-            std.debug.print("{}: {}\n", .{line_count, line});
-            line_count += 1;
+    for (soup.path_records.items, 0..) |path_record, path_index| {
+        const start_curve_index = soup.subpath_records.items[path_record.subpath_offsets.start].curve_offsets.start;
+        const end_curve_index = soup.subpath_records.items[path_record.subpath_offsets.end - 1].curve_offsets.end;
+
+        std.debug.print("-- Path({}) --\n", .{path_index});
+        for (soup.curve_records.items[start_curve_index..end_curve_index]) |curve_record| {
+            const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+            for (lines) |line| {
+                std.debug.print("{}: {}\n", .{ line_count, line });
+                line_count += 1;
+            }
         }
     }
     std.debug.print("-----------------------------\n", .{});
@@ -117,8 +124,6 @@ pub fn main() !void {
     var pen = draw.SoupPen.init(allocator, &rasterizer);
     var raster_data = try pen.drawDebug(
         soup,
-        scene.metadata.items,
-        scene.styles.items,
         &texture,
     );
     defer raster_data.deinit();
