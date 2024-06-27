@@ -15,6 +15,7 @@ pub fn main() !void {
     const glyph_id: u16 = try std.fmt.parseInt(u16, codepoint_str, 10);
     const size_str = args.next() orelse "16";
     const size = try std.fmt.parseInt(u32, size_str, 10);
+    const output_file = args.next() orelse @panic("need to provide output file");
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -237,5 +238,5 @@ pub fn main() !void {
 
         std.debug.print("==============\n", .{});
     }
-    try image.writeToFile("/tmp/output.png", .png);
+    try image.writeToFile(output_file, .png);
 }
