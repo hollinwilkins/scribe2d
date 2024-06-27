@@ -50,7 +50,7 @@ pub const QUAD_B2: f32 = -0.156;
 pub const QUAD_C2: f32 = 0.16145779359520596;
 pub const ROBUST_EPSILON: f32 = 2e-7;
 
-pub const ERROR_TOLERANCE: f32 = 0.12;
+pub const ERROR_TOLERANCE: f32 = 0.10;
 
 
 pub const EspcRobust = enum(u8) {
