@@ -6,6 +6,7 @@ const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
 const scene_module = @import("./scene.zig");
 const soup_module = @import("./soup.zig");
+const flatten_module = @import("./flatten.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -28,6 +29,7 @@ const Soup = soup_module.Soup;
 const Estimate = soup_module.Estimate;
 const SubpathEstimate = soup_module.SubpathEstimate;
 const CurveEstimate = soup_module.CurveEstimate;
+const ERROR_TOLERANCE = flatten_module.ERROR_TOLERANCE;
 
 pub const ArcEstimate = struct {
     items: u32 = 0,
@@ -391,9 +393,8 @@ pub const LineEstimatorImpl = struct {
 
     fn estimateArc(scaled_width: f32) ArcEstimate {
         const MIN_THETA: f32 = 1e-6;
-        const TOL: f32 = 0.25;
-        const radius = @max(TOL, scaled_width * 0.5);
-        const theta = @max(MIN_THETA, (2.0 * std.math.acos(1.0 - TOL / radius)));
+        const radius = @max(ERROR_TOLERANCE, scaled_width * 0.5);
+        const theta = @max(MIN_THETA, (2.0 * std.math.acos(1.0 - ERROR_TOLERANCE / radius)));
         const arc_lines = @max(2, @as(u32, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
 
         return ArcEstimate{

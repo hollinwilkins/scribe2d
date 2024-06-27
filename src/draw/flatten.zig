@@ -50,6 +50,9 @@ pub const QUAD_B2: f32 = -0.156;
 pub const QUAD_C2: f32 = 0.16145779359520596;
 pub const ROBUST_EPSILON: f32 = 2e-7;
 
+pub const ERROR_TOLERANCE: f32 = 0.12;
+
+
 pub const EspcRobust = enum(u8) {
     normal = 0,
     low_k1 = 1,
@@ -603,9 +606,8 @@ pub const PathFlattener = struct {
 
         var p0 = transform.apply(start);
         var r = start.sub(center);
-        const tol: f32 = 0.25;
-        const radius = @max(tol, (p0.sub(transform.apply(center))).length());
-        const theta = @max(MIN_THETA, (2.0 * std.math.acos(1.0 - tol / radius)));
+        const radius = @max(ERROR_TOLERANCE, (p0.sub(transform.apply(center))).length());
+        const theta = @max(MIN_THETA, (2.0 * std.math.acos(1.0 - ERROR_TOLERANCE / radius)));
 
         // Always output at least one line so that we always draw the chord.
         const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
@@ -660,7 +662,6 @@ pub const PathFlattener = struct {
             return;
         }
 
-        const tol: f32 = 0.25;
         var t0_u: u32 = 0;
         var dt: f32 = 1.0;
         var last_p = p0;
@@ -700,7 +701,7 @@ pub const PathFlattener = struct {
             }
             const actual_dt = t1 - last_t;
             const cubic_params = CubicParams.create(this_p0, this_p1, this_q0, this_q1, actual_dt);
-            if (cubic_params.err * scale <= tol or dt <= SUBDIV_LIMIT) {
+            if (cubic_params.err * scale <= ERROR_TOLERANCE or dt <= SUBDIV_LIMIT) {
                 const euler_params = EulerParams.create(cubic_params.th0, cubic_params.th1);
                 const es = EulerSegment{
                     .p0 = this_p0,
@@ -716,7 +717,7 @@ pub const PathFlattener = struct {
                 const dist_scaled = normalized_offset * es.params.ch;
 
                 // The number of subdivisions for curvature = 1
-                const scale_multiplier = 0.5 * std.math.sqrt1_2 * std.math.sqrt((scale * cubic_params.chord_len / (es.params.ch * tol)));
+                const scale_multiplier = 0.5 * std.math.sqrt1_2 * std.math.sqrt((scale * cubic_params.chord_len / (es.params.ch * ERROR_TOLERANCE)));
                 var a: f32 = 0.0;
                 var b: f32 = 0.0;
                 var integral: f32 = 0.0;
