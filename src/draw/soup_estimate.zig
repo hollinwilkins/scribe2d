@@ -134,7 +134,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                     for (path_records) |path_record| {
                         const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-                        for (subpath_records) |subpath_record| {
+                        for (subpath_records, 0..) |subpath_record, subpath_record_offset| {
                             const curve_record_len = subpath_record.curve_offsets.size();
                             const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
@@ -178,6 +178,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     const right_curve_index = soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = S.StrokeJob{
                                         .metadata_index = metadata_index,
+                                        .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_curve_index = left_curve_index,
                                         .right_curve_index = right_curve_index,
@@ -214,6 +215,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     const right_curve_index = right_soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = S.StrokeJob{
                                         .metadata_index = metadata_index,
+                                        .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_curve_index = left_curve_index,
                                         .right_curve_index = right_curve_index,

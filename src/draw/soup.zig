@@ -72,6 +72,7 @@ pub fn Soup(comptime T: type) type {
         pub const StrokeJob = struct {
             // index in the source Paths struct for the curve data
             metadata_index: u32,
+            source_subpath_index: u32,
             source_curve_index: u32,
             left_curve_index: u32,
             right_curve_index: u32,
