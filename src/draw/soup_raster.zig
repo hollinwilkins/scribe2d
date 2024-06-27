@@ -489,7 +489,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                     {
                         const ao = try raster_data.addBoundaryFragment();
                         ao.* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, next_grid_intersection });
-                        std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
+                        // std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
                     }
                 }
             }

@@ -188,11 +188,6 @@ const LineWriter = struct {
         self.lines[self.index] = line;
         self.index += 1;
     }
-
-    pub fn writeTransform(self: *@This(), line: Line, transform: TransformF32.Matrix) void {
-        self.lines[self.index] = Line.create(transform.apply(line.start), transform.apply(line.end));
-        self.index += 1;
-    }
 };
 
 pub const PathFlattener = struct {

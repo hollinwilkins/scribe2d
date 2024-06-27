@@ -47,11 +47,13 @@ pub const SoupPen = struct {
 
         for (metadatas) |metadata| {
             const style = styles[metadata.style_index];
+            _ = style;
             const blend = DEFAULT_BLEND;
             const path_records = raster_data.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
 
             for (path_records) |path_record| {
-                const color = style.fill.?.color;
+                // const color = style.fill.?.color;
+                const color = Color.BLACK;
                 const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
 
                 for (merge_fragments) |merge_fragment| {
