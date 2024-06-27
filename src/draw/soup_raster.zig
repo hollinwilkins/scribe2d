@@ -476,8 +476,11 @@ pub fn SoupRasterizer(comptime T: type) type {
             const subpath_records = raster_data.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
             for (subpath_records) |subpath_record| {
                 const grid_intersections = raster_data.grid_intersections.items[subpath_record.intersection_offsets.start..subpath_record.intersection_offsets.end];
+                if (grid_intersections.len == 0) {
+                    continue;
+                }
+                
                 std.debug.assert(grid_intersections.len > 0);
-
                 for (grid_intersections, 0..) |*grid_intersection, index| {
                     const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
 

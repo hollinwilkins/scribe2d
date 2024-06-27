@@ -186,6 +186,10 @@ const LineWriter = struct {
     mark_index: usize = 0,
 
     pub fn write(self: *@This(), line: Line) void {
+        if (std.meta.eql(line.start, line.end)) {
+            return;
+        }
+
         self.lines[self.index] = line;
         self.index += 1;
     }
@@ -458,7 +462,9 @@ pub const PathFlattener = struct {
             );
 
             left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
+            // left_curve_record.item_offsets.start = left_curve_record.item_offsets.end;
             right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
+            // right_curve_record.item_offsets.start = right_curve_record.item_offsets.end;
 
             right_line_writer.reverseAfterMark();
         }

@@ -56,7 +56,7 @@ pub fn main() !void {
     defer soup.deinit();
 
     const dimensions = core.DimensionsU32{
-        .width = size * 3,
+        .width = size,
         .height = size,
     };
 
