@@ -42,14 +42,12 @@ pub fn main() !void {
     defer scene.deinit();
 
     const style = try scene.pushStyle();
-    style.fill = draw.Style.Fill{
-        .color = draw.Color{
-            .r = 0.0,
-            .g = 0.0,
-            .b = 0.0,
-            .a = 1.0,
-        },
+    style.stroke = draw.Style.Stroke{
+        .color = draw.Color.BLACK,
     };
+    // style.fill = draw.Style.Fill{
+    //     .color = draw.Color.BLACK,
+    // };
     try scene.paths.copyPath(glyph_paths, 0);
     try scene.close();
 

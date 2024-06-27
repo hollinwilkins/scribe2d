@@ -145,11 +145,13 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 // subpath is capped, so the stroke will be a single subpath
                                 const soup_subpath_record = try soup.openSubpath();
 
-                                const left_curve_estimates = try soup.addCurveEstimates(curve_record_len);
+                                const curve_estimates = try soup.addCurveEstimates(curve_record_len * 2);
+                                const left_curve_estimates = curve_estimates[0..curve_record_len];
+                                const right_curve_estimates = curve_estimates[curve_record_len..];
 
                                 // need two curve records per each curve record in source
                                 // calculate side without caps
-                                for (subpath_base_estimates, left_curve_estimates) |base_estimate, *curve_estimate| {
+                                for (subpath_base_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
                                     _ = try soup.openCurve();
                                     curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(
                                         estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit),
@@ -159,12 +161,14 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 }
 
                                 // calculate side with caps
-                                const right_curve_estimates = try soup.addCurveEstimates(curve_record_len);
-                                for (right_curve_estimates, 0..) |*curve_estimate, offset| {
+                                for (left_curve_estimates, 0..) |*curve_estimate, offset| {
                                     const curve_record = curve_records[curve_records.len - (1 + offset)];
-                                    const base_estimate = left_curve_estimates[left_curve_estimates.len - (1 + offset)];
-                                    curve_estimate.* = base_estimate;
-                                    curve_estimate.* = base_estimate.add(estimateCurveCap(curve_record, stroke, scaled_width));
+                                    const base_estimate = right_curve_estimates[left_curve_estimates.len - (1 + offset)];
+                                    curve_estimate.* = base_estimate.add(estimateCurveCap(
+                                        curve_record,
+                                        stroke,
+                                        scaled_width,
+                                    ));
                                     _ = try soup.openCurve();
                                     _ = try soup.addItems(curve_estimate.items);
                                     soup.closeCurve();
@@ -187,8 +191,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                             } else {
                                 // subpath is not capped, so the stroke will be two subpaths
                                 const left_soup_subpath_record = try soup.openSubpath();
-                                const left_curve_estimates = try soup.addCurveEstimates(curve_record_len);
-                                for (subpath_base_estimates, left_curve_estimates) |base_estimate, *curve_estimate| {
+
+                                const curve_estimates = try soup.addCurveEstimates(curve_record_len * 2);
+                                const left_curve_estimates = curve_estimates[0..curve_record_len];
+                                const right_curve_estimates = curve_estimates[curve_record_len..];
+
+                                for (subpath_base_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
                                     _ = try soup.openCurve();
                                     curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(
                                         estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit),
@@ -199,9 +207,8 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 soup.closeSubpath();
 
                                 const right_soup_subpath_record = try soup.openSubpath();
-                                const right_curve_estimates = try soup.addCurveEstimates(curve_record_len);
-                                for (right_curve_estimates, 0..) |*curve_estimate, offset| {
-                                    const base_estimate = left_curve_estimates[left_curve_estimates.len - (1 + offset)];
+                                for (left_curve_estimates, 0..) |*curve_estimate, offset| {
+                                    const base_estimate = right_curve_estimates[left_curve_estimates.len - (1 + offset)];
                                     curve_estimate.* = base_estimate;
                                     _ = try soup.openCurve();
                                     _ = try soup.addItems(curve_estimate.items);

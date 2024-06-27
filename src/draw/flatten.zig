@@ -146,7 +146,7 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
 }
 
 fn readNeighborSegment(paths: PathsData, curve_range: RangeU32, index: u32) NeighborSegment {
-    const index_shifted = (index - curve_range.start) % curve_range.end + curve_range.start;
+    const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
     const curve_record = paths.curve_records[index_shifted];
     const cubic_points = paths.getCubicPoints(curve_record);
     const tangent = cubicStartTangent(
