@@ -423,7 +423,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                         .x = @floatFromInt(bounds.max.x + 1),
                         .y = @floatFromInt(bounds.max.y + 1),
                     });
-
+                    
                     (try raster_data.addGridIntersection()).* = GridIntersection.create((Intersection{
                         .t = 0.0,
                         .point = start_point,

@@ -56,7 +56,7 @@ pub fn main() !void {
     var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, scene);
     defer soup.deinit();
 
-    // soup.path_records.items = soup.path_records.items[2..3];
+    soup.path_records.items = soup.path_records.items[2..3];
     // soup.path_records.items[0].subpath_offsets.start += 1;
 
     const dimensions = core.DimensionsU32{
@@ -100,11 +100,11 @@ pub fn main() !void {
                         std.debug.print("{}: {}\n", .{ line_count, line });
                         line_count += 1;
 
-                        const offset = 8.0;
-                        line.start.x += offset;
-                        line.start.y += offset;
-                        line.end.x += offset;
-                        line.end.y += offset;
+                        // const offset = 8.0;
+                        // line.start.x += offset;
+                        // line.start.y += offset;
+                        // line.end.x += offset;
+                        // line.end.y += offset;
                     }
                 }
             }
@@ -183,38 +183,38 @@ pub fn main() !void {
         std.debug.print("-----------------------------\n", .{});
     }
 
-    // {
-    //     std.debug.print("\n", .{});
-    //     std.debug.print("Grid Intersections:\n", .{});
-    //     std.debug.print("-----------------------------\n", .{});
-    //     for (raster_data.grid_intersections.items) |grid_intersection| {
-    //         std.debug.print("({},{}): T({}), ({},{})\n", .{
-    //             grid_intersection.pixel.x,
-    //             grid_intersection.pixel.y,
-    //             grid_intersection.intersection.t,
-    //             grid_intersection.intersection.point.x,
-    //             grid_intersection.intersection.point.y,
-    //         });
-    //     }
-    //     std.debug.print("-----------------------------\n", .{});
-    // }
+    {
+        std.debug.print("\n", .{});
+        std.debug.print("Grid Intersections:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        for (raster_data.grid_intersections.items) |grid_intersection| {
+            std.debug.print("({},{}): T({}), ({},{})\n", .{
+                grid_intersection.pixel.x,
+                grid_intersection.pixel.y,
+                grid_intersection.intersection.t,
+                grid_intersection.intersection.point.x,
+                grid_intersection.intersection.point.y,
+            });
+        }
+        std.debug.print("-----------------------------\n", .{});
+    }
 
-    // {
-    //     std.debug.print("\n", .{});
-    //     std.debug.print("Boundary Fragments:\n", .{});
-    //     std.debug.print("-----------------------------\n", .{});
-    //     for (raster_data.boundary_fragments.items) |boundary_fragment| {
-    //         std.debug.print("({},{}): ({},{}), ({},{})\n", .{
-    //             boundary_fragment.pixel.x,
-    //             boundary_fragment.pixel.y,
-    //             boundary_fragment.intersections[0].point.x,
-    //             boundary_fragment.intersections[0].point.y,
-    //             boundary_fragment.intersections[1].point.x,
-    //             boundary_fragment.intersections[1].point.y,
-    //         });
-    //     }
-    //     std.debug.print("-----------------------------\n", .{});
-    // }
+    {
+        std.debug.print("\n", .{});
+        std.debug.print("Boundary Fragments:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        for (raster_data.boundary_fragments.items) |boundary_fragment| {
+            std.debug.print("({},{}): ({},{}), ({},{})\n", .{
+                boundary_fragment.pixel.x,
+                boundary_fragment.pixel.y,
+                boundary_fragment.intersections[0].point.x,
+                boundary_fragment.intersections[0].point.y,
+                boundary_fragment.intersections[1].point.x,
+                boundary_fragment.intersections[1].point.y,
+            });
+        }
+        std.debug.print("-----------------------------\n", .{});
+    }
 
     {
         std.debug.print("\n============== Boundary Texture\n\n", .{});

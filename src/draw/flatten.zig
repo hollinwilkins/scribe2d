@@ -193,6 +193,11 @@ const LineWriter = struct {
             return;
         }
 
+        // TODO: remove this
+        if (line.start.x == 5.4773743e1 or line.end.x == 5.4773743e1) {
+            std.debug.assert(false);
+        }
+
         self.lines[self.index] = line;
         self.index += 1;
     }
@@ -783,7 +788,8 @@ pub const PathFlattener = struct {
 
                     const l0 = if (offset >= 0.0) lp0 else lp1;
                     const l1 = if (offset >= 0.0) lp1 else lp0;
-                    line_writer.write(Line.create(transform.apply(l0), transform.apply(l1)));
+                    const line = Line.create(transform.apply(l0), transform.apply(l1));
+                    line_writer.write(line);
 
                     lp0 = lp1;
                 }
