@@ -459,12 +459,8 @@ pub const PathFlattener = struct {
 
             left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
             right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
-            // right_curve_record.item_offsets.end = right_curve_record.item_offsets.start;
 
-            // right_line_writer.reverseMark();
             right_line_writer.reverseAfterMark();
-            // right_line_writer.reverse();
-            right_line_writer.debug();
         }
 
         return soup;
