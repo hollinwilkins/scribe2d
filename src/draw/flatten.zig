@@ -180,6 +180,21 @@ pub const FlatData = struct {
     }
 };
 
+const LineWriter = struct {
+    lines: []Line,
+    index: usize = 0,
+
+    pub fn write(self: *@This(), line: Line) void {
+        self.lines[self.index] = line;
+        self.index += 1;
+    }
+
+    pub fn writeTransform(self: *@This(), line: Line, transform: TransformF32.Matrix) void {
+        self.lines[self.index] = Line.create(transform.apply(line.start), transform.apply(line.end));
+        self.index += 1;
+    }
+};
+
 pub const PathFlattener = struct {
     const PathRecord = struct {
         path_index: u32,
@@ -222,16 +237,19 @@ pub const PathFlattener = struct {
             const curve_record = &soup.curve_records.items[fill_job.curve_index];
             const fill_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
 
-            const line_count = try flattenEuler(
+            var line_writer = LineWriter{
+                .lines = fill_items,
+            };
+            try flattenEuler(
                 cubic_points,
                 transform,
                 0.0,
                 cubic_points.point0,
                 cubic_points.point3,
-                fill_items,
+                &line_writer,
             );
 
-            curve_record.item_offsets.end = curve_record.item_offsets.start + line_count;
+            curve_record.item_offsets.end = curve_record.item_offsets.start + @as(u32, @intCast(line_writer.index));
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
@@ -245,15 +263,14 @@ pub const PathFlattener = struct {
             const right_curve_record = &soup.curve_records.items[stroke_job.right_curve_index];
             const left_stroke_lines = soup.items.items[left_curve_record.item_offsets.start..left_curve_record.item_offsets.end];
             const right_stroke_lines = soup.items.items[right_curve_record.item_offsets.start..right_curve_record.item_offsets.end];
+            var left_line_writer = LineWriter{ .lines = left_stroke_lines };
+            var right_line_writer = LineWriter{ .lines = right_stroke_lines };
 
             const offset = 0.5 * stroke.width;
             const offset_point = PointF32{
                 .x = offset,
                 .y = offset,
             };
-
-            var left_line_count: u32 = 0;
-            var right_line_count: u32 = 0;
 
             const source_subpath_record = paths.subpath_records[stroke_job.source_subpath_index];
             const neighbor = readNeighborSegment(paths, source_subpath_record.curve_offsets, @intCast(stroke_job.source_curve_index + 1));
@@ -299,45 +316,45 @@ pub const PathFlattener = struct {
 
             if (source_curve_record.cap == .start) {
                 // draw start cap on left side
-                left_line_count += try drawCap(
+                try drawCap(
                     stroke.start_cap,
                     cubic_points.point0,
                     cubic_points.point0.sub(n_start),
                     cubic_points.point0.add(n_start),
                     offset_tangent.negate(),
                     transform,
-                    left_stroke_lines[left_line_count..],
+                    &left_line_writer,
                 );
             }
 
-            left_line_count += try flattenEuler(
+            try flattenEuler(
                 cubic_points,
                 transform,
                 offset,
                 cubic_points.point0.add(n_start),
                 cubic_points.point3.add(n_prev),
-                left_stroke_lines[left_line_count..],
+                &left_line_writer,
             );
 
-            right_line_count += try flattenEuler(
+            try flattenEuler(
                 cubic_points,
                 transform,
                 -offset,
                 cubic_points.point0.sub(n_start),
                 cubic_points.point3.sub(n_prev),
-                right_stroke_lines[right_line_count..],
+                &right_line_writer,
             );
 
             if (source_curve_record.cap == .end) {
                 // draw end cap on left side
-                left_line_count += try drawCap(
+                try drawCap(
                     stroke.end_cap,
                     cubic_points.point3,
                     cubic_points.point3.add(n_prev),
                     cubic_points.point3.sub(n_prev),
                     offset_tangent,
                     transform,
-                    left_stroke_lines[left_line_count..],
+                    &left_line_writer,
                 );
             } else {
                 try drawJoin(
@@ -348,19 +365,17 @@ pub const PathFlattener = struct {
                     n_prev,
                     n_next,
                     transform,
-                    left_stroke_lines[left_line_count..],
-                    right_stroke_lines[right_line_count..],
-                    &left_line_count,
-                    &right_line_count,
+                    &left_line_writer,
+                    &right_line_writer,
                 );
             }
 
-            left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + left_line_count;
-            right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + right_line_count;
+            left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
+            right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
 
             std.mem.reverse(
                 Line,
-                right_stroke_lines[0..right_line_count],
+                right_stroke_lines[0..right_curve_record.item_offsets.size()],
             );
         }
 
@@ -375,10 +390,8 @@ pub const PathFlattener = struct {
         n_prev: PointF32,
         n_next: PointF32,
         transform: TransformF32.Matrix,
-        left_lines: []Line,
-        right_lines: []Line,
-        left_line_count_out: *u32,
-        right_line_count_out: *u32,
+        left_line_writer: *LineWriter,
+        right_line_writer: *LineWriter,
     ) !void {
         var front0 = p0.add(n_prev);
         const front1 = p0.add(n_next);
@@ -387,16 +400,12 @@ pub const PathFlattener = struct {
 
         const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
         const d = tan_prev.dot(tan_next);
-        var left_line_count: u32 = 0;
-        var right_line_count: u32 = 0;
 
         switch (stroke.join) {
             .bevel => {
                 if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
-                    left_lines[left_line_count] = Line.create(transform.apply(front0), transform.apply(front1));
-                    left_line_count += 1;
-                    right_lines[right_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
-                    right_line_count += 1;
+                    left_line_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
+                    right_line_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
                 }
             },
             .miter => {
@@ -417,53 +426,43 @@ pub const PathFlattener = struct {
                     });
 
                     if (is_backside) {
-                        right_lines[right_line_count] = Line.create(transform.apply(p), transform.apply(miter_pt));
-                        right_line_count += 1;
+                        right_line_writer.write(Line.create(transform.apply(p), transform.apply(miter_pt)));
                         back0 = miter_pt;
                     } else {
-                        left_lines[left_line_count] = Line.create(transform.apply(p), transform.apply(miter_pt));
-                        left_line_count += 1;
+                        left_line_writer.write(Line.create(transform.apply(p), transform.apply(miter_pt)));
                         front0 = miter_pt;
                     }
                 }
 
-                left_lines[left_line_count] = Line.create(transform.apply(front0), transform.apply(front1));
-                left_line_count += 1;
-
-                right_lines[right_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
-                right_line_count += 1;
+                left_line_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
+                right_line_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
             },
             .round => {
                 if (cr > 0.0) {
-                    right_line_count += try flattenArc(
+                    try flattenArc(
                         back0,
                         back1,
                         p0,
                         @abs(std.math.atan2(cr, d)),
                         transform,
-                        right_lines[right_line_count..],
+                        right_line_writer,
                     );
 
-                    left_lines[left_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
-                    left_line_count += 1;
+                    left_line_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
                 } else {
-                    left_line_count += try flattenArc(
+                    try flattenArc(
                         front0,
                         front1,
                         p0,
                         @abs(std.math.atan2(cr, d)),
                         transform,
-                        left_lines[left_line_count..],
+                        left_line_writer,
                     );
 
-                    right_lines[right_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
-                    right_line_count += 1;
+                    right_line_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
                 }
             },
         }
-
-        left_line_count_out.* += left_line_count;
-        right_line_count_out.* += right_line_count;
     }
 
     fn drawCap(
@@ -473,8 +472,8 @@ pub const PathFlattener = struct {
         cap1: PointF32,
         offset_tangent: PointF32,
         transform: TransformF32.Matrix,
-        lines: []Line,
-    ) !u32 {
+        line_writer: *LineWriter,
+    ) !void {
         if (cap_style == .round) {
             return try flattenArc(
                 cap0,
@@ -482,31 +481,24 @@ pub const PathFlattener = struct {
                 point,
                 std.math.pi,
                 transform,
-                lines,
+                line_writer,
             );
         }
 
-        var line_count: u32 = 0;
         var start = cap0;
         var end = cap1;
         if (cap_style == .square) {
             const v = offset_tangent;
             const p0 = start.add(v);
             const p1 = end.add(v);
-            lines[line_count] = Line.create(transform.apply(start), transform.apply(p0));
-            line_count += 1;
-
-            lines[line_count] = Line.create(transform.apply(p1), transform.apply(end));
-            line_count += 1;
+            line_writer.write(Line.create(transform.apply(start), transform.apply(p0)));
+            line_writer.write(Line.create(transform.apply(p1), transform.apply(end)));
 
             start = p0;
             end = p1;
         }
 
-        lines[line_count] = Line.create(transform.apply(start), transform.apply(end));
-        line_count += 1;
-
-        return line_count;
+        line_writer.write(Line.create(transform.apply(start), transform.apply(end)));
     }
 
     fn flattenArc(
@@ -515,8 +507,8 @@ pub const PathFlattener = struct {
         center: PointF32,
         angle: f32,
         transform: TransformF32.Matrix,
-        lines: []Line,
-    ) !u32 {
+        line_writer: *LineWriter,
+    ) !void {
         const MIN_THETA: f32 = 0.0001;
 
         var p0 = transform.apply(start);
@@ -535,17 +527,15 @@ pub const PathFlattener = struct {
             .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
         };
 
-        for (0..n_lines - 1) |index| {
+        for (0..n_lines - 1) |_| {
             r = rot.apply(r);
             const p1 = transform.apply(center.add(r));
-            lines[index] = Line.create(p0, p1);
+            line_writer.write(Line.create(p0, p1));
             p0 = p1;
         }
 
         const p1 = transform.apply(end);
-        lines[n_lines - 1] = Line.create(p0, p1);
-
-        return n_lines;
+        line_writer.write(Line.create(p0, p1));
     }
 
     fn flattenEuler(
@@ -554,8 +544,8 @@ pub const PathFlattener = struct {
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
-        lines: []Line,
-    ) !u32 {
+        line_writer: *LineWriter,
+    ) !void {
         const p0 = transform.apply(cubic_points.point0);
         const p1 = transform.apply(cubic_points.point1);
         const p2 = transform.apply(cubic_points.point2);
@@ -576,7 +566,7 @@ pub const PathFlattener = struct {
         // line segments may result in loss of watertightness. The parallel curves of zero
         // length lines add nothing to stroke outlines, but we still may need to draw caps.
         if (std.meta.eql(p0, p1) and std.meta.eql(p0, p2) and std.meta.eql(p0, p3)) {
-            return 0;
+            return;
         }
 
         const tol: f32 = 0.25;
@@ -593,7 +583,6 @@ pub const PathFlattener = struct {
         var last_t: f32 = 0.0;
         var lp0 = t_start;
 
-        var line_count: u32 = 0;
         while (true) {
             const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
             if (t0 == 1.0) {
@@ -702,8 +691,7 @@ pub const PathFlattener = struct {
 
                     const l0 = if (offset >= 0.0) lp0 else lp1;
                     const l1 = if (offset >= 0.0) lp1 else lp0;
-                    lines[line_count] = Line.create(transform.apply(l0), transform.apply(l1));
-                    line_count += 1;
+                    line_writer.write(Line.create(transform.apply(l0), transform.apply(l1)));
 
                     lp0 = lp1;
                 }
@@ -726,8 +714,6 @@ pub const PathFlattener = struct {
                 dt *= 0.5;
             }
         }
-
-        return line_count;
     }
 
     // Evaluate both the point and derivative of a cubic bezier.
