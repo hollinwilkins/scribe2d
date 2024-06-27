@@ -185,8 +185,36 @@ const LineWriter = struct {
     index: usize = 0,
 
     pub fn write(self: *@This(), line: Line) void {
+        var previous_line: ?Line = null;
+        var breakit: bool = false;
+        if (self.index > 0) {
+            previous_line = self.lines[self.index - 1];
+            const align1 = previous_line.?.end.x == line.start.x and previous_line.?.end.y == line.start.y;
+            const align2 = previous_line.?.start.x == line.end.x and previous_line.?.start.y == line.end.y;
+            breakit = !(align1 or align2);
+            if (breakit) {
+                std.debug.assert(true);
+                std.debug.assert(true);
+            }
+        }
+
         self.lines[self.index] = line;
         self.index += 1;
+
+        std.debug.print("===========\n", .{});
+        for (self.lines[0..self.index]) |l| {
+            std.debug.print("{}\n", .{l});
+        }
+        std.debug.print("===========\n", .{});
+
+        if (breakit) {
+            std.debug.assert(true);
+            std.debug.assert(true);
+        }
+    }
+
+    pub fn reverse(self: *@This()) void {
+        std.mem.reverse(Line, self.lines[0..self.index]);
     }
 };
 
@@ -368,10 +396,7 @@ pub const PathFlattener = struct {
             left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
             right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
 
-            std.mem.reverse(
-                Line,
-                right_stroke_lines[0..right_curve_record.item_offsets.size()],
-            );
+            right_line_writer.reverse();
         }
 
         return soup;
@@ -443,7 +468,7 @@ pub const PathFlattener = struct {
                         right_line_writer,
                     );
 
-                    left_line_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
+                    left_line_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
                 } else {
                     try flattenArc(
                         front0,
@@ -522,7 +547,8 @@ pub const PathFlattener = struct {
             .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
         };
 
-        for (0..n_lines - 1) |_| {
+        for (0..n_lines - 1) |n| {
+            _ = n;
             r = rot.apply(r);
             const p1 = transform.apply(center.add(r));
             line_writer.write(Line.create(p0, p1));
