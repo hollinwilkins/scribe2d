@@ -63,42 +63,50 @@ pub fn main() !void {
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
 
-    // std.debug.print("\n", .{});
-    // std.debug.print("Curves:\n", .{});
-    // std.debug.print("-----------------------------\n", .{});
-    // const path = glyph_paths.getPathRecords()[0];
-    // const subpath_records = glyph_paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
-    // for (subpath_records, 0..) |subpath_record, subpath_index| {
-    //     const curve_records = glyph_paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-    //     for (curve_records, 0..) |curve_record, curve_index| {
-    //         const curve = glyph_paths.getCurve(curve_record);
-    //         std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
-    //     }
-    // }
-    // std.debug.print("-----------------------------\n", .{});
-
-    std.debug.print("\n", .{});
-    std.debug.print("Line Soup:\n", .{});
-    std.debug.print("-----------------------------\n", .{});
-    var line_count: usize = 0;
-    for (soup.path_records.items, 0..) |path_record, path_index| {
-        std.debug.print("-- Path({}) --\n", .{path_index});
-
-        const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+    {
+        std.debug.print("\n", .{});
+        std.debug.print("Curves:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        const path = glyph_paths.getPathRecords()[0];
+        const subpath_records = glyph_paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
         for (subpath_records, 0..) |subpath_record, subpath_index| {
-            std.debug.print("-- Subpath({}) --\n", .{subpath_index});
-            const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-            for (curve_records) |curve_record| {
-                const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
-                for (lines) |line| {
-                    std.debug.print("{}: {}\n", .{ line_count, line });
-                    line_count += 1;
+            const curve_records = glyph_paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            for (curve_records, 0..) |curve_record, curve_index| {
+                const curve = glyph_paths.getCurve(curve_record);
+                std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
+            }
+        }
+        std.debug.print("-----------------------------\n", .{});
+    }
+    {
+        std.debug.print("\n", .{});
+        std.debug.print("Line Soup:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        var line_count: usize = 0;
+        for (soup.path_records.items, 0..) |path_record, path_index| {
+            std.debug.print("-- Path({}) --\n", .{path_index});
+
+            const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+            for (subpath_records, 0..) |subpath_record, subpath_index| {
+                std.debug.print("-- Subpath({}) --\n", .{subpath_index});
+                const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                for (curve_records) |curve_record| {
+                    const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+                    for (lines) |*line| {
+                        std.debug.print("{}: {}\n", .{ line_count, line });
+                        line_count += 1;
+
+                        const offset = 8.0;
+                        line.start.x += offset;
+                        line.start.y += offset;
+                        line.end.x += offset;
+                        line.end.y += offset;
+                    }
                 }
             }
         }
+        std.debug.print("-----------------------------\n", .{});
     }
-    std.debug.print("-----------------------------\n", .{});
-
     const rasterizer = draw.LineSoupRasterizer.create(&half_planes);
 
     zstbi.init(allocator);
@@ -130,43 +138,60 @@ pub fn main() !void {
         &texture,
     );
     defer raster_data.deinit();
-
-    // std.debug.print("\n", .{});
-    // std.debug.print("Grid Intersections:\n", .{});
-    // std.debug.print("-----------------------------\n", .{});
-    // for (raster_data.grid_intersections.items) |grid_intersection| {
-    //     std.debug.print("{}\n", .{grid_intersection});
-    // }
-    // std.debug.print("-----------------------------\n", .{});
-
-    // std.debug.print("\n", .{});
-    // std.debug.print("Boundary Fragments:\n", .{});
-    // std.debug.print("-----------------------------\n", .{});
-    // for (raster_data.boundary_fragments.items) |boundary_fragment| {
-    //     std.debug.print("{}\n", .{boundary_fragment});
-    // }
-    // std.debug.print("-----------------------------\n", .{});
-
-    std.debug.print("\n============== Boundary Texture\n\n", .{});
-    for (0..texture.dimensions.height) |y| {
-        std.debug.print("{:0>4}: ", .{y});
-        for (0..texture.dimensions.height) |x| {
-            const pixel = texture.getPixelUnsafe(core.PointU32{
-                .x = @intCast(x),
-                .y = @intCast(y),
-            });
-
-            if (pixel.r < 1.0) {
-                std.debug.print("#", .{});
-            } else {
-                std.debug.print(";", .{});
-            }
-        }
-
+    {
         std.debug.print("\n", .{});
+        std.debug.print("Grid Intersections:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        for (raster_data.grid_intersections.items) |grid_intersection| {
+            std.debug.print("({},{}): T({}), ({},{})\n", .{
+                grid_intersection.pixel.x,
+                grid_intersection.pixel.y,
+                grid_intersection.intersection.t,
+                grid_intersection.intersection.point.x,
+                grid_intersection.intersection.point.y,
+            });
+        }
+        std.debug.print("-----------------------------\n", .{});
     }
 
-    std.debug.print("==============\n", .{});
+    {
+        std.debug.print("\n", .{});
+        std.debug.print("Boundary Fragments:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        for (raster_data.boundary_fragments.items) |boundary_fragment| {
+            std.debug.print("({},{}): ({},{}), ({},{})\n", .{
+                boundary_fragment.pixel.x,
+                boundary_fragment.pixel.y,
+                boundary_fragment.intersections[0].point.x,
+                boundary_fragment.intersections[0].point.y,
+                boundary_fragment.intersections[1].point.x,
+                boundary_fragment.intersections[1].point.y,
+            });
+        }
+        std.debug.print("-----------------------------\n", .{});
+    }
 
+    {
+        std.debug.print("\n============== Boundary Texture\n\n", .{});
+        for (0..texture.dimensions.height) |y| {
+            std.debug.print("{:0>4}: ", .{y});
+            for (0..texture.dimensions.height) |x| {
+                const pixel = texture.getPixelUnsafe(core.PointU32{
+                    .x = @intCast(x),
+                    .y = @intCast(y),
+                });
+
+                if (pixel.r < 1.0) {
+                    std.debug.print("#", .{});
+                } else {
+                    std.debug.print(";", .{});
+                }
+            }
+
+            std.debug.print("\n", .{});
+        }
+
+        std.debug.print("==============\n", .{});
+    }
     try image.writeToFile("/tmp/output.png", .png);
 }
