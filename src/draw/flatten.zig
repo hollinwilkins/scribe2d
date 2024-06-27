@@ -254,30 +254,6 @@ pub const PathFlattener = struct {
 
             var left_line_count: u32 = 0;
             var right_line_count: u32 = 0;
-            if (source_curve_record.cap == .start) {
-                // draw start cap on left side
-                const tangent = cubicStartTangent(
-                    cubic_points.point0,
-                    cubic_points.point1,
-                    cubic_points.point2,
-                    cubic_points.point3,
-                );
-                const offset_tangent = tangent.normalizeUnsafe().mulScalar(offset);
-                const n = PointF32{
-                    .x = -offset_tangent.y,
-                    .y = offset_tangent.x,
-                };
-
-                left_line_count += try drawCap(
-                    stroke.start_cap,
-                    cubic_points.point0,
-                    cubic_points.point0.sub(n),
-                    cubic_points.point0.add(n),
-                    offset_tangent.negate(),
-                    transform,
-                    left_stroke_lines[left_line_count..],
-                );
-            }
 
             const source_subpath_record = paths.subpath_records[stroke_job.source_subpath_index];
             const neighbor = readNeighborSegment(paths, source_subpath_record.curve_offsets, @intCast(stroke_job.source_curve_index + 1));
@@ -306,10 +282,10 @@ pub const PathFlattener = struct {
                 };
             }
 
-            const n_start = offset_point.mul(PointF32{
+            const n_start = offset_point.mul((PointF32{
                 .x = -tan_start.y,
                 .y = tan_start.x,
-            }).normalizeUnsafe();
+            }).normalizeUnsafe());
             const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
             const n_prev = PointF32{
                 .x = -offset_tangent.y,
@@ -320,6 +296,19 @@ pub const PathFlattener = struct {
                 .x = -tan_next_norm.y,
                 .y = tan_next_norm.x,
             });
+
+            if (source_curve_record.cap == .start) {
+                // draw start cap on left side
+                left_line_count += try drawCap(
+                    stroke.start_cap,
+                    cubic_points.point0,
+                    cubic_points.point0.sub(n_start),
+                    cubic_points.point0.add(n_start),
+                    offset_tangent.negate(),
+                    transform,
+                    left_stroke_lines[left_line_count..],
+                );
+            }
 
             left_line_count += try flattenEuler(
                 cubic_points,
@@ -351,65 +340,24 @@ pub const PathFlattener = struct {
                     left_stroke_lines[left_line_count..],
                 );
             } else {
-                const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
-                if (cr <= 0.0) {
-                    // left side
-                    left_line_count += try drawJoin(
-                        stroke,
-                        cubic_points.point3,
-                        tan_prev,
-                        tan_next,
-                        n_prev,
-                        n_next,
-                        transform,
-                        left_stroke_lines[left_line_count..],
-                    );
-                } else {
-                    // right side
-                    right_line_count += try drawJoin(
-                        stroke,
-                        cubic_points.point3,
-                        tan_prev,
-                        tan_next,
-                        n_prev,
-                        n_next,
-                        transform,
-                        right_stroke_lines[right_line_count..],
-                    );
-                }
+                try drawJoin(
+                    stroke,
+                    cubic_points.point3,
+                    tan_prev,
+                    tan_next,
+                    n_prev,
+                    n_next,
+                    transform,
+                    left_stroke_lines[left_line_count..],
+                    right_stroke_lines[right_line_count..],
+                    &left_line_count,
+                    &right_line_count,
+                );
             }
         }
 
         return soup;
     }
-
-    //                     if (style.stroke) |stroke|
-    //                 }
-
-    //                 if (style.isFilled()) {
-    //                     fill_lines.closeSubpath();
-    //                 }
-
-    //                 if (style.isStroked()) {
-    //                     stroke_lines.closeSubpath();
-    //                 }
-    //             }
-
-    //             if (style.isFilled()) {
-    //                 fill_lines.closePath();
-    //             }
-
-    //             if (style.isStroked()) {
-    //                 stroke_lines.closePath();
-    //             }
-    //         }
-    //     }
-
-    //     return FlatData{
-    //         .fill_lines = fill_lines,
-    //         .stroke_lines = stroke_lines,
-    //     };
-    // }
 
     fn drawJoin(
         stroke: Style.Stroke,
@@ -419,7 +367,10 @@ pub const PathFlattener = struct {
         n_prev: PointF32,
         n_next: PointF32,
         transform: TransformF32.Matrix,
-        lines: []Line,
+        left_lines: []Line,
+        right_lines: []Line,
+        left_line_count_out: *u32,
+        right_line_count_out: *u32,
     ) !void {
         var front0 = p0.add(n_prev);
         const front1 = p0.add(n_next);
@@ -428,17 +379,16 @@ pub const PathFlattener = struct {
 
         const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
         const d = tan_prev.dot(tan_next);
+        var left_line_count: u32 = 0;
+        var right_line_count: u32 = 0;
 
         switch (stroke.join) {
             .bevel => {
                 if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
-                    const line1 = try line_soup.addItem();
-                    line1.start = transform.apply(front0);
-                    line1.end = transform.apply(front1);
-
-                    const line2 = try line_soup.addItem();
-                    line2.start = transform.apply(back0);
-                    line2.end = transform.apply(back1);
+                    left_lines[left_line_count] = Line.create(transform.apply(front0), transform.apply(front1));
+                    left_line_count += 1;
+                    right_lines[right_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
+                    right_line_count += 1;
                 }
             },
             .miter => {
@@ -458,57 +408,54 @@ pub const PathFlattener = struct {
                         .y = h,
                     });
 
-                    const line = try line_soup.addItem();
-                    line.start = transform.apply(p);
-                    line.end = transform.apply(miter_pt);
-
                     if (is_backside) {
+                        right_lines[right_line_count] = Line.create(transform.apply(p), transform.apply(miter_pt));
+                        right_line_count += 1;
                         back0 = miter_pt;
                     } else {
+                        left_lines[left_line_count] = Line.create(transform.apply(p), transform.apply(miter_pt));
+                        left_line_count += 1;
                         front0 = miter_pt;
                     }
                 }
 
-                const line1 = try line_soup.addItem();
-                line1.start = transform.apply(front0);
-                line1.end = transform.apply(front1);
+                left_lines[left_line_count] = Line.create(transform.apply(front0), transform.apply(front1));
+                left_line_count += 1;
 
-                const line2 = try line_soup.addItem();
-                line2.start = transform.apply(back0);
-                line2.end = transform.apply(back1);
+                right_lines[right_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
+                right_line_count += 1;
             },
             .round => {
-                var arc0: PointF32 = undefined;
-                var arc1: PointF32 = undefined;
-                var other0: PointF32 = undefined;
-                var other1: PointF32 = undefined;
-
                 if (cr > 0.0) {
-                    arc0 = back0;
-                    arc1 = back1;
-                    other0 = front0;
-                    other1 = front1;
+                    right_line_count += try flattenArc(
+                        back0,
+                        back1,
+                        p0,
+                        @abs(std.math.atan2(cr, d)),
+                        transform,
+                        right_lines[right_line_count..],
+                    );
+
+                    left_lines[left_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
+                    left_line_count += 1;
                 } else {
-                    arc0 = front0;
-                    arc1 = front1;
-                    other0 = back0;
-                    other1 = back1;
+                    left_line_count += try flattenArc(
+                        front0,
+                        front1,
+                        p0,
+                        @abs(std.math.atan2(cr, d)),
+                        transform,
+                        left_lines[left_line_count..],
+                    );
+
+                    right_lines[right_line_count] = Line.create(transform.apply(back0), transform.apply(back1));
+                    right_line_count += 1;
                 }
-
-                try flattenArc(
-                    arc0,
-                    arc1,
-                    p0,
-                    @abs(std.math.atan2(cr, d)),
-                    transform,
-                    line_soup,
-                );
-
-                const line = try line_soup.addItem();
-                line.start = transform.apply(other0);
-                line.end = transform.apply(other1);
             },
         }
+
+        left_line_count_out.* += left_line_count;
+        right_line_count_out.* += right_line_count;
     }
 
     fn drawCap(

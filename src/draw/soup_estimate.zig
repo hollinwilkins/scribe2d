@@ -177,7 +177,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     const left_curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
                                     const right_curve_index = soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = S.StrokeJob{
-                                        .metadata_index = metadata_index,
+                                        .metadata_index = @intCast(metadata_index),
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_curve_index = left_curve_index,
@@ -214,7 +214,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     const left_curve_index = left_soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
                                     const right_curve_index = right_soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = S.StrokeJob{
-                                        .metadata_index = metadata_index,
+                                        .metadata_index = @intCast(metadata_index),
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_curve_index = left_curve_index,
