@@ -55,7 +55,7 @@ pub fn main() !void {
     var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, scene);
     defer soup.deinit();
 
-    soup.path_records.items = soup.path_records.items[2..3];
+    // soup.path_records.items = soup.path_records.items[2..3];
     // soup.path_records.items[0].subpath_offsets.start += 1;
 
     const dimensions = core.DimensionsU32{

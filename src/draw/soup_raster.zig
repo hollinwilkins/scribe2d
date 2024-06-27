@@ -530,14 +530,17 @@ pub fn SoupRasterizer(comptime T: type) type {
                 merge_fragment.* = MergeFragment{
                     .pixel = first_boundary_fragment.pixel,
                 };
-                var boundary_offsets = RangeU32{};
+                var boundary_offsets = RangeU32{
+                    .start = path_record.boundary_offsets.start,
+                    .end = path_record.boundary_offsets.start,
+                };
                 var main_ray_winding: f32 = 0.0;
 
                 const boundary_fragments = raster_data.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
                 for (boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
                     const y_changing = boundary_fragment.pixel.y != merge_fragment.pixel.y;
                     if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
-                        boundary_offsets.end = @intCast(boundary_fragment_index);
+                        boundary_offsets.end = path_record.boundary_offsets.start + @as(u32, @intCast(boundary_fragment_index));
                         merge_fragment.boundary_offsets = boundary_offsets;
                         merge_fragment = try raster_data.addMergeFragment();
                         boundary_offsets.start = boundary_offsets.end;
