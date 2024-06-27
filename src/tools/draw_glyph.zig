@@ -79,10 +79,12 @@ pub fn main() !void {
     std.debug.print("\n", .{});
     std.debug.print("Line Soup:\n", .{});
     std.debug.print("-----------------------------\n", .{});
+    var line_count: usize = 0;
     for (soup.curve_records.items) |curve_record| {
         const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
         for (lines) |line| {
-            std.debug.print("{}\n", .{line});
+            std.debug.print("{}: {}\n", .{line_count, line});
+            line_count += 1;
         }
     }
     std.debug.print("-----------------------------\n", .{});
