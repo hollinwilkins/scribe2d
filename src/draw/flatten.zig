@@ -183,38 +183,101 @@ pub const FlatData = struct {
 const LineWriter = struct {
     lines: []Line,
     index: usize = 0,
+    mark_index: usize = 0,
 
     pub fn write(self: *@This(), line: Line) void {
-        var previous_line: ?Line = null;
-        var breakit: bool = false;
-        if (self.index > 0) {
-            previous_line = self.lines[self.index - 1];
-            const align1 = previous_line.?.end.x == line.start.x and previous_line.?.end.y == line.start.y;
-            const align2 = previous_line.?.start.x == line.end.x and previous_line.?.start.y == line.end.y;
-            breakit = !(align1 or align2);
-            if (breakit) {
-                std.debug.assert(true);
-                std.debug.assert(true);
-            }
-        }
-
         self.lines[self.index] = line;
         self.index += 1;
-
-        std.debug.print("===========\n", .{});
-        for (self.lines[0..self.index]) |l| {
-            std.debug.print("{}\n", .{l});
-        }
-        std.debug.print("===========\n", .{});
-
-        if (breakit) {
-            std.debug.assert(true);
-            std.debug.assert(true);
-        }
     }
 
     pub fn reverse(self: *@This()) void {
         std.mem.reverse(Line, self.lines[0..self.index]);
+        for (self.lines[0..self.index]) |*line| {
+            std.mem.swap(PointF32, &line.start, &line.end);
+        }
+    }
+
+    pub fn reverseMark(self: *@This()) void {
+        std.mem.reverse(Line, self.lines[0..self.mark_index]);
+    }
+
+    pub fn reverseAfterMark(self: *@This()) void {
+        std.mem.reverse(Line, self.lines[self.mark_index..self.index]);
+    }
+
+    pub fn mark(self: *@This()) void {
+        self.mark_index = self.index;
+    }
+
+    pub fn debug(self: @This()) void {
+        const before = self.lines[0..self.mark_index];
+        const after = self.lines[self.mark_index..self.index];
+        const complete = self.lines[0..self.index];
+
+        var bad_before: bool = false;
+        var bad_after: bool = false;
+        var bad_complete: bool = false;
+
+        if (before.len > 0) {
+            var previous = before[0];
+            for (before[1..]) |l| {
+                if (previous.end.x != l.start.x or previous.end.y != l.start.y) {
+                    bad_before = true;
+                    break;
+                }
+                previous = l;
+            }
+        }
+
+        if (after.len > 0) {
+            var previous = after[0];
+            for (after[1..]) |l| {
+                if (previous.end.x != l.start.x or previous.end.y != l.start.y) {
+                    bad_after = true;
+                    break;
+                }
+                previous = l;
+            }
+        }
+
+        if (complete.len > 0) {
+            var previous = complete[0];
+            for (complete[1..]) |l| {
+                if (previous.end.x != l.start.x or previous.end.y != l.start.y) {
+                    bad_complete = true;
+                    break;
+                }
+                previous = l;
+            }
+        }
+
+        if (bad_before) {
+            std.debug.print("----- BEFORE -----\n", .{});
+            for (before) |l| {
+                std.debug.print("{}\n", .{l});
+            }
+            std.debug.print("------------------\n", .{});
+        }
+
+        if (bad_after) {
+            std.debug.print("----- AFTER -----\n", .{});
+            for (after) |l| {
+                std.debug.print("{}\n", .{l});
+            }
+            std.debug.print("-----------------\n", .{});
+        }
+
+        if (bad_complete) {
+            std.debug.print("----- COMPLETE -----\n", .{});
+            for (before) |l| {
+                std.debug.print("{}\n", .{l});
+            }
+            std.debug.print("-------------\n", .{});
+            for (after) |l| {
+                std.debug.print("{}\n", .{l});
+            }
+            std.debug.print("--------------------\n", .{});
+        }
     }
 };
 
@@ -359,15 +422,6 @@ pub const PathFlattener = struct {
                 &left_line_writer,
             );
 
-            try flattenEuler(
-                cubic_points,
-                transform,
-                -offset,
-                cubic_points.point0.sub(n_start),
-                cubic_points.point3.sub(n_prev),
-                &right_line_writer,
-            );
-
             if (source_curve_record.cap == .end) {
                 // draw end cap on left side
                 try drawCap(
@@ -391,12 +445,26 @@ pub const PathFlattener = struct {
                     &left_line_writer,
                     &right_line_writer,
                 );
+                right_line_writer.mark();
             }
+
+            try flattenEuler(
+                cubic_points,
+                transform,
+                -offset,
+                cubic_points.point0.sub(n_start),
+                cubic_points.point3.sub(n_prev),
+                &right_line_writer,
+            );
 
             left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
             right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
+            // right_curve_record.item_offsets.end = right_curve_record.item_offsets.start;
 
-            right_line_writer.reverse();
+            // right_line_writer.reverseMark();
+            right_line_writer.reverseAfterMark();
+            // right_line_writer.reverse();
+            right_line_writer.debug();
         }
 
         return soup;

@@ -230,7 +230,7 @@ pub const Paths = struct {
             const start_curve_index = paths.subpath_records.items[path.subpath_offsets.start].curve_offsets.start;
             const end_curve_index = paths.subpath_records.items[path.subpath_offsets.end - 1].curve_offsets.end;
             const start_point_index = paths.curve_records.items[start_curve_index].point_offsets.start;
-            const end_point_index = paths.curve_records.items[end_curve_index].point_offsets.end;
+            const end_point_index = paths.curve_records.items[end_curve_index - 1].point_offsets.end;
 
             const self_start_point_index: u32 = @intCast(self.points.items.len);
             const points = try self.addPoints(end_point_index - start_point_index);
@@ -299,7 +299,7 @@ pub const Paths = struct {
             const start_point = self.points.items[start_curve.point_offsets.start];
             const end_point = self.points.items[end_curve.point_offsets.end - 1];
 
-            if (std.meta.eql(start_point, end_point)) {
+            if (!std.meta.eql(start_point, end_point)) {
                 // we need to close the subpath
                 try self.lineTo(start_point);
                 end_curve = &self.curve_records.items[self.curve_records.items.len - 1];

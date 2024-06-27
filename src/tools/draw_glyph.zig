@@ -82,15 +82,18 @@ pub fn main() !void {
     std.debug.print("-----------------------------\n", .{});
     var line_count: usize = 0;
     for (soup.path_records.items, 0..) |path_record, path_index| {
-        const start_curve_index = soup.subpath_records.items[path_record.subpath_offsets.start].curve_offsets.start;
-        const end_curve_index = soup.subpath_records.items[path_record.subpath_offsets.end - 1].curve_offsets.end;
-
         std.debug.print("-- Path({}) --\n", .{path_index});
-        for (soup.curve_records.items[start_curve_index..end_curve_index]) |curve_record| {
-            const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
-            for (lines) |line| {
-                std.debug.print("{}: {}\n", .{ line_count, line });
-                line_count += 1;
+
+        const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+        for (subpath_records, 0..) |subpath_record, subpath_index| {
+            std.debug.print("-- Subpath({}) --\n", .{subpath_index});
+            const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            for (curve_records) |curve_record| {
+                const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+                for (lines) |line| {
+                    std.debug.print("{}: {}\n", .{ line_count, line });
+                    line_count += 1;
+                }
             }
         }
     }
