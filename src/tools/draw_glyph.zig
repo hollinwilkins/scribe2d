@@ -55,6 +55,9 @@ pub fn main() !void {
     var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, scene);
     defer soup.deinit();
 
+    soup.path_records.items = soup.path_records.items[2..3];
+    // soup.path_records.items[0].subpath_offsets.start += 1;
+
     const dimensions = core.DimensionsU32{
         .width = size,
         .height = size,
@@ -138,38 +141,79 @@ pub fn main() !void {
         &texture,
     );
     defer raster_data.deinit();
+
     {
         std.debug.print("\n", .{});
-        std.debug.print("Grid Intersections:\n", .{});
-        std.debug.print("-----------------------------\n", .{});
-        for (raster_data.grid_intersections.items) |grid_intersection| {
-            std.debug.print("({},{}): T({}), ({},{})\n", .{
-                grid_intersection.pixel.x,
-                grid_intersection.pixel.y,
-                grid_intersection.intersection.t,
-                grid_intersection.intersection.point.x,
-                grid_intersection.intersection.point.y,
+        std.debug.print("Paths Summary:\n", .{});
+        for (raster_data.path_records.items) |path_record| {
+            const subpath_count = path_record.subpath_offsets.size();
+            const boundary_fragment_count = path_record.boundary_offsets.size();
+            const merge_fragment_count = path_record.merge_offsets.size();
+            const span_count = path_record.span_offsets.size();
+
+            std.debug.print("-----------------------------\n", .{});
+            std.debug.print("Subpaths({}), BoundaryFragments({}), MergeFragments({}), Spans({})\n", .{
+                subpath_count,
+                boundary_fragment_count,
+                merge_fragment_count,
+                span_count,
             });
+            std.debug.print("SubpathOffsets({},{}), BoundaryFragmentOffsets({},{}), MergeFragmentOffsets({},{}), SpanOffsets({},{})\n", .{
+                path_record.subpath_offsets.start,
+                path_record.subpath_offsets.end,
+                path_record.boundary_offsets.start,
+                path_record.boundary_offsets.end,
+                path_record.merge_offsets.start,
+                path_record.merge_offsets.end,
+                path_record.span_offsets.start,
+                path_record.span_offsets.end,
+            });
+
+            const subpath_records = raster_data.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+            for (subpath_records) |subpath_record| {
+                const intersection_count = subpath_record.intersection_offsets.size();
+                std.debug.print("Intersections({}), IntersectionOffsets({},{})\n", .{
+                    intersection_count,
+                    subpath_record.intersection_offsets.start,
+                    subpath_record.intersection_offsets.end,
+                });
+            }
         }
         std.debug.print("-----------------------------\n", .{});
     }
 
-    {
-        std.debug.print("\n", .{});
-        std.debug.print("Boundary Fragments:\n", .{});
-        std.debug.print("-----------------------------\n", .{});
-        for (raster_data.boundary_fragments.items) |boundary_fragment| {
-            std.debug.print("({},{}): ({},{}), ({},{})\n", .{
-                boundary_fragment.pixel.x,
-                boundary_fragment.pixel.y,
-                boundary_fragment.intersections[0].point.x,
-                boundary_fragment.intersections[0].point.y,
-                boundary_fragment.intersections[1].point.x,
-                boundary_fragment.intersections[1].point.y,
-            });
-        }
-        std.debug.print("-----------------------------\n", .{});
-    }
+    // {
+    //     std.debug.print("\n", .{});
+    //     std.debug.print("Grid Intersections:\n", .{});
+    //     std.debug.print("-----------------------------\n", .{});
+    //     for (raster_data.grid_intersections.items) |grid_intersection| {
+    //         std.debug.print("({},{}): T({}), ({},{})\n", .{
+    //             grid_intersection.pixel.x,
+    //             grid_intersection.pixel.y,
+    //             grid_intersection.intersection.t,
+    //             grid_intersection.intersection.point.x,
+    //             grid_intersection.intersection.point.y,
+    //         });
+    //     }
+    //     std.debug.print("-----------------------------\n", .{});
+    // }
+
+    // {
+    //     std.debug.print("\n", .{});
+    //     std.debug.print("Boundary Fragments:\n", .{});
+    //     std.debug.print("-----------------------------\n", .{});
+    //     for (raster_data.boundary_fragments.items) |boundary_fragment| {
+    //         std.debug.print("({},{}): ({},{}), ({},{})\n", .{
+    //             boundary_fragment.pixel.x,
+    //             boundary_fragment.pixel.y,
+    //             boundary_fragment.intersections[0].point.x,
+    //             boundary_fragment.intersections[0].point.y,
+    //             boundary_fragment.intersections[1].point.x,
+    //             boundary_fragment.intersections[1].point.y,
+    //         });
+    //     }
+    //     std.debug.print("-----------------------------\n", .{});
+    // }
 
     {
         std.debug.print("\n============== Boundary Texture\n\n", .{});

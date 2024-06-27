@@ -482,7 +482,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                 
                 std.debug.assert(grid_intersections.len > 0);
                 for (grid_intersections, 0..) |*grid_intersection, index| {
-                    const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
+                    const next_grid_intersection = &grid_intersections[(index + 1) % (grid_intersections.len - 1)];
 
                     if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
                         // skip if exactly the same point
@@ -525,7 +525,7 @@ pub fn SoupRasterizer(comptime T: type) type {
         pub fn populateMergeFragments(self: @This(), raster_data: *RD, path_record: *PathRecord) !void {
             raster_data.openPathRecordMerges(path_record);
             {
-                const first_boundary_fragment = &raster_data.boundary_fragments.items[0];
+                const first_boundary_fragment = &raster_data.boundary_fragments.items[path_record.boundary_offsets.start];
                 var merge_fragment: *MergeFragment = try raster_data.addMergeFragment();
                 merge_fragment.* = MergeFragment{
                     .pixel = first_boundary_fragment.pixel,
@@ -583,12 +583,6 @@ pub fn SoupRasterizer(comptime T: type) type {
                         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
                         merge_fragment.stencil_mask = merge_fragment.stencil_mask | (@as(u16, @intFromBool(merge_fragment.winding[index] != 0.0)) * bit_index);
                     }
-
-                    // std.debug.print("BoundaryFragment({},{}), StencilMask({b:0>16})", .{
-                    //     boundary_fragment.pixel.x,
-                    //     boundary_fragment.pixel.y,
-                    //     boundary_fragment.stencil_mask,
-                    // });
                 }
             }
         }
