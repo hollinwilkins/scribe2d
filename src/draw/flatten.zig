@@ -354,6 +354,9 @@ pub const PathFlattener = struct {
                     &right_line_count,
                 );
             }
+
+            left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + left_line_count;
+            right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + right_line_count;
         }
 
         return soup;
