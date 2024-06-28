@@ -45,7 +45,7 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
-        .width = 2.0,
+        .width = 1.0,
     };
     // style.fill = draw.Style.Fill{
     //     .color = draw.Color.BLACK,
@@ -56,7 +56,7 @@ pub fn main() !void {
     var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, scene);
     defer soup.deinit();
 
-    soup.path_records.items = soup.path_records.items[2..3];
+    // soup.path_records.items = soup.path_records.items[2..3];
     // soup.path_records.items[0].subpath_offsets.start += 1;
 
     const dimensions = core.DimensionsU32{
@@ -100,11 +100,11 @@ pub fn main() !void {
                         std.debug.print("{}: {}\n", .{ line_count, line });
                         line_count += 1;
 
-                        // const offset = 8.0;
-                        // line.start.x += offset;
-                        // line.start.y += offset;
-                        // line.end.x += offset;
-                        // line.end.y += offset;
+                        const offset = 8.0;
+                        line.start.x += offset;
+                        line.start.y += offset;
+                        line.end.x += offset;
+                        line.end.y += offset;
                     }
                 }
             }

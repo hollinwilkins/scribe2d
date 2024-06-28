@@ -52,7 +52,6 @@ pub const ROBUST_EPSILON: f32 = 2e-7;
 
 pub const ERROR_TOLERANCE: f32 = 0.10;
 
-
 pub const EspcRobust = enum(u8) {
     normal = 0,
     low_k1 = 1,
@@ -776,6 +775,8 @@ pub const PathFlattener = struct {
                             .normal => {
                                 const inv = EspcRobust.intInvApproximation(integral * t + int0);
                                 s = (inv - b) / a;
+                                // TODO: probably shouldn't have to do this, it differs from Vello
+                                s = std.math.clamp(s, 0.0, 1.0);
                             },
                         }
                         lp1 = es.applyOffset(s, normalized_offset);
