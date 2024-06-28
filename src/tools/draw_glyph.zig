@@ -45,7 +45,7 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
-        .width = 4.0,
+        .width = 2.0,
     };
     // style.fill = draw.Style.Fill{
     //     .color = draw.Color.BLACK,

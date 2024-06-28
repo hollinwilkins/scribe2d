@@ -46,7 +46,6 @@ pub const SoupPen = struct {
         const blend = DEFAULT_BLEND;
 
         for (raster_data.path_records.items) |path_record| {
-            // const color = style.fill.?.color;
             const color = Color.BLACK;
             const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
 
@@ -76,10 +75,13 @@ pub const SoupPen = struct {
                     const x = @as(i32, @intCast(span.x_range.start)) + @as(i32, @intCast(x_offset));
 
                     if (x >= 0 and span.y >= 0) {
-                        texture.setPixelUnsafe(core.PointU32{
+                        const texture_pixel = core.PointU32{
                             .x = @intCast(x),
                             .y = @intCast(span.y),
-                        }, color);
+                        };
+                        const texture_color = texture.getPixelUnsafe(texture_pixel);
+                        const blend_color = blend.blend(color, texture_color);
+                        texture.setPixelUnsafe(texture_pixel, blend_color);
                     }
                 }
             }
