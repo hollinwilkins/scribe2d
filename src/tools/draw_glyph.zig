@@ -45,7 +45,8 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
-        .width = 4.0,
+        .width = 2.0,
+        .join = .miter,
     };
     style.fill = draw.Style.Fill{
         .color = draw.Color.RED,
@@ -142,78 +143,78 @@ pub fn main() !void {
         &texture,
     );
 
-    {
-        std.debug.print("\n", .{});
-        std.debug.print("Paths Summary:\n", .{});
-        for (soup.path_records.items) |path_record| {
-            const subpath_count = path_record.subpath_offsets.size();
-            const boundary_fragment_count = path_record.boundary_offsets.size();
-            const merge_fragment_count = path_record.merge_offsets.size();
-            const span_count = path_record.span_offsets.size();
+    // {
+    //     std.debug.print("\n", .{});
+    //     std.debug.print("Paths Summary:\n", .{});
+    //     for (soup.path_records.items) |path_record| {
+    //         const subpath_count = path_record.subpath_offsets.size();
+    //         const boundary_fragment_count = path_record.boundary_offsets.size();
+    //         const merge_fragment_count = path_record.merge_offsets.size();
+    //         const span_count = path_record.span_offsets.size();
 
-            std.debug.print("-----------------------------\n", .{});
-            std.debug.print("Subpaths({}), BoundaryFragments({}), MergeFragments({}), Spans({})\n", .{
-                subpath_count,
-                boundary_fragment_count,
-                merge_fragment_count,
-                span_count,
-            });
-            std.debug.print("SubpathOffsets({},{}), BoundaryFragmentOffsets({},{}), MergeFragmentOffsets({},{}), SpanOffsets({},{})\n", .{
-                path_record.subpath_offsets.start,
-                path_record.subpath_offsets.end,
-                path_record.boundary_offsets.start,
-                path_record.boundary_offsets.end,
-                path_record.merge_offsets.start,
-                path_record.merge_offsets.end,
-                path_record.span_offsets.start,
-                path_record.span_offsets.end,
-            });
+    //         std.debug.print("-----------------------------\n", .{});
+    //         std.debug.print("Subpaths({}), BoundaryFragments({}), MergeFragments({}), Spans({})\n", .{
+    //             subpath_count,
+    //             boundary_fragment_count,
+    //             merge_fragment_count,
+    //             span_count,
+    //         });
+    //         std.debug.print("SubpathOffsets({},{}), BoundaryFragmentOffsets({},{}), MergeFragmentOffsets({},{}), SpanOffsets({},{})\n", .{
+    //             path_record.subpath_offsets.start,
+    //             path_record.subpath_offsets.end,
+    //             path_record.boundary_offsets.start,
+    //             path_record.boundary_offsets.end,
+    //             path_record.merge_offsets.start,
+    //             path_record.merge_offsets.end,
+    //             path_record.span_offsets.start,
+    //             path_record.span_offsets.end,
+    //         });
 
-            // const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-            // for (subpath_records) |subpath_record| {
-            //     const intersection_count = subpath_record.intersection_offsets.size();
-            //     std.debug.print("Intersections({}), IntersectionOffsets({},{})\n", .{
-            //         intersection_count,
-            //         subpath_record.intersection_offsets.start,
-            //         subpath_record.intersection_offsets.end,
-            //     });
-            // }
-        }
-        std.debug.print("-----------------------------\n", .{});
-    }
+    //         // const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+    //         // for (subpath_records) |subpath_record| {
+    //         //     const intersection_count = subpath_record.intersection_offsets.size();
+    //         //     std.debug.print("Intersections({}), IntersectionOffsets({},{})\n", .{
+    //         //         intersection_count,
+    //         //         subpath_record.intersection_offsets.start,
+    //         //         subpath_record.intersection_offsets.end,
+    //         //     });
+    //         // }
+    //     }
+    //     std.debug.print("-----------------------------\n", .{});
+    // }
 
-    {
-        std.debug.print("\n", .{});
-        std.debug.print("Grid Intersections:\n", .{});
-        std.debug.print("-----------------------------\n", .{});
-        for (soup.grid_intersections.items) |grid_intersection| {
-            std.debug.print("({},{}): T({}), ({},{})\n", .{
-                grid_intersection.pixel.x,
-                grid_intersection.pixel.y,
-                grid_intersection.intersection.t,
-                grid_intersection.intersection.point.x,
-                grid_intersection.intersection.point.y,
-            });
-        }
-        std.debug.print("-----------------------------\n", .{});
-    }
+    // {
+    //     std.debug.print("\n", .{});
+    //     std.debug.print("Grid Intersections:\n", .{});
+    //     std.debug.print("-----------------------------\n", .{});
+    //     for (soup.grid_intersections.items) |grid_intersection| {
+    //         std.debug.print("({},{}): T({}), ({},{})\n", .{
+    //             grid_intersection.pixel.x,
+    //             grid_intersection.pixel.y,
+    //             grid_intersection.intersection.t,
+    //             grid_intersection.intersection.point.x,
+    //             grid_intersection.intersection.point.y,
+    //         });
+    //     }
+    //     std.debug.print("-----------------------------\n", .{});
+    // }
 
-    {
-        std.debug.print("\n", .{});
-        std.debug.print("Boundary Fragments:\n", .{});
-        std.debug.print("-----------------------------\n", .{});
-        for (soup.boundary_fragments.items) |boundary_fragment| {
-            std.debug.print("({},{}): ({},{}), ({},{})\n", .{
-                boundary_fragment.pixel.x,
-                boundary_fragment.pixel.y,
-                boundary_fragment.intersections[0].point.x,
-                boundary_fragment.intersections[0].point.y,
-                boundary_fragment.intersections[1].point.x,
-                boundary_fragment.intersections[1].point.y,
-            });
-        }
-        std.debug.print("-----------------------------\n", .{});
-    }
+    // {
+    //     std.debug.print("\n", .{});
+    //     std.debug.print("Boundary Fragments:\n", .{});
+    //     std.debug.print("-----------------------------\n", .{});
+    //     for (soup.boundary_fragments.items) |boundary_fragment| {
+    //         std.debug.print("({},{}): ({},{}), ({},{})\n", .{
+    //             boundary_fragment.pixel.x,
+    //             boundary_fragment.pixel.y,
+    //             boundary_fragment.intersections[0].point.x,
+    //             boundary_fragment.intersections[0].point.y,
+    //             boundary_fragment.intersections[1].point.x,
+    //             boundary_fragment.intersections[1].point.y,
+    //         });
+    //     }
+    //     std.debug.print("-----------------------------\n", .{});
+    // }
 
     {
         std.debug.print("\n============== Boundary Texture\n\n", .{});

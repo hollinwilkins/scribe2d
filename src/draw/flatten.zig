@@ -469,6 +469,7 @@ pub const PathFlattener = struct {
             // right_curve_record.item_offsets.start = right_curve_record.item_offsets.end;
 
             right_line_writer.reverseAfterMark();
+            right_line_writer.debug();
         }
 
         return soup;
@@ -512,10 +513,10 @@ pub const PathFlattener = struct {
 
                     const v = fp_this.sub(fp_last);
                     const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
-                    const miter_pt = fp_this.sub(tan_next).mul(PointF32{
+                    const miter_pt = fp_this.sub(tan_next.mul(PointF32{
                         .x = h,
                         .y = h,
-                    });
+                    }));
 
                     if (is_backside) {
                         right_line_writer.write(Line.create(transform.apply(p), transform.apply(miter_pt)));
