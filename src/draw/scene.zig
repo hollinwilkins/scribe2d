@@ -1,13 +1,13 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
-const pen = @import("./pen.zig");
+const soup_pen = @import("./soup_pen.zig");
 const path_module = @import("./path.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
-const Style = pen.Style;
+const Style = soup_pen.Style;
 const Paths = path_module.Paths;
 const PathMetadata = path_module.PathMetadata;
 

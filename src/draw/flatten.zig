@@ -3,7 +3,7 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const path_module = @import("./path.zig");
-const pen = @import("./pen.zig");
+const soup_pen = @import("./soup_pen.zig");
 const curve_module = @import("./curve.zig");
 const scene_module = @import("./scene.zig");
 const euler = @import("./euler.zig");
@@ -18,7 +18,7 @@ const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
 const PathsData = path_module.PathsData;
-const Style = pen.Style;
+const Style = soup_pen.Style;
 const Line = curve_module.Line;
 const CubicPoints = euler.CubicPoints;
 const CubicParams = euler.CubicParams;

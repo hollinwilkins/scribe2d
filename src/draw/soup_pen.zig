@@ -3,7 +3,6 @@ const path_module = @import("./path.zig");
 const soup = @import("./soup.zig");
 const soup_raster = @import("./soup_raster.zig");
 const texture_module = @import("./texture.zig");
-const pen_module = @import("./pen.zig");
 const core = @import("../core/root.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
@@ -15,8 +14,52 @@ const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 const LineSoup = soup.LineSoup;
 const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
-const Style = pen_module.Style;
 const PathMetadata = path_module.PathMetadata;
+
+pub const Style = struct {
+    pub const Cap = enum(u8) {
+        butt = 0,
+        square = 1,
+        round = 2,
+    };
+
+    pub const Join = enum(u8) {
+        bevel = 0,
+        miter = 1,
+        round = 2,
+    };
+
+    pub const Fill = struct {
+        color: Color = Color.BLACK,
+    };
+
+    pub const Stroke = struct {
+        color: Color = Color.BLACK,
+        width: f32 = 1.0,
+        start_cap: Cap = .butt,
+        end_cap: Cap = .butt,
+        join: Join = .round,
+        miter_limit: f32 = 4.0,
+
+        pub fn toFill(self: @This()) Fill {
+            return Fill{
+                .color = self.color,
+            };
+        }
+    };
+
+    fill: ?Fill = null,
+    stroke: ?Stroke = null,
+    blend: ?ColorBlend = null,
+
+    pub fn isFilled(self: @This()) bool {
+        return self.fill != null;
+    }
+
+    pub fn isStroked(self: @This()) bool {
+        return self.stroke != null;
+    }
+};
 
 pub const SoupPen = struct {
     pub const DEFAULT_BLEND: ColorBlend = ColorBlend.Alpha;
