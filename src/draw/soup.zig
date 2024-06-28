@@ -298,10 +298,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn openPathSubpaths(self: @This(), path_record: *PathRecord) void {
-            path_record.subpath_offsets = RangeU32{
-                .start = @intCast(self.subpath_records.items.len),
-                .end = @intCast(self.subpath_records.items.len),
-            };
+            path_record.subpath_offsets.start =  @intCast(self.subpath_records.items.len);
         }
 
         pub fn openPathBoundaries(self: *@This(), path_record: *PathRecord) void {
@@ -339,10 +336,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn openSubpathCurves(self: @This(), subpath_record: *SubpathRecord) void {
-            subpath_record.curve_offsets = RangeU32{
-                .start = @intCast(self.curve_records.items.len),
-                .end = @intCast(self.curve_records.items.len),
-            };
+            subpath_record.curve_offsets.start = @intCast(self.curve_records.items.len);
         }
 
         pub fn openSubpathIntersections(self: *@This(), subpath_record: *SubpathRecord) void {

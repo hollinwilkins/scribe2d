@@ -46,8 +46,6 @@ pub fn SoupRasterizer(comptime T: type) type {
 
         pub fn rasterize(self: @This(), soup: *S) !void {
             for (soup.path_records.items) |*path_record| {
-                soup.openPathSubpaths(path_record);
-
                 const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                 for (subpath_records) |*subpath_record| {
                     try self.populateGridIntersections(
@@ -55,8 +53,6 @@ pub fn SoupRasterizer(comptime T: type) type {
                         subpath_record,
                     );
                 }
-
-                soup.closePathSubpaths(path_record);
 
                 try self.populateBoundaryFragments(
                     soup,
@@ -88,9 +84,9 @@ pub fn SoupRasterizer(comptime T: type) type {
 
             soup.openSubpathIntersections(subpath_record);
 
-            const soup_curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-            for (soup_curve_records) |soup_curve_record| {
-                const soup_items = soup.items.items[soup_curve_record.item_offsets.start..soup_curve_record.item_offsets.end];
+            const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            for (curve_records) |curve_record| {
+                const soup_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
                 for (soup_items) |item| {
                     const start_intersection_index = soup.grid_intersections.items.len;
                     const start_point: PointF32 = item.applyT(0.0);
