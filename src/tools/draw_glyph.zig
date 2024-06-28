@@ -43,10 +43,10 @@ pub fn main() !void {
     defer scene.deinit();
 
     const style = try scene.pushStyle();
-    // style.stroke = draw.Style.Stroke{
-    //     .color = draw.Color.BLACK,
-    //     .width = 4.0,
-    // };
+    style.stroke = draw.Style.Stroke{
+        .color = draw.Color.BLACK,
+        .width = 4.0,
+    };
     style.fill = draw.Style.Fill{
         .color = draw.Color.RED,
     };

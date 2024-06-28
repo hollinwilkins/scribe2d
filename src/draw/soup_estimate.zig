@@ -210,6 +210,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 // subpath is not capped, so the stroke will be two subpaths
                                 const left_soup_subpath_record = try soup.addSubpath();
                                 soup.openSubpathCurves(left_soup_subpath_record);
+                                const left_soup_subpath_record_start = left_soup_subpath_record.curve_offsets.start;
 
                                 const curve_estimates = try soup.addCurveEstimates(curve_record_len * 2);
                                 const left_curve_estimates = curve_estimates[0..curve_record_len];
@@ -244,7 +245,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                                 const stroke_jobs = try soup.addStrokeJobs(curve_record_len);
                                 for (stroke_jobs, 0..) |*stroke_job, offset| {
-                                    const left_curve_index = left_soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
+                                    const left_curve_index = left_soup_subpath_record_start + @as(u32, @intCast(offset));
                                     const right_curve_index = right_soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = StrokeJob{
                                         .metadata_index = @intCast(metadata_index),
