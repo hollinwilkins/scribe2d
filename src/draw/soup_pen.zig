@@ -45,8 +45,8 @@ pub const SoupPen = struct {
 
         const blend = DEFAULT_BLEND;
 
-        for (raster_data.path_records.items) |path_record| {
-            const color = Color.BLACK;
+        for (raster_data.path_records.items, line_soup.path_records.items) |path_record, soup_path_record| {
+            const color = soup_path_record.fill.color;
             const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
 
             for (merge_fragments) |merge_fragment| {

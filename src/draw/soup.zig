@@ -52,6 +52,7 @@ pub const Estimate = struct {
 pub fn Soup(comptime T: type) type {
     return struct {
         pub const PathRecord = struct {
+            fill: Style.Fill,
             subpath_offsets: RangeU32,
         };
 
@@ -113,9 +114,10 @@ pub fn Soup(comptime T: type) type {
             self.items.deinit(self.allocator);
         }
 
-        pub fn openPath(self: *@This()) !*PathRecord {
+        pub fn openPath(self: *@This(), fill: Style.Fill) !*PathRecord {
             const path = try self.path_records.addOne(self.allocator);
             path.* = PathRecord{
+                .fill = fill,
                 .subpath_offsets = RangeU32{
                     .start = @intCast(self.subpath_records.items.len),
                     .end = @intCast(self.subpath_records.items.len),

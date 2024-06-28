@@ -7,6 +7,7 @@ const PointU32 = core.PointU32;
 
 pub const Color = struct {
     pub const BLACK: Color = Color{.r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0};
+    pub const RED: Color = Color{.r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0};
 
     r: f32 = 0.0,
     g: f32 = 0.0,

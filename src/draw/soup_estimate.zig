@@ -86,9 +86,9 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 const style = styles[metadata.style_index];
 
                 const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
-                if (style.isFilled()) {
+                if (style.fill) |fill| {
                     for (path_records) |path_record| {
-                        _ = try soup.openPath();
+                        _ = try soup.openPath(fill);
                         const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records) |subpath_record| {
                             const soup_subpath_record = try soup.openSubpath();
@@ -130,6 +130,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 }
 
                 if (style.stroke) |stroke| {
+                    const fill = stroke.toFill();
                     const transform = transforms[metadata.transform_index];
                     const scaled_width = stroke.width * transform.getScale();
                     const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
@@ -141,7 +142,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                             const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
 
-                            _ = try soup.openPath();
+                            _ = try soup.openPath(fill);
 
                             if (paths.isSubpathCapped(subpath_record)) {
                                 // subpath is capped, so the stroke will be a single subpath

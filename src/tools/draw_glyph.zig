@@ -45,11 +45,11 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
-        .width = 2.0,
+        .width = 4.0,
     };
-    // style.fill = draw.Style.Fill{
-    //     .color = draw.Color.BLACK,
-    // };
+    style.fill = draw.Style.Fill{
+        .color = draw.Color.RED,
+    };
     try scene.paths.copyPath(glyph_paths, 0);
     try scene.close();
 
