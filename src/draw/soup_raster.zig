@@ -32,6 +32,30 @@ const MergeFragment = soup_module.MergeFragment;
 const Span = soup_module.Span;
 const LineSoupEstimator = soup_estimate_module.LineSoupEstimator;
 
+pub fn Writer(comptime T: type) type {
+    return struct {
+        slice: []T,
+        index: usize = 0,
+
+        pub fn create(slice: []T) @This() {
+            return @This(){
+                .slice = slice,
+            };
+        }
+
+        pub fn addOne(self: *@This()) *T{
+            const item = &self.slice[self.index];
+            self.index += 1;
+            return item;
+        }
+    };
+}
+
+const IntersectionWriter = Writer(GridIntersection);
+const BoundaryFragmentWriter = Writer(BoundaryFragment);
+const MergeFragmentWriter = Writer(MergeFragment);
+const SpanWriter = Writer(Span);
+
 pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
@@ -47,8 +71,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
         }
 
         pub fn rasterize(self: @This(), soup: *S) !void {
-            _ = Estimator;
-            // try Estimator.estimateRaster(soup);
+            try Estimator.estimateRaster(soup);
 
             for (soup.path_records.items) |*path_record| {
                 const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
@@ -87,7 +110,8 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
 
             const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
             for (curve_records) |*curve_record| {
-                soup.openCurveIntersections(curve_record);
+                const intersections = soup.grid_intersections.items[curve_record.intersection_offsets.start..curve_record.intersection_offsets.end];
+                var intersection_writer = IntersectionWriter.create(intersections);
 
                 const soup_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
                 for (soup_items) |item| {
@@ -110,22 +134,23 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                         .y = @floatFromInt(bounds.max.y + 1),
                     });
 
-                    (try soup.addGridIntersection()).* = GridIntersection.create((Intersection{
+
+                    intersection_writer.addOne().* = GridIntersection.create((Intersection{
                         .t = 0.0,
                         .point = start_point,
                     }).fitToGrid());
 
                     for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
                         const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
-                        try scanX(soup, grid_x, item, scan_bounds);
+                        try scanX( grid_x, item, scan_bounds, &intersection_writer);
                     }
 
                     for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
                         const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
-                        try scanY(soup, grid_y, item, scan_bounds);
+                        try scanY( grid_y, item, scan_bounds, &intersection_writer);
                     }
 
-                    (try soup.addGridIntersection()).* = GridIntersection.create((Intersection{
+                    intersection_writer.addOne().* = GridIntersection.create((Intersection{
                         .t = 1.0,
                         .point = end_point,
                     }).fitToGrid());
@@ -142,7 +167,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                     );
                 }
 
-                soup.closeCurveIntersections(curve_record);
+                curve_record.intersection_offsets.end = curve_record.intersection_offsets.start + @as(u32, @intCast(intersection_writer.index));
             }
         }
 
@@ -316,10 +341,10 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
         }
 
         fn scanX(
-            soup: *S,
             grid_x: f32,
             curve: T,
             scan_bounds: RectF32,
+            intersection_writer: *IntersectionWriter,
         ) !void {
             const line = Line.create(
                 PointF32{
@@ -333,16 +358,15 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
             );
 
             if (curve.intersectVerticalLine(line)) |intersection| {
-                const ao = try soup.addGridIntersection();
-                ao.* = GridIntersection.create(intersection.fitToGrid());
+                intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
             }
         }
 
         fn scanY(
-            soup: *S,
             grid_y: f32,
             curve: T,
             scan_bounds: RectF32,
+            intersection_writer: *IntersectionWriter,
         ) !void {
             const line = Line.create(
                 PointF32{
@@ -356,8 +380,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
             );
 
             if (curve.intersectHorizontalLine(line)) |intersection| {
-                const ao = try soup.addGridIntersection();
-                ao.* = GridIntersection.create(intersection.fitToGrid());
+                intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
             }
         }
     };
