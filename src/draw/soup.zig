@@ -298,7 +298,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn openPathSubpaths(self: @This(), path_record: *PathRecord) void {
-            path_record.subpath_offsets.start =  @intCast(self.subpath_records.items.len);
+            path_record.subpath_offsets.start = @intCast(self.subpath_records.items.len);
         }
 
         pub fn openPathBoundaries(self: *@This(), path_record: *PathRecord) void {
@@ -358,10 +358,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn openCurveItems(self: *@This(), curve_record: *CurveRecord) void {
-            curve_record.item_offsets = RangeU32{
-                .start = @intCast(self.items.items.len),
-                .end = @intCast(self.items.items.len),
-            };
+            curve_record.item_offsets.start = @intCast(self.items.items.len);
         }
 
         pub fn closeCurveItems(self: *@This(), curve_record: *CurveRecord) void {

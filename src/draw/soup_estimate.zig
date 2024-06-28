@@ -266,6 +266,31 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             return soup;
         }
 
+        pub fn estimateRaster(soup: *S) !void {
+            // need to estimate
+            // intersections (done)
+            // boundary fragments
+            // merge fragments
+            // spans
+            for (soup.path_records.items) |*path_record| {
+                const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                for (subpath_records) |*subpath_record| {
+                    var intersections: u32 = 0;
+                    const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                    for (curve_records) |*curve_record| {
+                        const items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+                        for (items) |item| {
+                            intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateIntersections(item)));
+                        }
+                    }
+
+                    soup.openSubpathIntersections(subpath_record);
+                    _ = try soup.addGridIntersections(intersections);
+                    soup.closeSubpathIntersections(subpath_record);
+                }
+            }
+        }
+
         fn estimateCurveBase(
             paths: PathsData,
             curve_record: Paths.CurveRecord,
@@ -379,6 +404,12 @@ pub const LineEstimatorImpl = struct {
             .items = arc_lines,
             .length = 2.0 * std.math.sin(theta) * radius,
         };
+    }
+
+    pub fn estimateIntersections(line: Line) u32 {
+        const dxdy = line.end.sub(line.start);
+        const intersections: u32 = @intFromFloat(@floor(@abs(dxdy.x)) + @floor(@abs(dxdy.y)));
+        return @max(1, intersections);
     }
 };
 
