@@ -137,16 +137,15 @@ pub fn main() !void {
     });
 
     var pen = draw.SoupPen.init(allocator, &rasterizer);
-    var raster_data = try pen.drawDebug(
-        soup,
+    try pen.draw(
+        &soup,
         &texture,
     );
-    defer raster_data.deinit();
 
     {
         std.debug.print("\n", .{});
         std.debug.print("Paths Summary:\n", .{});
-        for (raster_data.path_records.items) |path_record| {
+        for (soup.path_records.items) |path_record| {
             const subpath_count = path_record.subpath_offsets.size();
             const boundary_fragment_count = path_record.boundary_offsets.size();
             const merge_fragment_count = path_record.merge_offsets.size();
@@ -170,7 +169,7 @@ pub fn main() !void {
                 path_record.span_offsets.end,
             });
 
-            const subpath_records = raster_data.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+            const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
             for (subpath_records) |subpath_record| {
                 const intersection_count = subpath_record.intersection_offsets.size();
                 std.debug.print("Intersections({}), IntersectionOffsets({},{})\n", .{
@@ -187,7 +186,7 @@ pub fn main() !void {
         std.debug.print("\n", .{});
         std.debug.print("Grid Intersections:\n", .{});
         std.debug.print("-----------------------------\n", .{});
-        for (raster_data.grid_intersections.items) |grid_intersection| {
+        for (soup.grid_intersections.items) |grid_intersection| {
             std.debug.print("({},{}): T({}), ({},{})\n", .{
                 grid_intersection.pixel.x,
                 grid_intersection.pixel.y,
@@ -203,7 +202,7 @@ pub fn main() !void {
         std.debug.print("\n", .{});
         std.debug.print("Boundary Fragments:\n", .{});
         std.debug.print("-----------------------------\n", .{});
-        for (raster_data.boundary_fragments.items) |boundary_fragment| {
+        for (soup.boundary_fragments.items) |boundary_fragment| {
             std.debug.print("({},{}): ({},{}), ({},{})\n", .{
                 boundary_fragment.pixel.x,
                 boundary_fragment.pixel.y,

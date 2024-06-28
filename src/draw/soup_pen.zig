@@ -1,6 +1,6 @@
 const std = @import("std");
 const path_module = @import("./path.zig");
-const soup = @import("./soup.zig");
+const soup_module = @import("./soup.zig");
 const soup_raster = @import("./soup_raster.zig");
 const texture_module = @import("./texture.zig");
 const core = @import("../core/root.zig");
@@ -12,7 +12,7 @@ const AlphaColorBlend = texture_module.AlphaColorBlend;
 const Paths = path_module.Paths;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
-const LineSoup = soup.LineSoup;
+const LineSoup = soup_module.LineSoup;
 const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
 const PathMetadata = path_module.PathMetadata;
 
@@ -78,19 +78,18 @@ pub const SoupPen = struct {
         _ = self; // nothing needed for now
     }
 
-    pub fn drawDebug(
+    pub fn draw(
         self: @This(),
-        line_soup: LineSoup,
+        line_soup: *LineSoup,
         texture: *TextureUnmanaged,
-    ) !soup_raster.LineRasterData {
-        var raster_data = try self.rasterizer.rasterizeAlloc(self.allocator, line_soup);
-        errdefer raster_data.deinit();
+    ) !void {
+        try self.rasterizer.rasterize(line_soup);
 
         const blend = DEFAULT_BLEND;
 
-        for (raster_data.path_records.items, line_soup.path_records.items) |path_record, soup_path_record| {
-            const color = soup_path_record.fill.color;
-            const merge_fragments = raster_data.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+        for (line_soup.path_records.items) |path_record| {
+            const color = path_record.fill.color;
+            const merge_fragments = line_soup.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
 
             for (merge_fragments) |merge_fragment| {
                 const pixel = merge_fragment.pixel;
@@ -112,7 +111,7 @@ pub const SoupPen = struct {
                 }
             }
 
-            const spans = raster_data.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
+            const spans = line_soup.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
             for (spans) |span| {
                 for (0..span.x_range.size()) |x_offset| {
                     const x = @as(i32, @intCast(span.x_range.start)) + @as(i32, @intCast(x_offset));
@@ -129,17 +128,5 @@ pub const SoupPen = struct {
                 }
             }
         }
-
-        return raster_data;
-    }
-
-    pub fn draw(
-        self: @This(),
-        line_soup: LineSoup,
-        metadatas: []const PathMetadata,
-        texture: *TextureUnmanaged,
-    ) !void {
-        var raster_data = try self.drawDebug(line_soup, metadatas, texture);
-        defer raster_data.deinit();
     }
 };

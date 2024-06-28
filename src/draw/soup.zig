@@ -254,6 +254,7 @@ pub fn Soup(comptime T: type) type {
         pub const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
         pub const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
         pub const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
+        pub const SpanList = std.ArrayListUnmanaged(Span);
 
         allocator: Allocator,
         path_records: PathRecordList = PathRecordList{},
@@ -267,6 +268,7 @@ pub fn Soup(comptime T: type) type {
         grid_intersections: GridIntersectionList = GridIntersectionList{},
         boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
         merge_fragments: MergeFragmentList = MergeFragmentList{},
+        spans: SpanList = SpanList{},
 
         pub fn init(allocator: Allocator) @This() {
             return @This(){
@@ -286,6 +288,7 @@ pub fn Soup(comptime T: type) type {
             self.grid_intersections.deinit(self.allocator);
             self.boundary_fragments.deinit(self.allocator);
             self.merge_fragments.deinit(self.allocator);
+            self.spans.deinit(self.allocator);
         }
 
         pub fn addPathRecord(self: *@This()) !*PathRecord {
