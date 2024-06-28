@@ -45,7 +45,7 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
-        .width = 1.0,
+        .width = 4.0,
     };
     // style.fill = draw.Style.Fill{
     //     .color = draw.Color.BLACK,
@@ -100,7 +100,7 @@ pub fn main() !void {
                         std.debug.print("{}: {}\n", .{ line_count, line });
                         line_count += 1;
 
-                        const offset = 8.0;
+                        const offset = 16.0;
                         line.start.x += offset;
                         line.start.y += offset;
                         line.end.x += offset;
