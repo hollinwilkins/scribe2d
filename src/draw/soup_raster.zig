@@ -4,6 +4,7 @@ const curve_module = @import("./curve.zig");
 const core = @import("../core/root.zig");
 const msaa = @import("./msaa.zig");
 const soup_module = @import("./soup.zig");
+const soup_estimate_module = @import("./soup_estimate.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Paths = path_module.Paths;
@@ -29,22 +30,27 @@ const GridIntersection = soup_module.GridIntersection;
 const BoundaryFragment = soup_module.BoundaryFragment;
 const MergeFragment = soup_module.MergeFragment;
 const Span = soup_module.Span;
+const LineSoupEstimator = soup_estimate_module.LineSoupEstimator;
 
-pub fn SoupRasterizer(comptime T: type) type {
+pub fn SoupRasterizer(comptime T: type, comptime Estimator: T) type {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
     const S = Soup(T);
 
     return struct {
+        estimator: Estimator,
         half_planes: *const HalfPlanesU16,
 
-        pub fn create(half_planes: *const HalfPlanesU16) @This() {
+        pub fn create(estimator: Estimator, half_planes: *const HalfPlanesU16) @This() {
             return @This(){
+                .estimator = estimator,
                 .half_planes = half_planes,
             };
         }
 
         pub fn rasterize(self: @This(), soup: *S) !void {
+            try self.estimator.estimateRaster(soup);
+
             for (soup.path_records.items) |*path_record| {
                 const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                 for (subpath_records) |*subpath_record| {
@@ -349,4 +355,4 @@ pub fn SoupRasterizer(comptime T: type) type {
     };
 }
 
-pub const LineSoupRasterizer = SoupRasterizer(Line);
+pub const LineSoupRasterizer = SoupRasterizer(Line, LineSoupEstimator);

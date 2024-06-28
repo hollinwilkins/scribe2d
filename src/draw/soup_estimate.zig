@@ -267,27 +267,38 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
         }
 
         pub fn estimateRaster(soup: *S) !void {
-            // need to estimate
-            // intersections (done)
-            // boundary fragments
-            // merge fragments
-            // spans
             for (soup.path_records.items) |*path_record| {
+                const path_intersections: u32 = 0;
+
                 const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                 for (subpath_records) |*subpath_record| {
-                    var intersections: u32 = 0;
+                    var subpath_intersections: u32 = 0;
                     const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                     for (curve_records) |*curve_record| {
                         const items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
                         for (items) |item| {
-                            intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateIntersections(item)));
+                            subpath_intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateIntersections(item)));
                         }
                     }
 
                     soup.openSubpathIntersections(subpath_record);
-                    _ = try soup.addGridIntersections(intersections);
+                    _ = try soup.addGridIntersections(subpath_intersections);
                     soup.closeSubpathIntersections(subpath_record);
+
+                    path_intersections += subpath_intersections;
                 }
+
+                soup.openPathBoundaries(path_record);
+                _ = try soup.addBoundaryFragments(path_intersections);
+                soup.closePathBoundaries(path_record);
+
+                soup.openPathMerges(path_record);
+                _ = try soup.addMergeFragments(path_intersections);
+                soup.closePathMerges(path_record);
+
+                soup.openPathSpans(path_record);
+                _ = try soup.addSpans(path_intersections / 2 + 1);
+                soup.closePathSpans(path_record);
             }
         }
 
