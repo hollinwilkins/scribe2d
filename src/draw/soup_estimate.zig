@@ -91,7 +91,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 if (style.fill) |fill| {
                     for (path_records) |path_record| {
                         const soup_path_record = try soup.addPathRecord();
-                        soup.openPathRecordSubpaths(soup_path_record);
+                        soup.openPathSubpaths(soup_path_record);
                         soup_path_record.fill = fill;
 
                         const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
@@ -132,7 +132,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                             soup.closeSubpathCurves(soup_subpath_record);
                         }
-                        soup.closePathRecordSubpaths(soup_path_record);
+                        soup.closePathSubpaths(soup_path_record);
                     }
                 }
 
@@ -150,7 +150,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
 
                             const soup_path_record = try soup.addPathRecord();
-                            soup.openPathRecordSubpaths(soup_path_record);
+                            soup.openPathSubpaths(soup_path_record);
                             soup_path_record.fill = fill;
 
                             if (paths.isSubpathCapped(subpath_record)) {
@@ -256,7 +256,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 }
                             }
 
-                            soup.closePathRecordSubpaths(soup_path_record);
+                            soup.closePathSubpaths(soup_path_record);
                         }
                     }
                 }
