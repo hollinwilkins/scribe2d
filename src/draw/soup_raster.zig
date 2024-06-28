@@ -482,7 +482,7 @@ pub fn SoupRasterizer(comptime T: type) type {
                 
                 std.debug.assert(grid_intersections.len > 0);
                 for (grid_intersections, 0..) |*grid_intersection, index| {
-                    const next_grid_intersection = &grid_intersections[(index + 1) % (grid_intersections.len - 1)];
+                    const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
 
                     if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
                         // skip if exactly the same point
