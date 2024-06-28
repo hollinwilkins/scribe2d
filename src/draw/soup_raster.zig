@@ -115,7 +115,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
 
                 const soup_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
                 for (soup_items) |item| {
-                    const start_intersection_index = soup.grid_intersections.items.len;
+                    const start_intersection_index = intersection_writer.index;
                     const start_point: PointF32 = item.applyT(0.0);
                     const end_point: PointF32 = item.applyT(1.0);
                     const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
@@ -155,8 +155,8 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                         .point = end_point,
                     }).fitToGrid());
 
-                    const end_intersection_index = soup.grid_intersections.items.len;
-                    const grid_intersections = soup.grid_intersections.items[start_intersection_index..end_intersection_index];
+                    const end_intersection_index = intersection_writer.index;
+                    const grid_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
 
                     // need to sort by T for each curve, in order
                     std.mem.sort(

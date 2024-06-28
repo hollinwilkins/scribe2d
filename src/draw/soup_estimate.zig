@@ -390,6 +390,9 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 pub const LineSoupEstimator = SoupEstimator(Line, LineEstimatorImpl);
 
 pub const LineEstimatorImpl = struct {
+    const VIRTUAL_INTERSECTIONS: u32 = 2;
+    const INTERSECTION_FUDGE: u32 = 2;
+
     pub fn estimateLineItems(_: PointF32, _: PointF32, _: TransformF32.Matrix) f32 {
         return 1.0;
     }
@@ -419,8 +422,8 @@ pub const LineEstimatorImpl = struct {
 
     pub fn estimateIntersections(line: Line) u32 {
         const dxdy = line.end.sub(line.start);
-        const intersections: u32 = @intFromFloat(@floor(@abs(dxdy.x)) + @floor(@abs(dxdy.y)));
-        return @max(1, intersections);
+        const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
     }
 };
 
