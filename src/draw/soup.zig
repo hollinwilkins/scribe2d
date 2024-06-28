@@ -433,7 +433,7 @@ pub fn Soup(comptime T: type) type {
             return try self.spans.addOne(self.allocator);
         }
 
-        pub fn addSpans(self: *@This(), n: usize) !*Span {
+        pub fn addSpans(self: *@This(), n: usize) ![]Span {
             return try self.spans.addManyAsSlice(self.allocator, n);
         }
     };

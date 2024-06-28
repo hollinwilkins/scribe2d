@@ -169,15 +169,15 @@ pub fn main() !void {
                 path_record.span_offsets.end,
             });
 
-            const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-            for (subpath_records) |subpath_record| {
-                const intersection_count = subpath_record.intersection_offsets.size();
-                std.debug.print("Intersections({}), IntersectionOffsets({},{})\n", .{
-                    intersection_count,
-                    subpath_record.intersection_offsets.start,
-                    subpath_record.intersection_offsets.end,
-                });
-            }
+            // const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+            // for (subpath_records) |subpath_record| {
+            //     const intersection_count = subpath_record.intersection_offsets.size();
+            //     std.debug.print("Intersections({}), IntersectionOffsets({},{})\n", .{
+            //         intersection_count,
+            //         subpath_record.intersection_offsets.start,
+            //         subpath_record.intersection_offsets.end,
+            //     });
+            // }
         }
         std.debug.print("-----------------------------\n", .{});
     }

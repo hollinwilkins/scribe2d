@@ -32,24 +32,23 @@ const MergeFragment = soup_module.MergeFragment;
 const Span = soup_module.Span;
 const LineSoupEstimator = soup_estimate_module.LineSoupEstimator;
 
-pub fn SoupRasterizer(comptime T: type, comptime Estimator: T) type {
+pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
     const S = Soup(T);
 
     return struct {
-        estimator: Estimator,
         half_planes: *const HalfPlanesU16,
 
-        pub fn create(estimator: Estimator, half_planes: *const HalfPlanesU16) @This() {
+        pub fn create(half_planes: *const HalfPlanesU16) @This() {
             return @This(){
-                .estimator = estimator,
                 .half_planes = half_planes,
             };
         }
 
         pub fn rasterize(self: @This(), soup: *S) !void {
-            try self.estimator.estimateRaster(soup);
+            _ = Estimator;
+            // try Estimator.estimateRaster(soup);
 
             for (soup.path_records.items) |*path_record| {
                 const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
@@ -74,8 +73,6 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: T) type {
                     soup,
                     path_record,
                 );
-
-                soup.closePathMerges(path_record);
             }
         }
 
@@ -88,10 +85,10 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: T) type {
         ) !void {
             _ = self;
 
-            soup.openSubpathIntersections(subpath_record);
-
             const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-            for (curve_records) |curve_record| {
+            for (curve_records) |*curve_record| {
+                soup.openCurveIntersections(curve_record);
+
                 const soup_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
                 for (soup_items) |item| {
                     const start_intersection_index = soup.grid_intersections.items.len;
@@ -144,9 +141,9 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: T) type {
                         gridIntersectionLessThan,
                     );
                 }
-            }
 
-            soup.closeSubpathIntersections(subpath_record);
+                soup.closeCurveIntersections(curve_record);
+            }
         }
 
         fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
@@ -164,24 +161,35 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: T) type {
 
             const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
             for (subpath_records) |subpath_record| {
-                const grid_intersections = soup.grid_intersections.items[subpath_record.intersection_offsets.start..subpath_record.intersection_offsets.end];
-                if (grid_intersections.len == 0) {
-                    continue;
-                }
-
-                std.debug.assert(grid_intersections.len > 0);
-                for (grid_intersections, 0..) |*grid_intersection, index| {
-                    const next_grid_intersection = &grid_intersections[(index + 1) % grid_intersections.len];
-
-                    if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
-                        // skip if exactly the same point
+                const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                for (curve_records, 0..) |curve_record, curve_record_index| {
+                    const grid_intersections = soup.grid_intersections.items[curve_record.intersection_offsets.start..curve_record.intersection_offsets.end];
+                    if (grid_intersections.len == 0) {
                         continue;
                     }
 
-                    {
-                        const ao = try soup.addBoundaryFragment();
-                        ao.* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, next_grid_intersection });
-                        // std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
+                    std.debug.assert(grid_intersections.len > 0);
+                    for (grid_intersections, 0..) |*grid_intersection, index| {
+                        var next_grid_intersection: *GridIntersection = undefined;
+                        const next_index = index + 1;
+
+                        if (next_index >= grid_intersections.len) {
+                            const next_curve_record = curve_records[(curve_record_index + 1) % curve_records.len];
+                            next_grid_intersection = &soup.grid_intersections.items[next_curve_record.intersection_offsets.start];
+                        } else {
+                            next_grid_intersection = &grid_intersections[next_index];
+                        }
+
+                        if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
+                            // skip if exactly the same point
+                            continue;
+                        }
+
+                        {
+                            const ao = try soup.addBoundaryFragment();
+                            ao.* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, next_grid_intersection });
+                            // std.debug.assert(ao.intersections[0].t < ao.intersections[1].t);
+                        }
                     }
                 }
             }
