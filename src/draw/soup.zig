@@ -23,32 +23,6 @@ const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
 const Scene = scene_module.Scene;
 
-pub const Estimate = struct {
-    intersections: u32 = 0,
-    items: u32 = 0,
-
-    pub fn add(self: @This(), other: @This()) @This() {
-        return @This(){
-            .intersections = self.intersections + other.intersections,
-            .items = self.items + other.items,
-        };
-    }
-
-    pub fn mulScalar(self: @This(), value: f32) @This() {
-        return @This(){
-            .intersections = @intFromFloat(@as(f32, @floatFromInt(self.intersections)) * value),
-            .items = @intFromFloat(@as(f32, @floatFromInt(self.items)) * value),
-        };
-    }
-
-    pub fn max(self: @This(), other: @This()) @This() {
-        return @This(){
-            .intersections = @max(self.intersections, other.intersections),
-            .items = @max(self.items, other.items),
-        };
-    }
-};
-
 pub fn Soup(comptime T: type) type {
     return struct {
         pub const PathRecord = struct {
@@ -82,7 +56,7 @@ pub fn Soup(comptime T: type) type {
         pub const PathRecordList = std.ArrayListUnmanaged(PathRecord);
         pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
         pub const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
-        pub const EstimateList = std.ArrayListUnmanaged(Estimate);
+        pub const EstimateList = std.ArrayListUnmanaged(u32);
         pub const FillJobList = std.ArrayListUnmanaged(FillJob);
         pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
         pub const ItemList = std.ArrayListUnmanaged(T);
@@ -160,19 +134,19 @@ pub fn Soup(comptime T: type) type {
             self.curve_records.items[self.curve_records.items.len - 1].item_offsets.end = @intCast(self.items.items.len);
         }
 
-        pub fn addCurveEstimate(self: *@This()) !*Estimate {
+        pub fn addCurveEstimate(self: *@This()) !*u32 {
             return try self.curve_estimates.addOne(self.allocator);
         }
 
-        pub fn addCurveEstimates(self: *@This(), n: usize) ![]Estimate {
+        pub fn addCurveEstimates(self: *@This(), n: usize) ![]u32 {
             return try self.curve_estimates.addManyAsSlice(self.allocator, n);
         }
 
-        pub fn addBaseEstimate(self: *@This()) !*Estimate {
+        pub fn addBaseEstimate(self: *@This()) !*u32 {
             return try self.base_estimates.addOne(self.allocator);
         }
 
-        pub fn addBaseEstimates(self: *@This(), n: usize) ![]Estimate {
+        pub fn addBaseEstimates(self: *@This(), n: usize) ![]u32 {
             return try self.base_estimates.addManyAsSlice(self.allocator, n);
         }
 
