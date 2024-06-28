@@ -23,36 +23,36 @@ const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
 const Scene = scene_module.Scene;
 
+pub const PathRecord = struct {
+    fill: Style.Fill,
+    subpath_offsets: RangeU32,
+};
+
+pub const SubpathRecord = struct {
+    curve_offsets: RangeU32,
+};
+
+pub const CurveRecord = struct {
+    item_offsets: RangeU32,
+};
+
+pub const FillJob = struct {
+    // index in the source Paths struct for the curve data
+    metadata_index: u32,
+    source_curve_index: u32,
+    curve_index: u32,
+};
+pub const StrokeJob = struct {
+    // index in the source Paths struct for the curve data
+    metadata_index: u32,
+    source_subpath_index: u32,
+    source_curve_index: u32,
+    left_curve_index: u32,
+    right_curve_index: u32,
+};
+
 pub fn Soup(comptime T: type) type {
     return struct {
-        pub const PathRecord = struct {
-            fill: Style.Fill,
-            subpath_offsets: RangeU32,
-        };
-
-        pub const SubpathRecord = struct {
-            curve_offsets: RangeU32,
-        };
-
-        pub const CurveRecord = struct {
-            item_offsets: RangeU32,
-        };
-
-        pub const FillJob = struct {
-            // index in the source Paths struct for the curve data
-            metadata_index: u32,
-            source_curve_index: u32,
-            curve_index: u32,
-        };
-        pub const StrokeJob = struct {
-            // index in the source Paths struct for the curve data
-            metadata_index: u32,
-            source_subpath_index: u32,
-            source_curve_index: u32,
-            left_curve_index: u32,
-            right_curve_index: u32,
-        };
-
         pub const PathRecordList = std.ArrayListUnmanaged(PathRecord);
         pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
         pub const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);

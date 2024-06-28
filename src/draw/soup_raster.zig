@@ -395,7 +395,7 @@ pub fn SoupRasterizer(comptime T: type) type {
             self: @This(),
             raster_data: *RD,
             subpath_record: *SubpathRecord,
-            soup_subpath_record: S.SubpathRecord,
+            soup_subpath_record: soup_module.SubpathRecord,
         ) !void {
             _ = self;
 

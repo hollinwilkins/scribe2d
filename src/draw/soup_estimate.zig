@@ -29,6 +29,8 @@ const Soup = soup_module.Soup;
 const Estimate = soup_module.Estimate;
 const SubpathEstimate = soup_module.SubpathEstimate;
 const CurveEstimate = soup_module.CurveEstimate;
+const FillJob = soup_module.FillJob;
+const StrokeJob = soup_module.StrokeJob;
 const ERROR_TOLERANCE = flatten_module.ERROR_TOLERANCE;
 
 pub const ArcEstimate = struct {
@@ -114,7 +116,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 const source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
                                 const curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
 
-                                fill_job.* = S.FillJob{
+                                fill_job.* = FillJob{
                                     .metadata_index = @intCast(metadata_index),
                                     .source_curve_index = source_curve_index,
                                     .curve_index = curve_index,
@@ -182,7 +184,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 for (stroke_jobs, 0..) |*stroke_job, offset| {
                                     const left_curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
                                     const right_curve_index = soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
-                                    stroke_job.* = S.StrokeJob{
+                                    stroke_job.* = StrokeJob{
                                         .metadata_index = @intCast(metadata_index),
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
@@ -221,7 +223,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 for (stroke_jobs, 0..) |*stroke_job, offset| {
                                     const left_curve_index = left_soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
                                     const right_curve_index = right_soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
-                                    stroke_job.* = S.StrokeJob{
+                                    stroke_job.* = StrokeJob{
                                         .metadata_index = @intCast(metadata_index),
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
