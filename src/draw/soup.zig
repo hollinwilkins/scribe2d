@@ -24,31 +24,31 @@ const EulerSegment = euler.EulerSegment;
 const Scene = scene_module.Scene;
 
 pub const PathRecord = struct {
-    fill: Style.Fill,
-    subpath_offsets: RangeU32,
+    fill: Style.Fill = Style.Fill{},
+    subpath_offsets: RangeU32 = RangeU32{},
 };
 
 pub const SubpathRecord = struct {
-    curve_offsets: RangeU32,
+    curve_offsets: RangeU32 = RangeU32{},
 };
 
 pub const CurveRecord = struct {
-    item_offsets: RangeU32,
+    item_offsets: RangeU32 = RangeU32{},
 };
 
 pub const FillJob = struct {
     // index in the source Paths struct for the curve data
-    metadata_index: u32,
-    source_curve_index: u32,
-    curve_index: u32,
+    metadata_index: u32 = 0,
+    source_curve_index: u32 = 0,
+    curve_index: u32 = 0,
 };
 pub const StrokeJob = struct {
     // index in the source Paths struct for the curve data
-    metadata_index: u32,
-    source_subpath_index: u32,
-    source_curve_index: u32,
-    left_curve_index: u32,
-    right_curve_index: u32,
+    metadata_index: u32 = 0,
+    source_subpath_index: u32 = 0,
+    source_curve_index: u32 = 0,
+    left_curve_index: u32 = 0,
+    right_curve_index: u32 = 0,
 };
 
 pub fn Soup(comptime T: type) type {
@@ -88,50 +88,55 @@ pub fn Soup(comptime T: type) type {
             self.items.deinit(self.allocator);
         }
 
-        pub fn openPath(self: *@This(), fill: Style.Fill) !*PathRecord {
+        pub fn addPathRecord(self: *@This()) !*PathRecord {
             const path = try self.path_records.addOne(self.allocator);
-            path.* = PathRecord{
-                .fill = fill,
-                .subpath_offsets = RangeU32{
-                    .start = @intCast(self.subpath_records.items.len),
-                    .end = @intCast(self.subpath_records.items.len),
-                },
-            };
+            path.* = PathRecord{};
             return path;
         }
 
-        pub fn closePath(self: *@This()) void {
-            self.path_records.items[self.path_records.items.len - 1].subpath_offsets.end = @intCast(self.subpath_records.items.len);
+        pub fn openPathRecordSubpaths(self: @This(), path_record: *PathRecord) void {
+            path_record.subpath_offsets = RangeU32{
+                .start = @intCast(self.subpath_records.items.len),
+                .end = @intCast(self.subpath_records.items.len),
+            };
         }
 
-        pub fn openSubpath(self: *@This()) !*SubpathRecord {
+        pub fn closePathRecordSubpaths(self: @This(), path_record: *PathRecord) void {
+            path_record.subpath_offsets.end = @intCast(self.subpath_records.items.len);
+        }
+
+        pub fn addSubpath(self: *@This()) !*SubpathRecord {
             const subpath = try self.subpath_records.addOne(self.allocator);
-            subpath.* = SubpathRecord{
-                .curve_offsets = RangeU32{
-                    .start = @intCast(self.curve_records.items.len),
-                    .end = @intCast(self.curve_records.items.len),
-                },
-            };
+            subpath.* = SubpathRecord{};
             return subpath;
         }
 
-        pub fn closeSubpath(self: *@This()) void {
-            self.subpath_records.items[self.subpath_records.items.len - 1].curve_offsets.end = @intCast(self.curve_records.items.len);
+        pub fn openSubpathCurves(self: @This(), subpath_record: *SubpathRecord) void {
+            subpath_record.curve_offsets = RangeU32{
+                .start = @intCast(self.curve_records.items.len),
+                .end = @intCast(self.curve_records.items.len),
+            };
         }
 
-        pub fn openCurve(self: *@This()) !*CurveRecord {
+        pub fn closeSubpathCurves(self: @This(), subpath_record: *SubpathRecord) void {
+            subpath_record.curve_offsets.end = @intCast(self.curve_records.items.len);
+        }
+
+        pub fn addCurve(self: *@This()) !*CurveRecord {
             const curve = try self.curve_records.addOne(self.allocator);
-            curve.* = CurveRecord{
-                .item_offsets = RangeU32{
-                    .start = @intCast(self.items.items.len),
-                    .end = @intCast(self.items.items.len),
-                },
-            };
+            curve.* = CurveRecord{};
             return curve;
         }
 
-        pub fn closeCurve(self: *@This()) void {
-            self.curve_records.items[self.curve_records.items.len - 1].item_offsets.end = @intCast(self.items.items.len);
+        pub fn openCurveItems(self: *@This(), curve_record: *CurveRecord) void {
+            curve_record.item_offsets = RangeU32{
+                .start = @intCast(self.items.items.len),
+                .end = @intCast(self.items.items.len),
+            };
+        }
+
+        pub fn closeCurveItems(self: *@This(), curve_record: *CurveRecord) void {
+            curve_record.item_offsets.end = @intCast(self.items.items.len);
         }
 
         pub fn addCurveEstimate(self: *@This()) !*u32 {
