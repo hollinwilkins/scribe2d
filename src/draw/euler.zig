@@ -26,7 +26,7 @@ pub const CubicParams = struct {
 
     pub fn create(p0: PointF32, p1: PointF32, q0: PointF32, q1: PointF32, dt: f32) @This() {
         const chord = p1.sub(p0);
-        const chord_squared = chord.dot(chord); // length_squared
+        const chord_squared = chord.lengthSquared(); // length_squared
         const chord_len: f32 = std.math.sqrt(chord_squared);
         // Chord is near-zero; straight line case.
         if (chord_squared < TANGENT_THRESH_POW2) {
