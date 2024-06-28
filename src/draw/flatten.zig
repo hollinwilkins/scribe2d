@@ -193,11 +193,6 @@ const LineWriter = struct {
             return;
         }
 
-        // TODO: remove this
-        if (line.start.x == 5.4773743e1 or line.end.x == 5.4773743e1) {
-            std.debug.assert(false);
-        }
-
         self.lines[self.index] = line;
         self.index += 1;
     }
