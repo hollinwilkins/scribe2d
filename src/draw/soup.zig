@@ -38,11 +38,11 @@ pub const PathRecord = struct {
 
 pub const SubpathRecord = struct {
     curve_offsets: RangeU32 = RangeU32{},
-    intersection_offsets: RangeU32 = RangeU32{},
 };
 
 pub const CurveRecord = struct {
     item_offsets: RangeU32 = RangeU32{},
+    intersection_offsets: RangeU32 = RangeU32{},
 };
 
 pub const FillJob = struct {
@@ -339,16 +339,8 @@ pub fn Soup(comptime T: type) type {
             subpath_record.curve_offsets.start = @intCast(self.curve_records.items.len);
         }
 
-        pub fn openSubpathIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
-            subpath_record.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
-        }
-
         pub fn closeSubpathCurves(self: @This(), subpath_record: *SubpathRecord) void {
             subpath_record.curve_offsets.end = @intCast(self.curve_records.items.len);
-        }
-
-        pub fn closeSubpathIntersections(self: *@This(), subpath_record: *SubpathRecord) void {
-            subpath_record.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
         }
 
         pub fn addCurve(self: *@This()) !*CurveRecord {
@@ -361,8 +353,16 @@ pub fn Soup(comptime T: type) type {
             curve_record.item_offsets.start = @intCast(self.items.items.len);
         }
 
+        pub fn openCurveIntersections(self: *@This(), curve_record: *CurveRecord) void {
+            curve_record.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
+        }
+
         pub fn closeCurveItems(self: *@This(), curve_record: *CurveRecord) void {
             curve_record.item_offsets.end = @intCast(self.items.items.len);
+        }
+
+        pub fn closeCurveIntersections(self: *@This(), curve_record: *CurveRecord) void {
+            curve_record.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
         }
 
         pub fn addCurveEstimate(self: *@This()) !*u32 {

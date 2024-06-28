@@ -272,20 +272,20 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                 const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                 for (subpath_records) |*subpath_record| {
-                    var subpath_intersections: u32 = 0;
                     const curve_records = soup.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                     for (curve_records) |*curve_record| {
+                        var curve_intersections: u32 = 0;
                         const items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
                         for (items) |item| {
-                            subpath_intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateIntersections(item)));
+                            curve_intersections += @as(u32, @intFromFloat(EstimatorImpl.estimateIntersections(item)));
                         }
+
+                        soup.openCurveIntersections(curve_record);
+                        _ = try soup.addGridIntersections(curve_intersections);
+                        soup.closeCurveIntersections(curve_record);
+
+                        path_intersections += curve_intersections;
                     }
-
-                    soup.openSubpathIntersections(subpath_record);
-                    _ = try soup.addGridIntersections(subpath_intersections);
-                    soup.closeSubpathIntersections(subpath_record);
-
-                    path_intersections += subpath_intersections;
                 }
 
                 soup.openPathBoundaries(path_record);
