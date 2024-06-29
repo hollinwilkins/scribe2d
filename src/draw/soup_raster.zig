@@ -1,5 +1,5 @@
 const std = @import("std");
-const path_module = @import("./path.zig");
+const shape_module = @import("./shape.zig");
 const curve_module = @import("./curve.zig");
 const core = @import("../core/root.zig");
 const msaa = @import("./msaa.zig");
@@ -7,7 +7,7 @@ const soup_module = @import("./soup.zig");
 const soup_estimate_module = @import("./soup_estimate.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const Shape = path_module.Shape;
+const Shape = shape_module.Shape;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
 const PointI32 = core.PointI32;

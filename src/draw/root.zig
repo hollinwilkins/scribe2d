@@ -2,7 +2,7 @@ pub const Error = error{
     DimensionOverflow,
 };
 
-const path = @import("./path.zig");
+const shape = @import("./shape.zig");
 const flatten = @import("./flatten.zig");
 const scene = @import("./scene.zig");
 const soup = @import("./soup.zig");
@@ -13,9 +13,8 @@ const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const msaa = @import("./msaa.zig");
 
-pub const Shape = path.Shape;
-pub const PathBuilder = path.PathBuilder;
-pub const Segment = path.Segment;
+pub const Shape = shape.Shape;
+pub const ShapeBuilder = shape.ShapeBuilder;
 
 pub const LineSoup = soup.LineSoup;
 pub const LineSoupEstimator = soup_estimate.LineSoupEstimator;

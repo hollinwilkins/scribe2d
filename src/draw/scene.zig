@@ -1,15 +1,15 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const soup_pen = @import("./soup_pen.zig");
-const path_module = @import("./path.zig");
+const shape_module = @import("./shape.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
 const Style = soup_pen.Style;
-const Shape = path_module.Shape;
-const PathMetadata = path_module.PathMetadata;
+const Shape = shape_module.Shape;
+const PathMetadata = shape_module.PathMetadata;
 
 pub const Scene = struct {
     const StyleList = std.ArrayListUnmanaged(Style);

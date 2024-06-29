@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
-const path_module = @import("./path.zig");
+const shape_module = @import("./shape.zig");
 const soup_pen = @import("./soup_pen.zig");
 const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
@@ -12,10 +12,10 @@ const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
-const Path = path_module.Path;
-const PathBuilder = path_module.PathBuilder;
-const PathMetadata = path_module.PathMetadata;
-const Shape = path_module.Shape;
+const Path = shape_module.Path;
+const PathBuilder = shape_module.PathBuilder;
+const PathMetadata = shape_module.PathMetadata;
+const Shape = shape_module.Shape;
 const Style = soup_pen.Style;
 const Line = curve_module.Line;
 const Arc = curve_module.Arc;
@@ -305,7 +305,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
         fn estimateCurveBase(
             shape: Shape,
-            curve: path_module.Curve,
+            curve: shape_module.Curve,
             transform: TransformF32.Matrix,
         ) u32 {
             var estimate: u32 = 0;
@@ -331,7 +331,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
         }
 
         fn estimateCurveCap(
-            curve: path_module.Curve,
+            curve: shape_module.Curve,
             stroke: Style.Stroke,
             scaled_width: f32,
         ) u32 {

@@ -1,5 +1,5 @@
 const std = @import("std");
-const path_module = @import("./path.zig");
+const shape_module = @import("./shape.zig");
 const soup_module = @import("./soup.zig");
 const soup_raster = @import("./soup_raster.zig");
 const texture_module = @import("./texture.zig");
@@ -9,12 +9,12 @@ const Allocator = mem.Allocator;
 const Color = texture_module.Color;
 const ColorBlend = texture_module.ColorBlend;
 const AlphaColorBlend = texture_module.AlphaColorBlend;
-const Shape = path_module.Shape;
+const Shape = shape_module.Shape;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 const LineSoup = soup_module.LineSoup;
 const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
-const PathMetadata = path_module.PathMetadata;
+const PathMetadata = shape_module.PathMetadata;
 
 pub const Style = struct {
     pub const Cap = enum(u8) {

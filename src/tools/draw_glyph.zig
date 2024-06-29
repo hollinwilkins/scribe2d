@@ -32,7 +32,7 @@ pub fn main() !void {
 
     var glyph_paths = draw.Shape.init(allocator);
     defer glyph_paths.deinit();
-    var builder = draw.PathBuilder.create(&glyph_paths);
+    var builder = draw.ShapeBuilder.create(&glyph_paths);
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     // _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);

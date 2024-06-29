@@ -326,7 +326,7 @@ pub const Shape = struct {
     }
 };
 
-pub const PathBuilder = struct {
+pub const ShapeBuilder = struct {
     const GlyphPenVTable: *const GlyphPen.VTable = &.{
         .moveTo = GlyphPenFunctions.moveTo,
         .lineTo = GlyphPenFunctions.lineTo,
@@ -393,21 +393,21 @@ pub const PathBuilder = struct {
 
     pub const GlyphPenFunctions = struct {
         fn moveTo(ctx: *anyopaque, point: PointF32) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+            var b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
             b.moveTo(point) catch {
                 b.is_error = true;
             };
         }
 
         fn lineTo(ctx: *anyopaque, point: PointF32) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+            var b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
             b.lineTo(point) catch {
                 b.is_error = true;
             };
         }
 
         fn quadTo(ctx: *anyopaque, control: PointF32, point: PointF32) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+            var b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
             b.quadTo(control, point) catch {
                 b.is_error = true;
             };
@@ -418,21 +418,21 @@ pub const PathBuilder = struct {
         }
 
         fn open(ctx: *anyopaque) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+            var b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
             b.open() catch {
                 b.is_error = true;
             };
         }
 
         fn close(ctx: *anyopaque) void {
-            var b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+            var b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
             b.close() catch {
                 b.is_error = true;
             };
         }
 
         fn transform(ctx: *anyopaque, t: TransformF32) void {
-            const b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
+            const b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
             b.shape.transformCurrentPath(t);
         }
     };
