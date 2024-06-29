@@ -51,6 +51,7 @@ pub fn build(b: *std.Build) void {
     }
     const run_draw_glyph_step = b.step("draw_glyph", "Run the draw_glyph tool");
     run_draw_glyph_step.dependOn(&run_draw_glyph.step);
+    run_draw_glyph_step.dependOn(&install_fixtures_step.step);
 
     const test_gpu_exe = b.addExecutable(.{
         .name = "test_gpu",
@@ -67,6 +68,7 @@ pub fn build(b: *std.Build) void {
     }
     const run_test_gpu_step = b.step("test_gpu", "Run the test_gpu tool");
     run_test_gpu_step.dependOn(&run_test_gpu.step);
+    run_test_gpu_step.dependOn(&install_fixtures_step.step);
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
