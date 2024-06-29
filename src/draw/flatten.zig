@@ -17,7 +17,7 @@ const PointF32 = core.PointF32;
 const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
-const PathsData = path_module.PathsData;
+const Paths = path_module.Paths;
 const Style = soup_pen.Style;
 const Line = curve_module.Line;
 const CubicPoints = euler.CubicPoints;
@@ -147,9 +147,9 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
     }
 }
 
-fn readNeighborSegment(paths: PathsData, curve_range: RangeU32, index: u32) NeighborSegment {
+fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) NeighborSegment {
     const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
-    const curve_record = paths.curve_records[index_shifted];
+    const curve_record = paths.curve_records.items[index_shifted];
     const cubic_points = paths.getCubicPoints(curve_record);
     const tangent = cubicStartTangent(
         cubic_points.point0,
@@ -301,7 +301,7 @@ pub const PathFlattener = struct {
             scene.metadata.items,
             scene.styles.items,
             scene.transforms.items,
-            scene.paths.toPathsData(),
+            scene.paths,
         );
     }
 
@@ -310,7 +310,7 @@ pub const PathFlattener = struct {
         metadatas: []const PathMetadata,
         styles: []const Style,
         transforms: []const TransformF32.Matrix,
-        paths: PathsData,
+        paths: Paths,
     ) !LineSoup {
         var soup = try LineSoupEstimator.estimateAlloc(
             allocator,
@@ -322,10 +322,9 @@ pub const PathFlattener = struct {
         errdefer soup.deinit();
 
         for (soup.fill_jobs.items) |fill_job| {
-            const source_curve_record = paths.curve_records[fill_job.source_curve_index];
+            const source_curve_record = paths.curve_records.items[fill_job.source_curve_index];
             const cubic_points = paths.getCubicPoints(source_curve_record);
-            const metadata = metadatas[fill_job.metadata_index];
-            const transform = transforms[metadata.transform_index];
+            const transform = transforms[fill_job.transform_index];
             const curve_record = &soup.curve_records.items[fill_job.curve_index];
             const fill_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
 
@@ -345,11 +344,10 @@ pub const PathFlattener = struct {
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
-            const source_curve_record = paths.curve_records[stroke_job.source_curve_index];
+            const source_curve_record = paths.curve_records.items[stroke_job.source_curve_index];
             const cubic_points = paths.getCubicPoints(source_curve_record);
-            const metadata = metadatas[stroke_job.metadata_index];
-            const transform = transforms[metadata.transform_index];
-            const style = styles[metadata.style_index];
+            const transform = transforms[stroke_job.transform_index];
+            const style = styles[stroke_job.style_index];
             const stroke = style.stroke.?;
             const left_curve_record = &soup.curve_records.items[stroke_job.left_curve_index];
             const right_curve_record = &soup.curve_records.items[stroke_job.right_curve_index];
@@ -364,7 +362,7 @@ pub const PathFlattener = struct {
                 .y = offset,
             };
 
-            const source_subpath_record = paths.subpath_records[stroke_job.source_subpath_index];
+            const source_subpath_record = paths.subpath_records.items[stroke_job.source_subpath_index];
             const neighbor = readNeighborSegment(paths, source_subpath_record.curve_offsets, @intCast(stroke_job.source_curve_index + 1));
             var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
             var tan_next = neighbor.tangent;

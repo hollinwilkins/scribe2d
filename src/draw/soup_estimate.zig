@@ -16,7 +16,6 @@ const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
 const Paths = path_module.Paths;
-const PathsData = path_module.PathsData;
 const Style = soup_pen.Style;
 const Line = curve_module.Line;
 const Arc = curve_module.Arc;
@@ -59,12 +58,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             metadatas: []const PathMetadata,
             styles: []const Style,
             transforms: []const TransformF32.Matrix,
-            paths: PathsData,
+            paths: Paths,
         ) !S {
             var soup = S.init(allocator);
             errdefer soup.deinit();
 
-            const base_estimates = try soup.addBaseEstimates(paths.curve_records.len);
+            const base_estimates = try soup.addBaseEstimates(paths.curve_records.items.len);
 
             for (metadatas) |metadata| {
                 if (metadata.path_offsets.size() == 0) {
@@ -72,11 +71,11 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 }
 
                 const transform = transforms[metadata.transform_index];
-                const start_path_record = paths.path_records[metadata.path_offsets.start];
-                const end_path_record = paths.path_records[metadata.path_offsets.end - 1];
-                const start_subpath_record = paths.subpath_records[start_path_record.subpath_offsets.start];
-                const end_subpath_record = paths.subpath_records[end_path_record.subpath_offsets.end - 1];
-                const curve_records = paths.curve_records[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
+                const start_path_record = paths.path_records.items[metadata.path_offsets.start];
+                const end_path_record = paths.path_records.items[metadata.path_offsets.end - 1];
+                const start_subpath_record = paths.subpath_records.items[start_path_record.subpath_offsets.start];
+                const end_subpath_record = paths.subpath_records.items[end_path_record.subpath_offsets.end - 1];
+                const curve_records = paths.curve_records.items[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
                 const curve_estimates = base_estimates[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
 
                 for (curve_records, curve_estimates) |curve_record, *curve_estimate| {
@@ -84,17 +83,17 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 }
             }
 
-            for (metadatas, 0..) |metadata, metadata_index| {
+            for (metadatas) |metadata| {
                 const style = styles[metadata.style_index];
 
-                const path_records = paths.path_records[metadata.path_offsets.start..metadata.path_offsets.end];
+                const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
                 if (style.fill) |fill| {
                     for (path_records) |path_record| {
                         const soup_path_record = try soup.addPathRecord();
                         soup.openPathSubpaths(soup_path_record);
                         soup_path_record.fill = fill;
 
-                        const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                        const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records) |subpath_record| {
                             const soup_subpath_record = try soup.addSubpath();
                             soup.openSubpathCurves(soup_subpath_record);
@@ -122,7 +121,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 const curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
 
                                 fill_job.* = FillJob{
-                                    .metadata_index = @intCast(metadata_index),
+                                    .transform_index = metadata.transform_index,
                                     .source_curve_index = source_curve_index,
                                     .curve_index = curve_index,
                                 };
@@ -143,10 +142,10 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
 
                     for (path_records) |path_record| {
-                        const subpath_records = paths.subpath_records[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                        const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records, 0..) |subpath_record, subpath_record_offset| {
                             const curve_record_len = subpath_record.curve_offsets.size();
-                            const curve_records = paths.curve_records[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                            const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
 
                             const soup_path_record = try soup.addPathRecord();
@@ -199,7 +198,8 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     const left_curve_index = soup_subpath_record.curve_offsets.start + @as(u32, @intCast(offset));
                                     const right_curve_index = soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = StrokeJob{
-                                        .metadata_index = @intCast(metadata_index),
+                                        .transform_index = metadata.transform_index,
+                                        .style_index = metadata.style_index,
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_curve_index = left_curve_index,
@@ -248,7 +248,8 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     const left_curve_index = left_soup_subpath_record_start + @as(u32, @intCast(offset));
                                     const right_curve_index = right_soup_subpath_record.curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = StrokeJob{
-                                        .metadata_index = @intCast(metadata_index),
+                                        .transform_index = metadata.transform_index,
+                                        .style_index = metadata.style_index,
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_curve_index = left_curve_index,
@@ -303,19 +304,19 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
         }
 
         fn estimateCurveBase(
-            paths: PathsData,
-            curve_record: Paths.CurveRecord,
+            paths: Paths,
+            curve_record: path_module.CurveRecord,
             transform: TransformF32.Matrix,
         ) u32 {
             var estimate: u32 = 0;
 
             switch (curve_record.kind) {
                 .line => {
-                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                    const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
                     estimate += @as(u32, @intFromFloat(EstimatorImpl.estimateLineItems(points[0], points[1], transform)));
                 },
                 .quadratic_bezier => {
-                    const points = paths.points[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                    const points = paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
                     estimate += @as(u32, @intFromFloat(Wang.quadratic(
                         @floatCast(RSQRT_OF_TOL),
                         points[0],
@@ -330,7 +331,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
         }
 
         fn estimateCurveCap(
-            curve_record: Paths.CurveRecord,
+            curve_record: path_module.CurveRecord,
             stroke: Style.Stroke,
             scaled_width: f32,
         ) u32 {
