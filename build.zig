@@ -53,28 +53,13 @@ pub fn build(b: *std.Build) void {
     run_draw_glyph_step.dependOn(&run_draw_glyph.step);
     run_draw_glyph_step.dependOn(&install_fixtures_step.step);
 
-    const test_gpu_exe = b.addExecutable(.{
-        .name = "test_gpu",
-        .root_source_file = b.path("src/tools/test_gpu.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    test_gpu_exe.root_module.addImport("scribe", &lib.root_module);
-    b.installArtifact(test_gpu_exe);
-    const run_test_gpu = b.addRunArtifact(test_gpu_exe);
-    run_test_gpu.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_test_gpu.addArgs(args);
-    }
-    const run_test_gpu_step = b.step("test_gpu", "Run the test_gpu tool");
-    run_test_gpu_step.dependOn(&run_test_gpu.step);
-    run_test_gpu_step.dependOn(&install_fixtures_step.step);
-
-    const gpu_kernel = b.addStaticLibrary(gpuOptions(b, "kernel", optimize));
-    b.installArtifact(gpu_kernel);
-    test_gpu_exe.root_module.addAnonymousImport("kernel", .{
-        .root_source_file = gpu_kernel.getEmittedBin(),
-    });
+    // TODO: This doesn't work yet
+    //   Tracking Issue: https://github.com/ziglang/zig/issues/20454
+    // const gpu_kernel = b.addStaticLibrary(gpuOptions(b, "kernel", optimize));
+    // b.installArtifact(gpu_kernel);
+    // test_gpu_exe.root_module.addAnonymousImport("kernel", .{
+    //     .root_source_file = gpu_kernel.getEmittedBin(),
+    // });
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
@@ -102,38 +87,6 @@ pub fn build(b: *std.Build) void {
         draw_glyph_exe.linkLibrary(dep.artifact("zstbi"));
         exe_unit_tests.root_module.addImport("zstbi", dep.module("root"));
         exe_unit_tests.linkLibrary(dep.artifact("zstbi"));
-    }
-
-    if (b.lazyDependency("zgpu", .{
-        .target = target,
-        .optimize = optimize,
-    })) |dep| {
-        @import("zgpu").addLibraryPathsTo(test_gpu_exe);
-        test_gpu_exe.root_module.addImport("zgpu", dep.module("root"));
-        test_gpu_exe.linkLibrary(dep.artifact("zdawn"));
-    }
-
-    if (b.lazyDependency("zglfw", .{
-        .target = target,
-        .optimize = optimize,
-    })) |dep| {
-        test_gpu_exe.root_module.addImport("zglfw", dep.module("root"));
-        test_gpu_exe.linkLibrary(dep.artifact("glfw"));
-    }
-
-    if (b.lazyDependency("zmath", .{
-        .target = target,
-        .optimize = optimize,
-    })) |dep| {
-        test_gpu_exe.root_module.addImport("zmath", dep.module("root"));
-    }
-
-    if (b.lazyDependency("zgui", .{
-        .target = target,
-        .optimize = optimize,
-    })) |dep| {
-        test_gpu_exe.root_module.addImport("zgui", dep.module("root"));
-        test_gpu_exe.linkLibrary(dep.artifact("imgui"));
     }
 
     // Similar to creating the run step earlier, this exposes a `test` step to
