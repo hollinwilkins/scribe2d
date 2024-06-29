@@ -139,13 +139,14 @@ pub fn Kernel(comptime T: type) type {
             // input buffers
             transforms: []const TransformF32.Matrix,
             styles: []const Style,
+            subpaths: []const Subpath,
             curves: []const Curve,
             points: []const PointF32,
             // job parameters
             transform_index: u32,
             style_index: u32,
             curve_index: u32,
-            curve_range: RangeU32,
+            subpath_index: u32,
             left_flat_curve_index: u32,
             right_flat_curve_index: u32,
             // write destination
@@ -177,6 +178,7 @@ pub fn Kernel(comptime T: type) type {
                 .y = offset,
             };
 
+            const curve_range = subpaths[subpath_index].curve_offsets;
             const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
             var tan_prev = cubicEndTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
             var tan_next = neighbor.tangent;
@@ -221,6 +223,7 @@ pub fn Kernel(comptime T: type) type {
             if (curve.cap == .start) {
                 // draw start cap on left side
                 drawCap(
+                    config,
                     stroke.start_cap,
                     cubic_points.point0,
                     cubic_points.point0.sub(n_start),
@@ -232,6 +235,7 @@ pub fn Kernel(comptime T: type) type {
             }
 
             flattenEuler(
+                config,
                 cubic_points,
                 transform,
                 offset,
@@ -240,10 +244,11 @@ pub fn Kernel(comptime T: type) type {
                 &left_writer,
             );
 
-            var right_join_index: u32 = 0;
+            var right_join_index: usize = 0;
             if (curve.cap == .end) {
                 // draw end cap on left side
                 drawCap(
+                    config,
                     stroke.end_cap,
                     cubic_points.point3,
                     cubic_points.point3.add(n_prev),
@@ -269,6 +274,7 @@ pub fn Kernel(comptime T: type) type {
             }
 
             flattenEuler(
+                config,
                 cubic_points,
                 transform,
                 -offset,
@@ -475,7 +481,7 @@ pub fn Kernel(comptime T: type) type {
             writer: *Writer,
         ) void {
             if (cap_style == .round) {
-                return try flattenArc(
+                flattenArc(
                     config,
                     cap0,
                     cap1,
@@ -484,6 +490,7 @@ pub fn Kernel(comptime T: type) type {
                     transform,
                     writer,
                 );
+                return;
             }
 
             var start = cap0;

@@ -339,128 +339,146 @@ pub const PathFlattener = struct {
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
-            const curve = shape.curves.items[stroke_job.curve_index];
-            const cubic_points = shape.getCubicPoints(curve);
-            const transform = transforms[stroke_job.transform_index];
-            const style = styles[stroke_job.style_index];
-            const stroke = style.stroke.?;
-            const left_curve = &soup.flat_curves.items[stroke_job.left_flat_curve_index];
-            const right_curve = &soup.flat_curves.items[stroke_job.right_flat_curve_index];
-            const left_stroke_lines = soup.items.items[left_curve.item_offsets.start..left_curve.item_offsets.end];
-            const right_stroke_lines = soup.items.items[right_curve.item_offsets.start..right_curve.item_offsets.end];
-            var left_line_writer = LineWriter{ .lines = left_stroke_lines };
-            var right_line_writer = LineWriter{ .lines = right_stroke_lines };
+            LineKernel.flattenStroke(
+                KernelConfig.DEFAULT,
+                transforms,
+                styles,
+                shape.subpaths.items,
+                shape.curves.items,
+                shape.points.items,
 
-            const offset = 0.5 * stroke.width;
-            const offset_point = PointF32{
-                .x = offset,
-                .y = offset,
-            };
+                stroke_job.transform_index,
+                stroke_job.style_index,
+                stroke_job.curve_index,
+                stroke_job.subpath_index,
+                stroke_job.left_flat_curve_index,
+                stroke_job.right_flat_curve_index,
 
-            const source_subpath = shape.subpaths.items[stroke_job.source_subpath_index];
-            const neighbor = readNeighborSegment(shape, source_subpath.curve_offsets, @intCast(stroke_job.curve_index + 1));
-            var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
-            var tan_next = neighbor.tangent;
-            var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
-
-            if (tan_start.dot(tan_start) < euler.TANGENT_THRESH_POW2) {
-                tan_start = PointF32{
-                    .x = euler.TANGENT_THRESH,
-                    .y = 0.0,
-                };
-            }
-
-            if (tan_prev.dot(tan_prev) < euler.TANGENT_THRESH_POW2) {
-                tan_prev = PointF32{
-                    .x = euler.TANGENT_THRESH,
-                    .y = 0.0,
-                };
-            }
-
-            if (tan_next.dot(tan_next) < euler.TANGENT_THRESH_POW2) {
-                tan_next = PointF32{
-                    .x = euler.TANGENT_THRESH,
-                    .y = 0.0,
-                };
-            }
-
-            const n_start = offset_point.mul((PointF32{
-                .x = -tan_start.y,
-                .y = tan_start.x,
-            }).normalizeUnsafe());
-            const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
-            const n_prev = PointF32{
-                .x = -offset_tangent.y,
-                .y = offset_tangent.x,
-            };
-            const tan_next_norm = tan_next.normalizeUnsafe();
-            const n_next = offset_point.mul(PointF32{
-                .x = -tan_next_norm.y,
-                .y = tan_next_norm.x,
-            });
-
-            if (curve.cap == .start) {
-                // draw start cap on left side
-                try drawCap(
-                    stroke.start_cap,
-                    cubic_points.point0,
-                    cubic_points.point0.sub(n_start),
-                    cubic_points.point0.add(n_start),
-                    offset_tangent.negate(),
-                    transform,
-                    &left_line_writer,
-                );
-            }
-
-            try flattenEuler(
-                cubic_points,
-                transform,
-                offset,
-                cubic_points.point0.add(n_start),
-                cubic_points.point3.add(n_prev),
-                &left_line_writer,
+                soup.flat_curves.items,
+                soup.items.items,
             );
+            // const curve = shape.curves.items[stroke_job.curve_index];
+            // const cubic_points = shape.getCubicPoints(curve);
+            // const transform = transforms[stroke_job.transform_index];
+            // const style = styles[stroke_job.style_index];
+            // const stroke = style.stroke.?;
+            // const left_curve = &soup.flat_curves.items[stroke_job.left_flat_curve_index];
+            // const right_curve = &soup.flat_curves.items[stroke_job.right_flat_curve_index];
+            // const left_stroke_lines = soup.items.items[left_curve.item_offsets.start..left_curve.item_offsets.end];
+            // const right_stroke_lines = soup.items.items[right_curve.item_offsets.start..right_curve.item_offsets.end];
+            // var left_line_writer = LineWriter{ .lines = left_stroke_lines };
+            // var right_line_writer = LineWriter{ .lines = right_stroke_lines };
 
-            if (curve.cap == .end) {
-                // draw end cap on left side
-                try drawCap(
-                    stroke.end_cap,
-                    cubic_points.point3,
-                    cubic_points.point3.add(n_prev),
-                    cubic_points.point3.sub(n_prev),
-                    offset_tangent,
-                    transform,
-                    &left_line_writer,
-                );
-            } else {
-                try drawJoin(
-                    stroke,
-                    cubic_points.point3,
-                    tan_prev,
-                    tan_next,
-                    n_prev,
-                    n_next,
-                    transform,
-                    &left_line_writer,
-                    &right_line_writer,
-                );
-                right_line_writer.mark();
-            }
+            // const offset = 0.5 * stroke.width;
+            // const offset_point = PointF32{
+            //     .x = offset,
+            //     .y = offset,
+            // };
 
-            try flattenEuler(
-                cubic_points,
-                transform,
-                -offset,
-                cubic_points.point0.sub(n_start),
-                cubic_points.point3.sub(n_prev),
-                &right_line_writer,
-            );
+            // const source_subpath = shape.subpaths.items[stroke_job.source_subpath_index];
+            // const neighbor = readNeighborSegment(shape, source_subpath.curve_offsets, @intCast(stroke_job.curve_index + 1));
+            // var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+            // var tan_next = neighbor.tangent;
+            // var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
 
-            left_curve.item_offsets.end = left_curve.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
-            right_curve.item_offsets.end = right_curve.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
+            // if (tan_start.dot(tan_start) < euler.TANGENT_THRESH_POW2) {
+            //     tan_start = PointF32{
+            //         .x = euler.TANGENT_THRESH,
+            //         .y = 0.0,
+            //     };
+            // }
 
-            right_line_writer.reverseAfterMark();
-            right_line_writer.debug();
+            // if (tan_prev.dot(tan_prev) < euler.TANGENT_THRESH_POW2) {
+            //     tan_prev = PointF32{
+            //         .x = euler.TANGENT_THRESH,
+            //         .y = 0.0,
+            //     };
+            // }
+
+            // if (tan_next.dot(tan_next) < euler.TANGENT_THRESH_POW2) {
+            //     tan_next = PointF32{
+            //         .x = euler.TANGENT_THRESH,
+            //         .y = 0.0,
+            //     };
+            // }
+
+            // const n_start = offset_point.mul((PointF32{
+            //     .x = -tan_start.y,
+            //     .y = tan_start.x,
+            // }).normalizeUnsafe());
+            // const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
+            // const n_prev = PointF32{
+            //     .x = -offset_tangent.y,
+            //     .y = offset_tangent.x,
+            // };
+            // const tan_next_norm = tan_next.normalizeUnsafe();
+            // const n_next = offset_point.mul(PointF32{
+            //     .x = -tan_next_norm.y,
+            //     .y = tan_next_norm.x,
+            // });
+
+            // if (curve.cap == .start) {
+            //     // draw start cap on left side
+            //     try drawCap(
+            //         stroke.start_cap,
+            //         cubic_points.point0,
+            //         cubic_points.point0.sub(n_start),
+            //         cubic_points.point0.add(n_start),
+            //         offset_tangent.negate(),
+            //         transform,
+            //         &left_line_writer,
+            //     );
+            // }
+
+            // try flattenEuler(
+            //     cubic_points,
+            //     transform,
+            //     offset,
+            //     cubic_points.point0.add(n_start),
+            //     cubic_points.point3.add(n_prev),
+            //     &left_line_writer,
+            // );
+
+            // if (curve.cap == .end) {
+            //     // draw end cap on left side
+            //     try drawCap(
+            //         stroke.end_cap,
+            //         cubic_points.point3,
+            //         cubic_points.point3.add(n_prev),
+            //         cubic_points.point3.sub(n_prev),
+            //         offset_tangent,
+            //         transform,
+            //         &left_line_writer,
+            //     );
+            // } else {
+            //     try drawJoin(
+            //         stroke,
+            //         cubic_points.point3,
+            //         tan_prev,
+            //         tan_next,
+            //         n_prev,
+            //         n_next,
+            //         transform,
+            //         &left_line_writer,
+            //         &right_line_writer,
+            //     );
+            //     right_line_writer.mark();
+            // }
+
+            // try flattenEuler(
+            //     cubic_points,
+            //     transform,
+            //     -offset,
+            //     cubic_points.point0.sub(n_start),
+            //     cubic_points.point3.sub(n_prev),
+            //     &right_line_writer,
+            // );
+
+            // left_curve.item_offsets.end = left_curve.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
+            // right_curve.item_offsets.end = right_curve.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
+
+            // right_line_writer.reverseAfterMark();
+            // right_line_writer.debug();
         }
 
         return soup;

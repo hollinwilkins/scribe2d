@@ -200,7 +200,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     stroke_job.* = StrokeJob{
                                         .transform_index = metadata.transform_index,
                                         .style_index = metadata.style_index,
-                                        .source_subpath_index = path.subpath_offsets.start + @as(u32, @intCast(subpath_offset)),
+                                        .subpath_index = path.subpath_offsets.start + @as(u32, @intCast(subpath_offset)),
                                         .curve_index = subpath.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_flat_curve_index = left_flat_curve_index,
                                         .right_flat_curve_index = right_flat_curve_index,
@@ -250,7 +250,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     stroke_job.* = StrokeJob{
                                         .transform_index = metadata.transform_index,
                                         .style_index = metadata.style_index,
-                                        .source_subpath_index = path.subpath_offsets.start + @as(u32, @intCast(subpath_offset)),
+                                        .subpath_index = path.subpath_offsets.start + @as(u32, @intCast(subpath_offset)),
                                         .curve_index = subpath.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_flat_curve_index = left_flat_curve_index,
                                         .right_flat_curve_index = right_flat_curve_index,

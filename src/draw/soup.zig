@@ -56,7 +56,7 @@ pub const StrokeJob = struct {
     // index in the source Shape struct for the curve data
     transform_index: u32 = 0,
     style_index: u32 = 0,
-    source_subpath_index: u32 = 0,
+    subpath_index: u32 = 0,
     curve_index: u32 = 0,
     left_flat_curve_index: u32 = 0,
     right_flat_curve_index: u32 = 0,
