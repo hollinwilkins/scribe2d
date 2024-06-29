@@ -159,8 +159,7 @@ pub fn gpuOptions(
         .root_source_file = b.path("src/draw/kernel.zig"),
         .target = b.resolveTargetQuery(std.Target.Query{
             .cpu_arch = .spirv64,
-            .os_tag = .opencl,
-            .abi = .gnu,
+            .os_tag = .vulkan,
             .cpu_features_add = std.Target.spirv.featureSet(&.{
                 .Int64,
                 .Int16,
