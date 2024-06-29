@@ -70,25 +70,11 @@ pub fn build(b: *std.Build) void {
     run_test_gpu_step.dependOn(&run_test_gpu.step);
     run_test_gpu_step.dependOn(&install_fixtures_step.step);
 
-    const gpu_kernel = b.addStaticLibrary(.{
-        .name = "kernel",
-        .root_source_file = b.path("src/draw/kernel.zig"),
-        .target = b.resolveTargetQuery(std.Target.Query{
-            .cpu_arch = .spirv64,
-            .os_tag = .opencl,
-            .abi = .gnu,
-            .cpu_features_add = std.Target.spirv.featureSet(&.{
-                .Int64,
-                .Int16,
-                .Int8,
-                .Float64,
-                .Float16,
-                .Vector16,
-            }),
-        }),
-        .optimize = optimize,
-    });
+    const gpu_kernel = b.addStaticLibrary(gpuOptions(b, "kernel", optimize));
     b.installArtifact(gpu_kernel);
+    test_gpu_exe.root_module.addAnonymousImport("kernel", .{
+        .root_source_file = gpu_kernel.getEmittedBin(),
+    });
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
@@ -161,4 +147,31 @@ pub fn build(b: *std.Build) void {
     const lib_unit_tests_install = b.addInstallArtifact(lib_unit_tests, .{});
     test_install_step.dependOn(&install_fixtures_step.step);
     test_install_step.dependOn(&lib_unit_tests_install.step);
+}
+
+pub fn gpuOptions(
+    b: *std.Build,
+    name: []const u8,
+    optimize: std.builtin.OptimizeMode,
+) std.Build.StaticLibraryOptions {
+    return std.Build.StaticLibraryOptions{
+        .name = name,
+        .root_source_file = b.path("src/draw/kernel.zig"),
+        .target = b.resolveTargetQuery(std.Target.Query{
+            .cpu_arch = .spirv64,
+            .os_tag = .opencl,
+            .abi = .gnu,
+            .cpu_features_add = std.Target.spirv.featureSet(&.{
+                .Int64,
+                .Int16,
+                .Int8,
+                .Float64,
+                .Float16,
+                .Vector16,
+            }),
+        }),
+        .optimize = optimize,
+        .use_llvm = false,
+        .use_lld = false,
+    };
 }

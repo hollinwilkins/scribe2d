@@ -1,10 +1,4 @@
-// const f32x3 = [3]f32;
-// const f32x4 = [4]f32;
-
-pub fn main() void {
-    // placeholder needed for SPIR-V executable compilation
+export fn saxpy(y: [*]addrspace(.global) f32, x: [*]addrspace(.global) const f32, a: f32) callconv(.Kernel) void {
+    const gid = @workGroupId(0) * @workGroupSize(0) + @workItemId(0);
+    y[gid] += x[gid] * a;
 }
-
-// pub fn main_fs(color: f32x3) f32x4 {
-//     return f32x4{ color[0], color[1], color[2], 1.0 };
-// }
