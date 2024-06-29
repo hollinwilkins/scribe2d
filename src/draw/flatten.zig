@@ -322,7 +322,7 @@ pub const PathFlattener = struct {
         errdefer soup.deinit();
 
         for (soup.fill_jobs.items) |fill_job| {
-            const curve = paths.curves.items[fill_job.source_curve_index];
+            const curve = paths.curves.items[fill_job.curve_index];
             const cubic_points = paths.getCubicPoints(curve);
             const transform = transforms[fill_job.transform_index];
             const flat_curve = &soup.flat_curves.items[fill_job.flat_curve_index];
@@ -344,8 +344,8 @@ pub const PathFlattener = struct {
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
-            const source_curve_record = paths.curves.items[stroke_job.source_curve_index];
-            const cubic_points = paths.getCubicPoints(source_curve_record);
+            const curve = paths.curves.items[stroke_job.curve_index];
+            const cubic_points = paths.getCubicPoints(curve);
             const transform = transforms[stroke_job.transform_index];
             const style = styles[stroke_job.style_index];
             const stroke = style.stroke.?;
@@ -363,7 +363,7 @@ pub const PathFlattener = struct {
             };
 
             const source_subpath_record = paths.subpaths.items[stroke_job.source_subpath_index];
-            const neighbor = readNeighborSegment(paths, source_subpath_record.curve_offsets, @intCast(stroke_job.source_curve_index + 1));
+            const neighbor = readNeighborSegment(paths, source_subpath_record.curve_offsets, @intCast(stroke_job.curve_index + 1));
             var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
             var tan_next = neighbor.tangent;
             var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
@@ -404,7 +404,7 @@ pub const PathFlattener = struct {
                 .y = tan_next_norm.x,
             });
 
-            if (source_curve_record.cap == .start) {
+            if (curve.cap == .start) {
                 // draw start cap on left side
                 try drawCap(
                     stroke.start_cap,
@@ -426,7 +426,7 @@ pub const PathFlattener = struct {
                 &left_line_writer,
             );
 
-            if (source_curve_record.cap == .end) {
+            if (curve.cap == .end) {
                 // draw end cap on left side
                 try drawCap(
                     stroke.end_cap,

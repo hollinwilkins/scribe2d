@@ -48,7 +48,7 @@ pub const FlatCurve = struct {
 pub const FillJob = struct {
     // index in the source Paths struct for the curve data
     transform_index: u32 = 0,
-    source_curve_index: u32 = 0,
+    curve_index: u32 = 0,
     flat_curve_index: u32 = 0,
 };
 
@@ -57,7 +57,7 @@ pub const StrokeJob = struct {
     transform_index: u32 = 0,
     style_index: u32 = 0,
     source_subpath_index: u32 = 0,
-    source_curve_index: u32 = 0,
+    curve_index: u32 = 0,
     left_flat_curve_index: u32 = 0,
     right_flat_curve_index: u32 = 0,
 };

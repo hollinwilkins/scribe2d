@@ -117,12 +117,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 soup.openFlatCurveItems(soup_curve_record);
 
                                 _ = try soup.addItems(fill_curve_estimate.*);
-                                const source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
+                                const curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
                                 const flat_curve_index = soup_subpath_record.flat_curve_offsets.start + @as(u32, @intCast(curve_offset));
 
                                 fill_job.* = FillJob{
                                     .transform_index = metadata.transform_index,
-                                    .source_curve_index = source_curve_index,
+                                    .curve_index = curve_index,
                                     .flat_curve_index = flat_curve_index,
                                 };
 
@@ -201,7 +201,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                         .transform_index = metadata.transform_index,
                                         .style_index = metadata.style_index,
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
-                                        .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
+                                        .curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_flat_curve_index = left_flat_curve_index,
                                         .right_flat_curve_index = right_flat_curve_index,
                                     };
@@ -251,7 +251,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                         .transform_index = metadata.transform_index,
                                         .style_index = metadata.style_index,
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
-                                        .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
+                                        .curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
                                         .left_flat_curve_index = left_flat_curve_index,
                                         .right_flat_curve_index = right_flat_curve_index,
                                     };
