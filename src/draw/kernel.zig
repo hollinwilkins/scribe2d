@@ -11,6 +11,8 @@ const RangeU32 = core.RangeU32;
 const FlatPath = soup_module.FlatPath;
 const FlatSubpath = soup_module.FlatSubpath;
 const FlatCurve = soup_module.FlatCurve;
+const FillJob = soup_module.FillJob;
+const StrokeJob = soup_module.StrokeJob;
 const Path = shape_module.Path;
 const Subpath = shape_module.Subpath;
 const Curve = shape_module.Curve;
@@ -95,6 +97,60 @@ pub fn Kernel(comptime T: type) type {
     };
 
     return struct {
+        pub fn flatten(
+            config: KernelConfig,
+            // input buffers
+            transforms: []const TransformF32.Matrix,
+            styles: []const Style,
+            subpaths: []const Subpath,
+            curves: []const Curve,
+            points: []const PointF32,
+            fill_jobs: []const FillJob,
+            fill_range: RangeU32,
+            stroke_jobs: []const StrokeJob,
+            stroke_range: RangeU32,
+            // write destination
+            flat_curves: []FlatCurve,
+            items: []T,
+        ) void {
+            for (fill_jobs[fill_range.start..fill_range.end]) |fill_job| {
+                flattenFill(
+                    config,
+                    // inputs
+                    transforms,
+                    curves,
+                    points,
+                    fill_job.transform_index,
+                    fill_job.curve_index,
+                    fill_job.flat_curve_index,
+                    // output
+                    flat_curves,
+                    items,
+                );
+            }
+
+            for (stroke_jobs[stroke_range.start..stroke_range.end]) |stroke_job| {
+                flattenStroke(
+                    config,
+                    // input
+                    transforms,
+                    styles,
+                    subpaths,
+                    curves,
+                    points,
+                    stroke_job.transform_index,
+                    stroke_job.style_index,
+                    stroke_job.curve_index,
+                    stroke_job.subpath_index,
+                    stroke_job.left_flat_curve_index,
+                    stroke_job.right_flat_curve_index,
+                    // output
+                    flat_curves,
+                    items,
+                );
+            }
+        }
+
         pub fn flattenFill(
             // input uniform
             config: KernelConfig,

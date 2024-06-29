@@ -69,40 +69,26 @@ pub const PathFlattener = struct {
         );
         errdefer soup.deinit();
 
-        for (soup.fill_jobs.items) |fill_job| {
-            LineKernel.flattenFill(
-                KernelConfig.DEFAULT,
-                transforms,
-                shape.curves.items,
-                shape.points.items,
-                fill_job.transform_index,
-                fill_job.curve_index,
-                fill_job.flat_curve_index,
-                soup.flat_curves.items,
-                soup.items.items,
-            );
-        }
-
-        for (soup.stroke_jobs.items) |stroke_job| {
-            LineKernel.flattenStroke(
-                KernelConfig.DEFAULT,
-                transforms,
-                styles,
-                shape.subpaths.items,
-                shape.curves.items,
-                shape.points.items,
-
-                stroke_job.transform_index,
-                stroke_job.style_index,
-                stroke_job.curve_index,
-                stroke_job.subpath_index,
-                stroke_job.left_flat_curve_index,
-                stroke_job.right_flat_curve_index,
-
-                soup.flat_curves.items,
-                soup.items.items,
-            );
-        }
+        LineKernel.flatten(
+            config,
+            transforms,
+            styles,
+            shape.subpaths.items,
+            shape.curves.items,
+            shape.points.items,
+            soup.fill_jobs.items,
+            RangeU32{
+                .start = 0,
+                .end = @intCast(soup.fill_jobs.items.len),
+            },
+            soup.stroke_jobs.items,
+            RangeU32{
+                .start = 0,
+                .end = @intCast(soup.stroke_jobs.items.len),
+            },
+            soup.flat_curves.items,
+            soup.items.items,
+        );
 
         return soup;
     }
