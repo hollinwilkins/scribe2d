@@ -4,8 +4,10 @@ const soup_module = @import("./soup.zig");
 const shape_module = @import("./shape.zig");
 const euler_module = @import("./euler.zig");
 const curve_module = @import("./curve.zig");
+const pen_module = @import("./soup_pen.zig");
 const TransformF32 = core.TransformF32;
 const PointF32 = core.PointF32;
+const RangeU32 = core.RangeU32;
 const FlatPath = soup_module.FlatPath;
 const FlatSubpath = soup_module.FlatSubpath;
 const FlatCurve = soup_module.FlatCurve;
@@ -17,6 +19,7 @@ const CubicParams = euler_module.CubicParams;
 const EulerParams = euler_module.EulerParams;
 const EulerSegment = euler_module.EulerSegment;
 const Line = curve_module.Line;
+const Style = pen_module.Style;
 
 pub const KernelConfig = struct {
     pub const DEFAULT: @This() = init(@This(){});
@@ -41,13 +44,35 @@ pub const KernelConfig = struct {
     error_tolerance: f32 = 0.125,
     subdivision_limit: f32 = 1.0 / 65536.0,
 
+    tangent_threshold: f32 = 1e-6,
+    tangent_threshold_pow2: f32 = 0.0,
+    min_theta: f32 = 0.0001,
+
     pub fn init(config: @This()) @This() {
         return @This(){
+            .k1_threshold = config.k1_threshold,
+            .distance_threshold = config.distance_threshold,
+            .break1 = config.break1,
+            .break2 = config.break2,
+            .break3 = config.break3,
+            .sin_scale = config.sin_scale,
+            .quad_a1 = config.quad_a1,
+            .quad_b1 = config.quad_b1,
+            .quad_c1 = config.quad_c1,
+            .quad_a2 = config.quad_a2,
+            .quad_b2 = config.quad_b2,
+            .quad_c2 = config.quad_c2,
+            .robust_eps = config.robust_eps,
+
             .derivative_threshold = config.derivative_threshold,
             .derivative_threshold_pow2 = std.math.pow(f32, config.derivative_threshold, 2.0),
             .derivative_eps = config.derivative_eps,
             .error_tolerance = config.error_tolerance,
             .subdivision_limit = config.subdivision_limit,
+
+            .tangent_threshold = config.tangent_threshold,
+            .tangent_threshold_pow2 = std.math.pow(f32, config.tangent_threshold, 2.0),
+            .min_theta = config.min_theta,
         };
     }
 };
@@ -95,7 +120,7 @@ pub fn Kernel(comptime T: type) type {
             var writer = Writer{
                 .items = fill_items,
             };
-            try flattenEuler(
+            flattenEuler(
                 config,
                 cubic_points,
                 transform,
@@ -108,6 +133,156 @@ pub fn Kernel(comptime T: type) type {
             flat_curves[flat_curve_index].item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(writer.index));
         }
 
+        pub fn flattenStroke(
+            // input uniform
+            config: KernelConfig,
+            // input buffers
+            transforms: []const TransformF32.Matrix,
+            styles: []const Style,
+            curves: []const Curve,
+            points: []const PointF32,
+            // job parameters
+            transform_index: u32,
+            style_index: u32,
+            curve_index: u32,
+            curve_range: RangeU32,
+            left_flat_curve_index: u32,
+            right_flat_curve_index: u32,
+            // write destination
+            flat_curves: []FlatCurve,
+            items: []T,
+        ) void {
+            const transform = transforms[transform_index];
+            const curve = curves[curve_index];
+            const left_flat_curve = flat_curves[left_flat_curve_index];
+            const right_flat_curve = flat_curves[right_flat_curve_index];
+            const cubic_points = getCubicPoints(
+                curve,
+                points[curve.point_offsets.start..curve.point_offsets.end],
+            );
+            const left_stroke_items = items[left_flat_curve.item_offsets.start..left_flat_curve.item_offsets.end];
+            const right_stroke_items = items[right_flat_curve.item_offsets.start..right_flat_curve.item_offsets.end];
+            var left_writer = Writer{
+                .items = left_stroke_items,
+            };
+            var right_writer = Writer{
+                .items = right_stroke_items,
+            };
+            const style = styles[style_index];
+            const stroke = style.stroke.?;
+
+            const offset = 0.5 * stroke.width;
+            const offset_point = PointF32{
+                .x = offset,
+                .y = offset,
+            };
+
+            const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
+            var tan_prev = cubicEndTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+            var tan_next = neighbor.tangent;
+            var tan_start = cubicStartTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+
+            if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
+                tan_start = PointF32{
+                    .x = config.tangent_threshold,
+                    .y = 0.0,
+                };
+            }
+
+            if (tan_prev.dot(tan_prev) < config.tangent_threshold_pow2) {
+                tan_prev = PointF32{
+                    .x = config.tangent_threshold,
+                    .y = 0.0,
+                };
+            }
+
+            if (tan_next.dot(tan_next) < config.tangent_threshold_pow2) {
+                tan_next = PointF32{
+                    .x = config.tangent_threshold,
+                    .y = 0.0,
+                };
+            }
+
+            const n_start = offset_point.mul((PointF32{
+                .x = -tan_start.y,
+                .y = tan_start.x,
+            }).normalizeUnsafe());
+            const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
+            const n_prev = PointF32{
+                .x = -offset_tangent.y,
+                .y = offset_tangent.x,
+            };
+            const tan_next_norm = tan_next.normalizeUnsafe();
+            const n_next = offset_point.mul(PointF32{
+                .x = -tan_next_norm.y,
+                .y = tan_next_norm.x,
+            });
+
+            if (curve.cap == .start) {
+                // draw start cap on left side
+                drawCap(
+                    stroke.start_cap,
+                    cubic_points.point0,
+                    cubic_points.point0.sub(n_start),
+                    cubic_points.point0.add(n_start),
+                    offset_tangent.negate(),
+                    transform,
+                    &left_writer,
+                );
+            }
+
+            flattenEuler(
+                cubic_points,
+                transform,
+                offset,
+                cubic_points.point0.add(n_start),
+                cubic_points.point3.add(n_prev),
+                &left_writer,
+            );
+
+            var right_join_index: u32 = 0;
+            if (curve.cap == .end) {
+                // draw end cap on left side
+                drawCap(
+                    stroke.end_cap,
+                    cubic_points.point3,
+                    cubic_points.point3.add(n_prev),
+                    cubic_points.point3.sub(n_prev),
+                    offset_tangent,
+                    transform,
+                    &left_writer,
+                );
+            } else {
+                drawJoin(
+                    config,
+                    stroke,
+                    cubic_points.point3,
+                    tan_prev,
+                    tan_next,
+                    n_prev,
+                    n_next,
+                    transform,
+                    &left_writer,
+                    &right_writer,
+                );
+                right_join_index = right_writer.index;
+            }
+
+            flattenEuler(
+                cubic_points,
+                transform,
+                -offset,
+                cubic_points.point0.sub(n_start),
+                cubic_points.point3.sub(n_prev),
+                &right_writer,
+            );
+
+            std.mem.reverse(T, right_writer.items[right_join_index..right_writer.index]);
+
+            flat_curves[left_flat_curve_index].item_offsets.end = left_flat_curve.item_offsets.start + @as(u32, @intCast(left_writer.index));
+            flat_curves[right_flat_curve_index].item_offsets.end = right_flat_curve.item_offsets.start + @as(u32, @intCast(right_writer.index));
+        }
+
         fn flattenEuler(
             config: KernelConfig,
             cubic_points: CubicPoints,
@@ -116,7 +291,7 @@ pub fn Kernel(comptime T: type) type {
             start_point: PointF32,
             end_point: PointF32,
             writer: *Writer,
-        ) !void {
+        ) void {
             const p0 = transform.apply(cubic_points.point0);
             const p1 = transform.apply(cubic_points.point1);
             const p2 = transform.apply(cubic_points.point2);
@@ -288,6 +463,166 @@ pub fn Kernel(comptime T: type) type {
                 }
             }
         }
+
+        fn drawCap(
+            config: KernelConfig,
+            cap_style: Style.Cap,
+            point: PointF32,
+            cap0: PointF32,
+            cap1: PointF32,
+            offset_tangent: PointF32,
+            transform: TransformF32.Matrix,
+            writer: *Writer,
+        ) void {
+            if (cap_style == .round) {
+                return try flattenArc(
+                    config,
+                    cap0,
+                    cap1,
+                    point,
+                    std.math.pi,
+                    transform,
+                    writer,
+                );
+            }
+
+            var start = cap0;
+            var end = cap1;
+            if (cap_style == .square) {
+                const v = offset_tangent;
+                const p0 = start.add(v);
+                const p1 = end.add(v);
+                writer.write(T.create(transform.apply(start), transform.apply(p0)));
+                writer.write(T.create(transform.apply(p1), transform.apply(end)));
+
+                start = p0;
+                end = p1;
+            }
+
+            writer.write(T.create(transform.apply(start), transform.apply(end)));
+        }
+
+        fn drawJoin(
+            config: KernelConfig,
+            stroke: Style.Stroke,
+            p0: PointF32,
+            tan_prev: PointF32,
+            tan_next: PointF32,
+            n_prev: PointF32,
+            n_next: PointF32,
+            transform: TransformF32.Matrix,
+            left_writer: *Writer,
+            right_writer: *Writer,
+        ) void {
+            var front0 = p0.add(n_prev);
+            const front1 = p0.add(n_next);
+            var back0 = p0.sub(n_next);
+            const back1 = p0.sub(n_prev);
+
+            const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
+            const d = tan_prev.dot(tan_next);
+
+            switch (stroke.join) {
+                .bevel => {
+                    if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
+                        left_writer.write(T.create(transform.apply(front0), transform.apply(front1)));
+                        right_writer.write(T.create(transform.apply(back0), transform.apply(back1)));
+                    }
+                },
+                .miter => {
+                    const hypot = std.math.hypot(cr, d);
+                    const miter_limit = stroke.miter_limit;
+
+                    if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
+                        const is_backside = cr > 0.0;
+                        const fp_last = if (is_backside) back1 else front0;
+                        const fp_this = if (is_backside) back0 else front1;
+                        const p = if (is_backside) back0 else front0;
+
+                        const v = fp_this.sub(fp_last);
+                        const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+                        const miter_pt = fp_this.sub(tan_next.mul(PointF32{
+                            .x = h,
+                            .y = h,
+                        }));
+
+                        if (is_backside) {
+                            right_writer.write(T.create(transform.apply(p), transform.apply(miter_pt)));
+                            back0 = miter_pt;
+                        } else {
+                            left_writer.write(T.create(transform.apply(p), transform.apply(miter_pt)));
+                            front0 = miter_pt;
+                        }
+                    }
+
+                    left_writer.write(T.create(transform.apply(front0), transform.apply(front1)));
+                    right_writer.write(T.create(transform.apply(back0), transform.apply(back1)));
+                },
+                .round => {
+                    if (cr > 0.0) {
+                        flattenArc(
+                            config,
+                            back0,
+                            back1,
+                            p0,
+                            @abs(std.math.atan2(cr, d)),
+                            transform,
+                            right_writer,
+                        );
+
+                        left_writer.write(T.create(transform.apply(front0), transform.apply(front1)));
+                    } else {
+                        flattenArc(
+                            config,
+                            front0,
+                            front1,
+                            p0,
+                            @abs(std.math.atan2(cr, d)),
+                            transform,
+                            left_writer,
+                        );
+
+                        right_writer.write(T.create(transform.apply(back0), transform.apply(back1)));
+                    }
+                },
+            }
+        }
+
+        fn flattenArc(
+            config: KernelConfig,
+            start: PointF32,
+            end: PointF32,
+            center: PointF32,
+            angle: f32,
+            transform: TransformF32.Matrix,
+            writer: *Writer,
+        ) void {
+            var p0 = transform.apply(start);
+            var r = start.sub(center);
+            const radius = @max(config.error_tolerance, (p0.sub(transform.apply(center))).length());
+            const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
+
+            // Always output at least one line so that we always draw the chord.
+            const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
+
+            // let (s, c) = theta.sin_cos();
+            const s = std.math.sin(theta);
+            const c = std.math.cos(theta);
+            const rot = TransformF32.Matrix{
+                .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
+            };
+
+            for (0..n_lines - 1) |n| {
+                _ = n;
+                r = rot.apply(r);
+                const p1 = transform.apply(center.add(r));
+                writer.write(T.create(p0, p1));
+                p0 = p1;
+            }
+
+            const p1 = transform.apply(end);
+            writer.write(T.create(p0, p1));
+        }
     };
 }
 
@@ -404,4 +739,58 @@ pub fn getCubicPoints(curve: Curve, points: []const PointF32) CubicPoints {
     }
 
     return cubic_points;
+}
+
+pub const NeighborSegment = struct {
+    tangent: PointF32,
+};
+
+pub fn cubicStartTangent(config: KernelConfig, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
+    const d01 = p1.sub(p0);
+    const d02 = p2.sub(p0);
+    const d03 = p3.sub(p0);
+
+    if (d01.lengthSquared() > config.robust_eps) {
+        return d01;
+    } else if (d02.lengthSquared() > config.robust_eps) {
+        return d02;
+    } else {
+        return d03;
+    }
+}
+
+fn cubicEndTangent(config: KernelConfig, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
+    const d23 = p3.sub(p2);
+    const d13 = p3.sub(p1);
+    const d03 = p3.sub(p0);
+    if (d23.lengthSquared() > config.robust_eps) {
+        return d23;
+    } else if (d13.lengthSquared() > config.robust_eps) {
+        return d13;
+    } else {
+        return d03;
+    }
+}
+
+fn readNeighborSegment(
+    config: KernelConfig,
+    curves: []const Curve,
+    points: []const PointF32,
+    curve_range: RangeU32,
+    index: u32,
+) NeighborSegment {
+    const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
+    const curve = curves[index_shifted];
+    const cubic_points = getCubicPoints(curve, points[curve.point_offsets.start..curve.point_offsets.end]);
+    const tangent = cubicStartTangent(
+        config,
+        cubic_points.point0,
+        cubic_points.point1,
+        cubic_points.point2,
+        cubic_points.point3,
+    );
+
+    return NeighborSegment{
+        .tangent = tangent,
+    };
 }
