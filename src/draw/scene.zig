@@ -79,7 +79,7 @@ pub const Scene = struct {
         var metadata: *PathMetadata = undefined;
         if (self.metadata.items.len > 0) {
             metadata = &self.metadata.items[self.metadata.items.len - 1];
-            metadata.path_offsets.end = @intCast(self.paths.path_records.items.len);
+            metadata.path_offsets.end = @intCast(self.paths.paths.items.len);
 
             if (metadata.path_offsets.size() > 0) {
                 metadata = try self.metadata.addOne(self.allocator);
@@ -92,8 +92,8 @@ pub const Scene = struct {
             .style_index = @as(u16, @intCast(self.styles.items.len)) -| 1,
             .transform_index = @as(u16, @intCast(self.transforms.items.len)) -| 1,
             .path_offsets = RangeU32{
-                .start = @intCast(self.paths.path_records.items.len),
-                .end = @intCast(self.paths.path_records.items.len),
+                .start = @intCast(self.paths.paths.items.len),
+                .end = @intCast(self.paths.paths.items.len),
             }
         };
     }

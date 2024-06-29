@@ -63,7 +63,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             var soup = S.init(allocator);
             errdefer soup.deinit();
 
-            const base_estimates = try soup.addBaseEstimates(paths.curve_records.items.len);
+            const base_estimates = try soup.addBaseEstimates(paths.curves.items.len);
 
             for (metadatas) |metadata| {
                 if (metadata.path_offsets.size() == 0) {
@@ -71,11 +71,11 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 }
 
                 const transform = transforms[metadata.transform_index];
-                const start_path_record = paths.path_records.items[metadata.path_offsets.start];
-                const end_path_record = paths.path_records.items[metadata.path_offsets.end - 1];
-                const start_subpath_record = paths.subpath_records.items[start_path_record.subpath_offsets.start];
-                const end_subpath_record = paths.subpath_records.items[end_path_record.subpath_offsets.end - 1];
-                const curve_records = paths.curve_records.items[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
+                const start_path_record = paths.paths.items[metadata.path_offsets.start];
+                const end_path_record = paths.paths.items[metadata.path_offsets.end - 1];
+                const start_subpath_record = paths.subpaths.items[start_path_record.subpath_offsets.start];
+                const end_subpath_record = paths.subpaths.items[end_path_record.subpath_offsets.end - 1];
+                const curve_records = paths.curves.items[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
                 const curve_estimates = base_estimates[start_subpath_record.curve_offsets.start..end_subpath_record.curve_offsets.end];
 
                 for (curve_records, curve_estimates) |curve_record, *curve_estimate| {
@@ -86,14 +86,14 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             for (metadatas) |metadata| {
                 const style = styles[metadata.style_index];
 
-                const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
+                const path_records = paths.paths.items[metadata.path_offsets.start..metadata.path_offsets.end];
                 if (style.fill) |fill| {
                     for (path_records) |path_record| {
                         const soup_path_record = try soup.addFlatPath();
                         soup.openFlatPathSubpaths(soup_path_record);
                         soup_path_record.fill = fill;
 
-                        const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                        const subpath_records = paths.subpaths.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records) |subpath_record| {
                             const soup_subpath_record = try soup.addFlatSubpath();
                             soup.openFlatSubpathCurves(soup_subpath_record);
@@ -142,10 +142,10 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     const offset_fudge: f32 = @max(1.0, std.math.sqrt(scaled_width));
 
                     for (path_records) |path_record| {
-                        const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
+                        const subpath_records = paths.subpaths.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records, 0..) |subpath_record, subpath_record_offset| {
                             const curve_record_len = subpath_record.curve_offsets.size();
-                            const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+                            const curve_records = paths.curves.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
 
                             const soup_path_record = try soup.addFlatPath();
@@ -305,7 +305,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
         fn estimateCurveBase(
             paths: Paths,
-            curve_record: path_module.CurveRecord,
+            curve_record: path_module.Curve,
             transform: TransformF32.Matrix,
         ) u32 {
             var estimate: u32 = 0;
@@ -331,7 +331,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
         }
 
         fn estimateCurveCap(
-            curve_record: path_module.CurveRecord,
+            curve_record: path_module.Curve,
             stroke: Style.Stroke,
             scaled_width: f32,
         ) u32 {

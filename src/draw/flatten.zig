@@ -149,7 +149,7 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
 
 fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) NeighborSegment {
     const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
-    const curve_record = paths.curve_records.items[index_shifted];
+    const curve_record = paths.curves.items[index_shifted];
     const cubic_points = paths.getCubicPoints(curve_record);
     const tangent = cubicStartTangent(
         cubic_points.point0,
@@ -322,7 +322,7 @@ pub const PathFlattener = struct {
         errdefer soup.deinit();
 
         for (soup.fill_jobs.items) |fill_job| {
-            const source_curve_record = paths.curve_records.items[fill_job.source_curve_index];
+            const source_curve_record = paths.curves.items[fill_job.source_curve_index];
             const cubic_points = paths.getCubicPoints(source_curve_record);
             const transform = transforms[fill_job.transform_index];
             const curve_record = &soup.flat_curves.items[fill_job.curve_index];
@@ -344,7 +344,7 @@ pub const PathFlattener = struct {
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
-            const source_curve_record = paths.curve_records.items[stroke_job.source_curve_index];
+            const source_curve_record = paths.curves.items[stroke_job.source_curve_index];
             const cubic_points = paths.getCubicPoints(source_curve_record);
             const transform = transforms[stroke_job.transform_index];
             const style = styles[stroke_job.style_index];
@@ -362,7 +362,7 @@ pub const PathFlattener = struct {
                 .y = offset,
             };
 
-            const source_subpath_record = paths.subpath_records.items[stroke_job.source_subpath_index];
+            const source_subpath_record = paths.subpaths.items[stroke_job.source_subpath_index];
             const neighbor = readNeighborSegment(paths, source_subpath_record.curve_offsets, @intCast(stroke_job.source_curve_index + 1));
             var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
             var tan_next = neighbor.tangent;

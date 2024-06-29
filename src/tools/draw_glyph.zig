@@ -72,17 +72,23 @@ pub fn main() !void {
         std.debug.print("\n", .{});
         std.debug.print("Curves:\n", .{});
         std.debug.print("-----------------------------\n", .{});
-        const path = glyph_paths.getPathRecords()[0];
-        const subpath_records = glyph_paths.getSubpathRecords()[path.subpath_offsets.start..path.subpath_offsets.end];
+        const path = glyph_paths.paths.items[0];
+        const subpath_records = glyph_paths.subpaths.items[path.subpath_offsets.start..path.subpath_offsets.end];
         for (subpath_records, 0..) |subpath_record, subpath_index| {
-            const curve_records = glyph_paths.getCurveRecords()[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
+            const curve_records = glyph_paths.curves.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
             for (curve_records, 0..) |curve_record, curve_index| {
-                const curve = glyph_paths.getCurve(curve_record);
-                std.debug.print("Curve({},{}): {}\n", .{ subpath_index, curve_index, curve });
+                const points = glyph_paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+                std.debug.print("Curve({},{},{}): {any}\n", .{
+                    subpath_index,
+                    curve_index,
+                    curve_record.kind,
+                    points,
+                });
             }
         }
         std.debug.print("-----------------------------\n", .{});
     }
+
     {
         std.debug.print("\n", .{});
         std.debug.print("Line Soup:\n", .{});
