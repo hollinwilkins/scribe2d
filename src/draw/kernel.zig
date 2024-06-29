@@ -26,6 +26,10 @@ const Style = pen_module.Style;
 pub const KernelConfig = struct {
     pub const DEFAULT: @This() = init(@This(){});
 
+    parallelism: u8 = 8,
+    fill_job_chunk_size: u8 = 8,
+    stroke_job_chunk_size: u8 = 2,
+
     k1_threshold: f32 = 1e-3,
     distance_threshold: f32 = 1e-3,
     break1: f32 = 0.8,
@@ -53,6 +57,10 @@ pub const KernelConfig = struct {
 
     pub fn init(config: @This()) @This() {
         return @This(){
+            .parallelism = config.parallelism,
+            .fill_job_chunk_size = config.fill_job_chunk_size,
+            .stroke_job_chunk_size = config.stroke_job_chunk_size,
+
             .k1_threshold = config.k1_threshold,
             .distance_threshold = config.distance_threshold,
             .break1 = config.break1,
@@ -97,24 +105,20 @@ pub fn Kernel(comptime T: type) type {
     };
 
     return struct {
-        pub fn flatten(
+        pub fn flattenFill(
             config: KernelConfig,
             // input buffers
             transforms: []const TransformF32.Matrix,
-            styles: []const Style,
-            subpaths: []const Subpath,
             curves: []const Curve,
             points: []const PointF32,
             fill_jobs: []const FillJob,
             fill_range: RangeU32,
-            stroke_jobs: []const StrokeJob,
-            stroke_range: RangeU32,
             // write destination
             flat_curves: []FlatCurve,
             items: []T,
         ) void {
             for (fill_jobs[fill_range.start..fill_range.end]) |fill_job| {
-                flattenFill(
+                flattenFillJob(
                     config,
                     // inputs
                     transforms,
@@ -128,9 +132,24 @@ pub fn Kernel(comptime T: type) type {
                     items,
                 );
             }
+        }
 
+        pub fn flattenStroke(
+            config: KernelConfig,
+            // input buffers
+            transforms: []const TransformF32.Matrix,
+            styles: []const Style,
+            subpaths: []const Subpath,
+            curves: []const Curve,
+            points: []const PointF32,
+            stroke_jobs: []const StrokeJob,
+            stroke_range: RangeU32,
+            // write destination
+            flat_curves: []FlatCurve,
+            items: []T,
+        ) void {
             for (stroke_jobs[stroke_range.start..stroke_range.end]) |stroke_job| {
-                flattenStroke(
+                flattenStrokeJob(
                     config,
                     // input
                     transforms,
@@ -151,7 +170,7 @@ pub fn Kernel(comptime T: type) type {
             }
         }
 
-        pub fn flattenFill(
+        pub fn flattenFillJob(
             // input uniform
             config: KernelConfig,
             // input buffers
@@ -191,7 +210,7 @@ pub fn Kernel(comptime T: type) type {
             flat_curves[flat_curve_index].item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(writer.index));
         }
 
-        pub fn flattenStroke(
+        pub fn flattenStrokeJob(
             // input uniform
             config: KernelConfig,
             // input buffers

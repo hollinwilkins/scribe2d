@@ -69,26 +69,45 @@ pub const PathFlattener = struct {
         );
         errdefer soup.deinit();
 
-        LineKernel.flatten(
-            config,
-            transforms,
-            styles,
-            shape.subpaths.items,
-            shape.curves.items,
-            shape.points.items,
-            soup.fill_jobs.items,
-            RangeU32{
-                .start = 0,
-                .end = @intCast(soup.fill_jobs.items.len),
-            },
-            soup.stroke_jobs.items,
-            RangeU32{
-                .start = 0,
-                .end = @intCast(soup.stroke_jobs.items.len),
-            },
-            soup.flat_curves.items,
-            soup.items.items,
-        );
+        const fill_range = RangeU32{
+            .start = 0,
+            .end = @intCast(soup.fill_jobs.items.len),
+        };
+        var fill_chunks = fill_range.chunkIterator(config.fill_job_chunk_size);
+
+        while (fill_chunks.next()) |chunk| {
+            LineKernel.flattenFill(
+                config,
+                transforms,
+                shape.curves.items,
+                shape.points.items,
+                soup.fill_jobs.items,
+                chunk,
+                soup.flat_curves.items,
+                soup.items.items,
+            );
+        }
+
+        const stroke_range = RangeU32{
+            .start = 0,
+            .end = @intCast(soup.stroke_jobs.items.len),
+        };
+        var stroke_chunks = stroke_range.chunkIterator(config.stroke_job_chunk_size);
+
+        while (stroke_chunks.next()) |chunk| {
+            LineKernel.flattenStroke(
+                config,
+                transforms,
+                styles,
+                shape.subpaths.items,
+                shape.curves.items,
+                shape.points.items,
+                soup.stroke_jobs.items,
+                chunk,
+                soup.flat_curves.items,
+                soup.items.items,
+            );
+        }
 
         return soup;
     }
