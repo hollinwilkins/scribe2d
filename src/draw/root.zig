@@ -12,6 +12,7 @@ const soup_pen = @import("./soup_pen.zig");
 const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const msaa = @import("./msaa.zig");
+const kernel = @import("./kernel.zig");
 
 pub const Shape = shape.Shape;
 pub const ShapeBuilder = shape.ShapeBuilder;
@@ -39,3 +40,5 @@ pub const PathFlattener = flatten.PathFlattener;
 pub const Scene = scene.Scene;
 
 pub const HalfPlanesU16 = msaa.HalfPlanesU16;
+
+pub const KernelConfig = kernel.KernelConfig;

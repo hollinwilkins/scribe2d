@@ -47,6 +47,7 @@ pub const KernelConfig = struct {
     tangent_threshold: f32 = 1e-6,
     tangent_threshold_pow2: f32 = 0.0,
     min_theta: f32 = 0.0001,
+    min_theta2: f32 = 1e-6,
 
     pub fn init(config: @This()) @This() {
         return @This(){
@@ -73,6 +74,7 @@ pub const KernelConfig = struct {
             .tangent_threshold = config.tangent_threshold,
             .tangent_threshold_pow2 = std.math.pow(f32, config.tangent_threshold, 2.0),
             .min_theta = config.min_theta,
+            .min_theta2 = config.min_theta2,
         };
     }
 };

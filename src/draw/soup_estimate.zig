@@ -7,6 +7,7 @@ const euler = @import("./euler.zig");
 const scene_module = @import("./scene.zig");
 const soup_module = @import("./soup.zig");
 const flatten_module = @import("./flatten.zig");
+const kernel_module = @import("./kernel.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -30,7 +31,7 @@ const SubpathEstimate = soup_module.SubpathEstimate;
 const CurveEstimate = soup_module.CurveEstimate;
 const FillJob = soup_module.FillJob;
 const StrokeJob = soup_module.StrokeJob;
-const ERROR_TOLERANCE = flatten_module.ERROR_TOLERANCE;
+const KernelConfig = kernel_module.KernelConfig;
 
 pub const ArcEstimate = struct {
     items: u32 = 0,
@@ -55,6 +56,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
         pub fn estimateAlloc(
             allocator: Allocator,
+            config: KernelConfig,
             metadatas: []const PathMetadata,
             styles: []const Style,
             transforms: []const TransformF32.Matrix,
@@ -168,7 +170,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     soup.openFlatCurveItems(soup_curve);
 
                                     curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
-                                        estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit);
+                                        estimateStrokeJoin(config, stroke.join, scaled_width, stroke.miter_limit);
                                     _ = try soup.addItems(curve_estimate.*);
 
                                     soup.closeFlatCurveItems(soup_curve);
@@ -179,6 +181,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     const curve = curves[curves.len - (1 + offset)];
                                     const base_estimate = right_curve_estimates[left_curve_estimates.len - (1 + offset)];
                                     curve_estimate.* = base_estimate + estimateCurveCap(
+                                        config,
                                         curve,
                                         stroke,
                                         scaled_width,
@@ -221,7 +224,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     soup.openFlatCurveItems(soup_curve);
 
                                     curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
-                                        estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit);
+                                        estimateStrokeJoin(config, stroke.join, scaled_width, stroke.miter_limit);
                                     _ = try soup.addItems(curve_estimate.*);
 
                                     soup.closeFlatCurveItems(soup_curve);
@@ -331,16 +334,17 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
         }
 
         fn estimateCurveCap(
+            config: KernelConfig,
             curve: shape_module.Curve,
             stroke: Style.Stroke,
             scaled_width: f32,
         ) u32 {
             switch (curve.cap) {
                 .start => {
-                    return estimateStrokeCap(stroke.start_cap, scaled_width);
+                    return estimateStrokeCap(config, stroke.start_cap, scaled_width);
                 },
                 .end => {
-                    return estimateStrokeCap(stroke.end_cap, scaled_width);
+                    return estimateStrokeCap(config, stroke.end_cap, scaled_width);
                 },
                 .none => {
                     return 0;
@@ -348,7 +352,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
             }
         }
 
-        fn estimateStrokeCap(cap: Style.Cap, scaled_width: f32) u32 {
+        fn estimateStrokeCap(config: KernelConfig, cap: Style.Cap, scaled_width: f32) u32 {
             switch (cap) {
                 .butt => {
                     return @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width)));
@@ -359,13 +363,13 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     return items;
                 },
                 .round => {
-                    const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
+                    const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(config, scaled_width);
                     return arc_estimate.items;
                 },
             }
         }
 
-        fn estimateStrokeJoin(join: Style.Join, scaled_width: f32, miter_limit: f32) u32 {
+        fn estimateStrokeJoin(config: KernelConfig, join: Style.Join, scaled_width: f32, miter_limit: f32) u32 {
             const inner_estimate = @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(scaled_width)));
             var outer_estimate: u32 = 0;
 
@@ -378,7 +382,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                     outer_estimate += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(max_miter_len))) * 2;
                 },
                 .round => {
-                    const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(scaled_width);
+                    const arc_estimate: ArcEstimate = EstimatorImpl.estimateArc(config, scaled_width);
                     outer_estimate += @as(u32, @intFromFloat(EstimatorImpl.estimateLineLengthItems(arc_estimate.length))) * arc_estimate.items;
                 },
             }
@@ -409,10 +413,9 @@ pub const LineEstimatorImpl = struct {
         return 0.5 * (chord_len + poly_len);
     }
 
-    fn estimateArc(scaled_width: f32) ArcEstimate {
-        const MIN_THETA: f32 = 1e-6;
-        const radius = @max(ERROR_TOLERANCE, scaled_width * 0.5);
-        const theta = @max(MIN_THETA, (2.0 * std.math.acos(1.0 - ERROR_TOLERANCE / radius)));
+    fn estimateArc(config: KernelConfig, scaled_width: f32) ArcEstimate {
+        const radius = @max(config.error_tolerance, scaled_width * 0.5);
+        const theta = @max(config.min_theta2, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
         const arc_lines = @max(2, @as(u32, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
 
         return ArcEstimate{

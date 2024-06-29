@@ -54,7 +54,7 @@ pub fn main() !void {
     try scene.shape.copyPath(glyph_paths, 0);
     try scene.close();
 
-    var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, scene);
+    var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, draw.KernelConfig.DEFAULT, scene);
     defer soup.deinit();
 
     // soup.path.items = soup.path.items[2..3];
