@@ -3,6 +3,7 @@ const core = @import("../core/root.zig");
 const soup_module = @import("./soup.zig");
 const shape_module = @import("./shape.zig");
 const euler_module = @import("./euler.zig");
+const curve_module = @import("./curve.zig");
 const TransformF32 = core.TransformF32;
 const PointF32 = core.PointF32;
 const FlatPath = soup_module.FlatPath;
@@ -15,8 +16,11 @@ const CubicPoints = euler_module.CubicPoints;
 const CubicParams = euler_module.CubicParams;
 const EulerParams = euler_module.EulerParams;
 const EulerSegment = euler_module.EulerSegment;
+const Line = curve_module.Line;
 
 pub const KernelConfig = struct {
+    pub const DEFAULT: @This() = init(@This(){});
+
     k1_threshold: f32 = 1e-3,
     distance_threshold: f32 = 1e-3,
     break1: f32 = 0.8,
@@ -37,7 +41,7 @@ pub const KernelConfig = struct {
     error_tolerance: f32 = 0.125,
     subdivision_limit: f32 = 1.0 / 65536.0,
 
-    pub fn init(config: @This()) void {
+    pub fn init(config: @This()) @This() {
         return @This(){
             .derivative_threshold = config.derivative_threshold,
             .derivative_threshold_pow2 = std.math.pow(f32, config.derivative_threshold, 2.0),
@@ -54,7 +58,7 @@ pub fn Kernel(comptime T: type) type {
         index: usize = 0,
 
         pub fn write(self: *@This(), item: T) void {
-            if (item.isEmpty() == 0.0) {
+            if (item.isEmpty()) {
                 return;
             }
 
@@ -68,15 +72,15 @@ pub fn Kernel(comptime T: type) type {
             // input uniform
             config: KernelConfig,
             // input buffers
-            transforms: []TransformF32.Matrix,
+            transforms: []const TransformF32.Matrix,
             curves: []const Curve,
-            flat_curves: []const FlatCurve,
             points: []const PointF32,
             // job parameters
             transform_index: u32,
             curve_index: u32,
             flat_curve_index: u32,
             // write destination
+            flat_curves: []FlatCurve,
             items: []T,
         ) void {
             const transform = transforms[transform_index];
@@ -100,6 +104,8 @@ pub fn Kernel(comptime T: type) type {
                 cubic_points.point3,
                 &writer,
             );
+
+            flat_curves[flat_curve_index].item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(writer.index));
         }
 
         fn flattenEuler(
@@ -213,8 +219,8 @@ pub fn Kernel(comptime T: type) type {
                     } else {
                         a = -2.0 * dist_scaled * k1;
                         b = -1.0 - 2.0 * dist_scaled * k0;
-                        int0 = EspcRobust.intApproximation(b);
-                        const int1 = EspcRobust.intApproximation(a + b);
+                        int0 = EspcRobust.intApproximation(config, b);
+                        const int1 = EspcRobust.intApproximation(config, a + b);
                         integral = int1 - int0;
                         const k_peak = k0 - k1 * b / a;
                         const integrand_peak = std.math.sqrt(@abs(k_peak * (k_peak * dist_scaled + 1.0)));
@@ -246,7 +252,7 @@ pub fn Kernel(comptime T: type) type {
                                     s = (inv - b) / a;
                                 },
                                 .normal => {
-                                    const inv = EspcRobust.intInvApproximation(integral * t + int0);
+                                    const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
                                     s = (inv - b) / a;
                                     // TODO: probably shouldn't have to do this, it differs from Vello
                                     s = std.math.clamp(s, 0.0, 1.0);
@@ -284,6 +290,8 @@ pub fn Kernel(comptime T: type) type {
         }
     };
 }
+
+pub const LineKernel = Kernel(Line);
 
 pub const EspcRobust = enum(u8) {
     normal = 0,
@@ -375,11 +383,11 @@ pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: Point
     };
 }
 
-pub fn getCubicPoints(curve: Curve, points: []PointF32) CubicPoints {
+pub fn getCubicPoints(curve: Curve, points: []const PointF32) CubicPoints {
     var cubic_points = CubicPoints{};
 
-    cubic_points.point0 = points.items[curve.point_offsets.start];
-    cubic_points.point1 = points.items[curve.point_offsets.start + 1];
+    cubic_points.point0 = points[0];
+    cubic_points.point1 = points[1];
 
     switch (curve.kind) {
         .line => {
@@ -388,7 +396,7 @@ pub fn getCubicPoints(curve: Curve, points: []PointF32) CubicPoints {
             cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
         },
         .quadratic_bezier => {
-            cubic_points.point2 = points.items[curve.point_offsets.start + 2];
+            cubic_points.point2 = points[2];
             cubic_points.point3 = cubic_points.point2;
             cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
             cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);

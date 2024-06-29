@@ -9,6 +9,7 @@ const scene_module = @import("./scene.zig");
 const euler = @import("./euler.zig");
 const soup_module = @import("./soup.zig");
 const soup_estimate = @import("./soup_estimate.zig");
+const kernel_module = @import("./kernel.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
@@ -27,6 +28,8 @@ const EulerSegment = euler.EulerSegment;
 const LineSoup = soup_module.LineSoup;
 const LineSoupEstimator = soup_estimate.LineSoupEstimator;
 const Scene = scene_module.Scene;
+const LineKernel = kernel_module.LineKernel;
+const KernelConfig = kernel_module.KernelConfig;
 
 /// Threshold below which a derivative is considered too small.
 pub const DERIV_THRESH: f32 = 1e-6;
@@ -322,25 +325,17 @@ pub const PathFlattener = struct {
         errdefer soup.deinit();
 
         for (soup.fill_jobs.items) |fill_job| {
-            const curve = shape.curves.items[fill_job.curve_index];
-            const cubic_points = shape.getCubicPoints(curve);
-            const transform = transforms[fill_job.transform_index];
-            const flat_curve = &soup.flat_curves.items[fill_job.flat_curve_index];
-            const fill_items = soup.items.items[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
-
-            var line_writer = LineWriter{
-                .lines = fill_items,
-            };
-            try flattenEuler(
-                cubic_points,
-                transform,
-                0.0,
-                cubic_points.point0,
-                cubic_points.point3,
-                &line_writer,
+            LineKernel.flattenFill(
+                KernelConfig.DEFAULT,
+                transforms,
+                shape.curves.items,
+                shape.points.items,
+                fill_job.transform_index,
+                fill_job.curve_index,
+                fill_job.flat_curve_index,
+                soup.flat_curves.items,
+                soup.items.items,
             );
-
-            flat_curve.item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(line_writer.index));
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
