@@ -51,6 +51,10 @@ pub const Line = struct {
         };
     }
 
+    pub fn isEmpty(self: @This()) bool {
+        return std.meta.eql(self.start, self.end);
+    }
+
     pub fn translate(self: Line, point: PointF32) Line {
         return Line{
             .start = self.start.add(point),
