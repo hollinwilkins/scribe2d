@@ -70,6 +70,26 @@ pub fn build(b: *std.Build) void {
     run_test_gpu_step.dependOn(&run_test_gpu.step);
     run_test_gpu_step.dependOn(&install_fixtures_step.step);
 
+    const gpu_kernel = b.addStaticLibrary(.{
+        .name = "kernel",
+        .root_source_file = b.path("src/draw/kernel.zig"),
+        .target = b.resolveTargetQuery(std.Target.Query{
+            .cpu_arch = .spirv64,
+            .os_tag = .opencl,
+            .abi = .gnu,
+            .cpu_features_add = std.Target.spirv.featureSet(&.{
+                .Int64,
+                .Int16,
+                .Int8,
+                .Float64,
+                .Float16,
+                .Vector16,
+            }),
+        }),
+        .optimize = optimize,
+    });
+    b.installArtifact(gpu_kernel);
+
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
