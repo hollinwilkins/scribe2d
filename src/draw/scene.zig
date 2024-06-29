@@ -8,7 +8,7 @@ const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
 const Style = soup_pen.Style;
-const Paths = path_module.Paths;
+const Shape = path_module.Shape;
 const PathMetadata = path_module.PathMetadata;
 
 pub const Scene = struct {
@@ -20,12 +20,12 @@ pub const Scene = struct {
     styles: StyleList = StyleList{},
     transforms: TransformList = TransformList{},
     metadata: PathMetadataList = PathMetadataList{},
-    paths: Paths,
+    shape: Shape,
 
     pub fn init(allocator: Allocator) !@This() {
         var scene = @This(){
             .allocator = allocator,
-            .paths = Paths.init(allocator),
+            .shape = Shape.init(allocator),
         };
 
         // push defaults
@@ -40,7 +40,7 @@ pub const Scene = struct {
         self.styles.deinit(self.allocator);
         self.transforms.deinit(self.allocator);
         self.metadata.deinit(self.allocator);
-        self.paths.deinit();
+        self.shape.deinit();
     }
 
     // pub fn toSoupAlloc
@@ -79,7 +79,7 @@ pub const Scene = struct {
         var metadata: *PathMetadata = undefined;
         if (self.metadata.items.len > 0) {
             metadata = &self.metadata.items[self.metadata.items.len - 1];
-            metadata.path_offsets.end = @intCast(self.paths.paths.items.len);
+            metadata.path_offsets.end = @intCast(self.shape.paths.items.len);
 
             if (metadata.path_offsets.size() > 0) {
                 metadata = try self.metadata.addOne(self.allocator);
@@ -92,8 +92,8 @@ pub const Scene = struct {
             .style_index = @as(u16, @intCast(self.styles.items.len)) -| 1,
             .transform_index = @as(u16, @intCast(self.transforms.items.len)) -| 1,
             .path_offsets = RangeU32{
-                .start = @intCast(self.paths.paths.items.len),
-                .end = @intCast(self.paths.paths.items.len),
+                .start = @intCast(self.shape.paths.items.len),
+                .end = @intCast(self.shape.paths.items.len),
             }
         };
     }

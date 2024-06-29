@@ -7,7 +7,7 @@ const soup_module = @import("./soup.zig");
 const soup_estimate_module = @import("./soup_estimate.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const Paths = path_module.Paths;
+const Shape = path_module.Shape;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
 const PointI32 = core.PointI32;
@@ -77,28 +77,28 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
         pub fn rasterize(self: @This(), soup: *S) !void {
             try Estimator.estimateRaster(soup);
 
-            for (soup.flat_paths.items) |*path_record| {
-                const subpath_records = soup.flat_subpaths.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
-                for (subpath_records) |*subpath_record| {
+            for (soup.flat_paths.items) |*path| {
+                const subpaths = soup.flat_subpaths.items[path.flat_subpath_offsets.start..path.flat_subpath_offsets.end];
+                for (subpaths) |*subpath| {
                     try self.populateGridIntersections(
                         soup,
-                        subpath_record,
+                        subpath,
                     );
                 }
 
                 try self.populateBoundaryFragments(
                     soup,
-                    path_record,
+                    path,
                 );
 
                 try self.populateMergeFragments(
                     soup,
-                    path_record,
+                    path,
                 );
 
                 try self.populateSpans(
                     soup,
-                    path_record,
+                    path,
                 );
             }
         }
@@ -108,16 +108,16 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
         pub fn populateGridIntersections(
             self: @This(),
             soup: *S,
-            subpath_record: *SubpathRecord,
+            subpath: *SubpathRecord,
         ) !void {
             _ = self;
 
-            const curve_records = soup.flat_curves.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
-            for (curve_records) |*curve_record| {
-                const intersections = soup.grid_intersections.items[curve_record.intersection_offsets.start..curve_record.intersection_offsets.end];
+            const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
+            for (curves) |*curve| {
+                const intersections = soup.grid_intersections.items[curve.intersection_offsets.start..curve.intersection_offsets.end];
                 var intersection_writer = IntersectionWriter.create(intersections);
 
-                const soup_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+                const soup_items = soup.items.items[curve.item_offsets.start..curve.item_offsets.end];
                 for (soup_items) |item| {
                     const start_intersection_index = intersection_writer.index;
                     const start_point: PointF32 = item.applyT(0.0);
@@ -170,7 +170,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                     );
                 }
 
-                curve_record.intersection_offsets.end = curve_record.intersection_offsets.start + @as(u32, @intCast(intersection_writer.index));
+                curve.intersection_offsets.end = curve.intersection_offsets.start + @as(u32, @intCast(intersection_writer.index));
             }
         }
 
@@ -182,17 +182,17 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
             return false;
         }
 
-        pub fn populateBoundaryFragments(self: @This(), soup: *S, path_record: *PathRecord) !void {
+        pub fn populateBoundaryFragments(self: @This(), soup: *S, path: *PathRecord) !void {
             _ = self;
 
-            const boundary_fragments = soup.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
+            const boundary_fragments = soup.boundary_fragments.items[path.boundary_offsets.start..path.boundary_offsets.end];
             var boundary_fragment_writer = BoundaryFragmentWriter.create(boundary_fragments);
 
-            const subpath_records = soup.flat_subpaths.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
-            for (subpath_records) |subpath_record| {
-                const curve_records = soup.flat_curves.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
-                for (curve_records, 0..) |curve_record, curve_record_index| {
-                    const grid_intersections = soup.grid_intersections.items[curve_record.intersection_offsets.start..curve_record.intersection_offsets.end];
+            const subpaths = soup.flat_subpaths.items[path.flat_subpath_offsets.start..path.flat_subpath_offsets.end];
+            for (subpaths) |subpath| {
+                const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
+                for (curves, 0..) |curve, curve_index| {
+                    const grid_intersections = soup.grid_intersections.items[curve.intersection_offsets.start..curve.intersection_offsets.end];
                     if (grid_intersections.len == 0) {
                         continue;
                     }
@@ -203,8 +203,8 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                         const next_index = index + 1;
 
                         if (next_index >= grid_intersections.len) {
-                            const next_curve_record = curve_records[(curve_record_index + 1) % curve_records.len];
-                            next_grid_intersection = &soup.grid_intersections.items[next_curve_record.intersection_offsets.start];
+                            const next_curve = curves[(curve_index + 1) % curves.len];
+                            next_grid_intersection = &soup.grid_intersections.items[next_curve.intersection_offsets.start];
                         } else {
                             next_grid_intersection = &grid_intersections[next_index];
                         }
@@ -221,7 +221,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                 }
             }
 
-            path_record.boundary_offsets.end = path_record.boundary_offsets.start + @as(u32, @intCast(boundary_fragment_writer.index));
+            path.boundary_offsets.end = path.boundary_offsets.start + @as(u32, @intCast(boundary_fragment_writer.index));
 
             // sort all curve fragments of all the subpaths by y ascending, x ascending
             std.mem.sort(
@@ -246,26 +246,26 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
             return false;
         }
 
-        pub fn populateMergeFragments(self: @This(), soup: *S, path_record: *PathRecord) !void {
+        pub fn populateMergeFragments(self: @This(), soup: *S, path: *PathRecord) !void {
             {
-                const merge_fragments = soup.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+                const merge_fragments = soup.merge_fragments.items[path.merge_offsets.start..path.merge_offsets.end];
                 var merge_fragment_writer = MergeFragmentWriter.create(merge_fragments);
-                const first_boundary_fragment = &soup.boundary_fragments.items[path_record.boundary_offsets.start];
+                const first_boundary_fragment = &soup.boundary_fragments.items[path.boundary_offsets.start];
                 var merge_fragment: *MergeFragment = merge_fragment_writer.addOne();
                 merge_fragment.* = MergeFragment{
                     .pixel = first_boundary_fragment.pixel,
                 };
                 var boundary_offsets = RangeU32{
-                    .start = path_record.boundary_offsets.start,
-                    .end = path_record.boundary_offsets.start,
+                    .start = path.boundary_offsets.start,
+                    .end = path.boundary_offsets.start,
                 };
                 var main_ray_winding: f32 = 0.0;
 
-                const boundary_fragments = soup.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
+                const boundary_fragments = soup.boundary_fragments.items[path.boundary_offsets.start..path.boundary_offsets.end];
                 for (boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
                     const y_changing = boundary_fragment.pixel.y != merge_fragment.pixel.y;
                     if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
-                        boundary_offsets.end = path_record.boundary_offsets.start + @as(u32, @intCast(boundary_fragment_index));
+                        boundary_offsets.end = path.boundary_offsets.start + @as(u32, @intCast(boundary_fragment_index));
                         merge_fragment.boundary_offsets = boundary_offsets;
                         merge_fragment = merge_fragment_writer.addOne();
                         boundary_offsets.start = boundary_offsets.end;
@@ -282,11 +282,11 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                     main_ray_winding += boundary_fragment.calculateMainRayWinding();
                 }
 
-                path_record.merge_offsets.end = path_record.merge_offsets.start + @as(u32, @intCast(merge_fragment_writer.index));
+                path.merge_offsets.end = path.merge_offsets.start + @as(u32, @intCast(merge_fragment_writer.index));
             }
 
             {
-                const merge_fragments = soup.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+                const merge_fragments = soup.merge_fragments.items[path.merge_offsets.start..path.merge_offsets.end];
                 for (merge_fragments) |*merge_fragment| {
                     const boundary_fragments = soup.boundary_fragments.items[merge_fragment.boundary_offsets.start..merge_fragment.boundary_offsets.end];
 
@@ -316,13 +316,13 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
             }
         }
 
-        pub fn populateSpans(self: @This(), soup: *S, path_record: *PathRecord) !void {
+        pub fn populateSpans(self: @This(), soup: *S, path: *PathRecord) !void {
             _ = self;
 
-            const spans = soup.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
+            const spans = soup.spans.items[path.span_offsets.start..path.span_offsets.end];
             var span_writer = SpanWriter.create(spans);
 
-            const merge_fragments = soup.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+            const merge_fragments = soup.merge_fragments.items[path.merge_offsets.start..path.merge_offsets.end];
             var previous_merge_fragment: ?*MergeFragment = null;
 
             for (merge_fragments) |*merge_fragment| {
@@ -341,7 +341,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
                 previous_merge_fragment = merge_fragment;
             }
 
-            path_record.span_offsets.end = path_record.span_offsets.start + @as(u32, @intCast(span_writer.index));
+            path.span_offsets.end = path.span_offsets.start + @as(u32, @intCast(span_writer.index));
         }
 
         fn scanX(

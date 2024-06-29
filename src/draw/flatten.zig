@@ -17,7 +17,7 @@ const PointF32 = core.PointF32;
 const Path = path_module.Path;
 const PathBuilder = path_module.PathBuilder;
 const PathMetadata = path_module.PathMetadata;
-const Paths = path_module.Paths;
+const Shape = path_module.Shape;
 const Style = soup_pen.Style;
 const Line = curve_module.Line;
 const CubicPoints = euler.CubicPoints;
@@ -147,10 +147,10 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
     }
 }
 
-fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) NeighborSegment {
+fn readNeighborSegment(shape: Shape, curve_range: RangeU32, index: u32) NeighborSegment {
     const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
-    const curve = paths.curves.items[index_shifted];
-    const cubic_points = paths.getCubicPoints(curve);
+    const curve = shape.curves.items[index_shifted];
+    const cubic_points = shape.getCubicPoints(curve);
     const tangent = cubicStartTangent(
         cubic_points.point0,
         cubic_points.point1,
@@ -301,7 +301,7 @@ pub const PathFlattener = struct {
             scene.metadata.items,
             scene.styles.items,
             scene.transforms.items,
-            scene.paths,
+            scene.shape,
         );
     }
 
@@ -310,20 +310,20 @@ pub const PathFlattener = struct {
         metadatas: []const PathMetadata,
         styles: []const Style,
         transforms: []const TransformF32.Matrix,
-        paths: Paths,
+        shape: Shape,
     ) !LineSoup {
         var soup = try LineSoupEstimator.estimateAlloc(
             allocator,
             metadatas,
             styles,
             transforms,
-            paths,
+            shape,
         );
         errdefer soup.deinit();
 
         for (soup.fill_jobs.items) |fill_job| {
-            const curve = paths.curves.items[fill_job.curve_index];
-            const cubic_points = paths.getCubicPoints(curve);
+            const curve = shape.curves.items[fill_job.curve_index];
+            const cubic_points = shape.getCubicPoints(curve);
             const transform = transforms[fill_job.transform_index];
             const flat_curve = &soup.flat_curves.items[fill_job.flat_curve_index];
             const fill_items = soup.items.items[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
@@ -344,15 +344,15 @@ pub const PathFlattener = struct {
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
-            const curve = paths.curves.items[stroke_job.curve_index];
-            const cubic_points = paths.getCubicPoints(curve);
+            const curve = shape.curves.items[stroke_job.curve_index];
+            const cubic_points = shape.getCubicPoints(curve);
             const transform = transforms[stroke_job.transform_index];
             const style = styles[stroke_job.style_index];
             const stroke = style.stroke.?;
-            const left_curve_record = &soup.flat_curves.items[stroke_job.left_flat_curve_index];
-            const right_curve_record = &soup.flat_curves.items[stroke_job.right_flat_curve_index];
-            const left_stroke_lines = soup.items.items[left_curve_record.item_offsets.start..left_curve_record.item_offsets.end];
-            const right_stroke_lines = soup.items.items[right_curve_record.item_offsets.start..right_curve_record.item_offsets.end];
+            const left_curve = &soup.flat_curves.items[stroke_job.left_flat_curve_index];
+            const right_curve = &soup.flat_curves.items[stroke_job.right_flat_curve_index];
+            const left_stroke_lines = soup.items.items[left_curve.item_offsets.start..left_curve.item_offsets.end];
+            const right_stroke_lines = soup.items.items[right_curve.item_offsets.start..right_curve.item_offsets.end];
             var left_line_writer = LineWriter{ .lines = left_stroke_lines };
             var right_line_writer = LineWriter{ .lines = right_stroke_lines };
 
@@ -362,8 +362,8 @@ pub const PathFlattener = struct {
                 .y = offset,
             };
 
-            const source_subpath_record = paths.subpaths.items[stroke_job.source_subpath_index];
-            const neighbor = readNeighborSegment(paths, source_subpath_record.curve_offsets, @intCast(stroke_job.curve_index + 1));
+            const source_subpath = shape.subpaths.items[stroke_job.source_subpath_index];
+            const neighbor = readNeighborSegment(shape, source_subpath.curve_offsets, @intCast(stroke_job.curve_index + 1));
             var tan_prev = cubicEndTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
             var tan_next = neighbor.tangent;
             var tan_start = cubicStartTangent(cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
@@ -461,10 +461,8 @@ pub const PathFlattener = struct {
                 &right_line_writer,
             );
 
-            left_curve_record.item_offsets.end = left_curve_record.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
-            // left_curve_record.item_offsets.start = left_curve_record.item_offsets.end;
-            right_curve_record.item_offsets.end = right_curve_record.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
-            // right_curve_record.item_offsets.start = right_curve_record.item_offsets.end;
+            left_curve.item_offsets.end = left_curve.item_offsets.start + @as(u32, @intCast(left_line_writer.index));
+            right_curve.item_offsets.end = right_curve.item_offsets.start + @as(u32, @intCast(right_line_writer.index));
 
             right_line_writer.reverseAfterMark();
             right_line_writer.debug();

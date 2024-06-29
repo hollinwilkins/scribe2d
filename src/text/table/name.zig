@@ -223,7 +223,7 @@ pub const Table = struct {
     names: Names,
 
     pub fn create(data: []const u8) Error!Table {
-        const LANG_TAG_RECORD_SIZE: u16 = 4;
+        const LANG_TAG_SIZE: u16 = 4;
 
         var reader = Reader.create(data);
         const version = reader.readInt(u16) orelse return error.InvalidTable;
@@ -234,7 +234,7 @@ pub const Table = struct {
             // Do nothing
         } else if (version == 1) {
             const lang_tag_count = reader.readInt(u16) orelse return error.InvalidTable;
-            const lang_tag_len = lang_tag_count * LANG_TAG_RECORD_SIZE;
+            const lang_tag_len = lang_tag_count * LANG_TAG_SIZE;
             reader.skipN(@intCast(lang_tag_len));
         } else {
             return error.InvalidTable;

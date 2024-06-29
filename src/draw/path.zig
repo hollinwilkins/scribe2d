@@ -58,7 +58,7 @@ pub const Curve = struct {
     }
 };
 
-pub const Paths = struct {
+pub const Shape = struct {
     const PathList = std.ArrayListUnmanaged(Path);
     const SubpathList = std.ArrayListUnmanaged(Subpath);
     const CurveList = std.ArrayListUnmanaged(Curve);
@@ -144,7 +144,7 @@ pub const Paths = struct {
         }
     }
 
-    pub fn copyPath(self: *@This(), paths: Paths, path_index: u32) !void {
+    pub fn copyPath(self: *@This(), paths: Shape, path_index: u32) !void {
         const path = paths.paths.items[path_index];
         try self.openPath();
 
@@ -337,14 +337,14 @@ pub const PathBuilder = struct {
         .transform = GlyphPenFunctions.transform,
     };
 
-    paths: *Paths,
+    shape: *Shape,
     location: PointF32 = PointF32{},
     is_subpath_initialized: bool = false,
     is_error: bool = false,
 
-    pub fn create(paths: *Paths) @This() {
+    pub fn create(shape: *Shape) @This() {
         return @This(){
-            .paths = paths,
+            .shape = shape,
         };
     }
 
@@ -356,39 +356,39 @@ pub const PathBuilder = struct {
     }
 
     pub fn moveTo(self: *@This(), point: PointF32) !void {
-        try self.paths.closeSubpath();
+        try self.shape.closeSubpath();
         self.location = point;
         self.is_subpath_initialized = false;
     }
 
     pub fn lineTo(self: *@This(), point: PointF32) !void {
         if (!self.is_subpath_initialized) {
-            try self.paths.openSubpath();
-            (try self.paths.addPoint()).* = self.location;
+            try self.shape.openSubpath();
+            (try self.shape.addPoint()).* = self.location;
             self.is_subpath_initialized = true;
         }
 
-        try self.paths.lineTo(point);
+        try self.shape.lineTo(point);
         self.location = point;
     }
 
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
         if (!self.is_subpath_initialized) {
-            try self.paths.openSubpath();
-            (try self.paths.addPoint()).* = self.location;
+            try self.shape.openSubpath();
+            (try self.shape.addPoint()).* = self.location;
             self.is_subpath_initialized = true;
         }
 
-        try self.paths.quadTo(control, point);
+        try self.shape.quadTo(control, point);
         self.location = point;
     }
 
     pub fn open(self: *@This()) !void {
-        try self.paths.openPath();
+        try self.shape.openPath();
     }
 
     pub fn close(self: *@This()) !void {
-        try self.paths.closePath();
+        try self.shape.closePath();
     }
 
     pub const GlyphPenFunctions = struct {
@@ -433,7 +433,7 @@ pub const PathBuilder = struct {
 
         fn transform(ctx: *anyopaque, t: TransformF32) void {
             const b = @as(*PathBuilder, @alignCast(@ptrCast(ctx)));
-            b.paths.transformCurrentPath(t);
+            b.shape.transformCurrentPath(t);
         }
     };
 };

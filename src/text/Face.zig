@@ -39,7 +39,7 @@ pub const Face = struct {
         const data = try readFileBytesAlloc(allocator, path);
         var reader = Reader.create(data);
         const raw_face = try RawTables.read(&reader, 0);
-        const raw_tables = try RawTables.TableRecords.create(data, raw_face.table_records);
+        const raw_tables = try RawTables.TableRecords.create(data, raw_face.table);
 
         return Face{
             .allocator = allocator,
@@ -135,7 +135,7 @@ test "parsing roboto medium" {
     _ = bounds;
 
     const raw = try RawTables.create(rm_face.unmanaged.data, 0);
-    var iter = raw.table_records.iterator();
+    var iter = raw.table.iterator();
 
     while (iter.next()) |tr| {
         const name = tr.tag.toBytes();

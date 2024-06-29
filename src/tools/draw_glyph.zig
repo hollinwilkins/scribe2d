@@ -25,12 +25,12 @@ pub fn main() !void {
     defer face.deinit();
 
     std.debug.print("Font Info: {s}\n", .{font_file});
-    var rt_iter = face.unmanaged.raw_tables.table_records.iterator();
+    var rt_iter = face.unmanaged.raw_tables.table.iterator();
     while (rt_iter.next()) |table| {
         std.debug.print("Table: {s}\n", .{table.tag.toBytes()});
     }
 
-    var glyph_paths = draw.Paths.init(allocator);
+    var glyph_paths = draw.Shape.init(allocator);
     defer glyph_paths.deinit();
     var builder = draw.PathBuilder.create(&glyph_paths);
 
@@ -51,14 +51,14 @@ pub fn main() !void {
     style.fill = draw.Style.Fill{
         .color = draw.Color.RED,
     };
-    try scene.paths.copyPath(glyph_paths, 0);
+    try scene.shape.copyPath(glyph_paths, 0);
     try scene.close();
 
     var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, scene);
     defer soup.deinit();
 
-    // soup.path_records.items = soup.path_records.items[2..3];
-    // soup.path_records.items[0].subpath_offsets.start += 1;
+    // soup.path.items = soup.path.items[2..3];
+    // soup.path.items[0].subpath_offsets.start += 1;
 
     const dimensions = core.DimensionsU32{
         .width = size,
@@ -73,15 +73,15 @@ pub fn main() !void {
         std.debug.print("Curves:\n", .{});
         std.debug.print("-----------------------------\n", .{});
         const path = glyph_paths.paths.items[0];
-        const subpath_records = glyph_paths.subpaths.items[path.subpath_offsets.start..path.subpath_offsets.end];
-        for (subpath_records, 0..) |subpath_record, subpath_index| {
-            const curve_records = glyph_paths.curves.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-            for (curve_records, 0..) |curve_record, curve_index| {
-                const points = glyph_paths.points.items[curve_record.point_offsets.start..curve_record.point_offsets.end];
+        const subpaths = glyph_paths.subpaths.items[path.subpath_offsets.start..path.subpath_offsets.end];
+        for (subpaths, 0..) |subpath, subpath_index| {
+            const curves = glyph_paths.curves.items[subpath.curve_offsets.start..subpath.curve_offsets.end];
+            for (curves, 0..) |curve, curve_index| {
+                const points = glyph_paths.points.items[curve.point_offsets.start..curve.point_offsets.end];
                 std.debug.print("Curve({},{},{}): {any}\n", .{
                     subpath_index,
                     curve_index,
-                    curve_record.kind,
+                    curve.kind,
                     points,
                 });
             }
@@ -94,15 +94,15 @@ pub fn main() !void {
         std.debug.print("Line Soup:\n", .{});
         std.debug.print("-----------------------------\n", .{});
         var line_count: usize = 0;
-        for (soup.flat_paths.items, 0..) |path_record, path_index| {
+        for (soup.flat_paths.items, 0..) |path, path_index| {
             std.debug.print("-- Path({}) --\n", .{path_index});
 
-            const subpath_records = soup.flat_subpaths.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
-            for (subpath_records, 0..) |subpath_record, subpath_index| {
+            const subpaths = soup.flat_subpaths.items[path.flat_subpath_offsets.start..path.flat_subpath_offsets.end];
+            for (subpaths, 0..) |subpath, subpath_index| {
                 std.debug.print("-- Subpath({}) --\n", .{subpath_index});
-                const curve_records = soup.flat_curves.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
-                for (curve_records) |curve_record| {
-                    const lines = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+                const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
+                for (curves) |curve| {
+                    const lines = soup.items.items[curve.item_offsets.start..curve.item_offsets.end];
                     for (lines) |*line| {
                         std.debug.print("{}: {}\n", .{ line_count, line });
                         line_count += 1;
@@ -151,12 +151,12 @@ pub fn main() !void {
 
     // {
     //     std.debug.print("\n", .{});
-    //     std.debug.print("Paths Summary:\n", .{});
-    //     for (soup.path_records.items) |path_record| {
-    //         const subpath_count = path_record.subpath_offsets.size();
-    //         const boundary_fragment_count = path_record.boundary_offsets.size();
-    //         const merge_fragment_count = path_record.merge_offsets.size();
-    //         const span_count = path_record.span_offsets.size();
+    //     std.debug.print("Shape Summary:\n", .{});
+    //     for (soup.path.items) |path| {
+    //         const subpath_count = path.subpath_offsets.size();
+    //         const boundary_fragment_count = path.boundary_offsets.size();
+    //         const merge_fragment_count = path.merge_offsets.size();
+    //         const span_count = path.span_offsets.size();
 
     //         std.debug.print("-----------------------------\n", .{});
     //         std.debug.print("Subpaths({}), BoundaryFragments({}), MergeFragments({}), Spans({})\n", .{
@@ -166,23 +166,23 @@ pub fn main() !void {
     //             span_count,
     //         });
     //         std.debug.print("SubpathOffsets({},{}), BoundaryFragmentOffsets({},{}), MergeFragmentOffsets({},{}), SpanOffsets({},{})\n", .{
-    //             path_record.subpath_offsets.start,
-    //             path_record.subpath_offsets.end,
-    //             path_record.boundary_offsets.start,
-    //             path_record.boundary_offsets.end,
-    //             path_record.merge_offsets.start,
-    //             path_record.merge_offsets.end,
-    //             path_record.span_offsets.start,
-    //             path_record.span_offsets.end,
+    //             path.subpath_offsets.start,
+    //             path.subpath_offsets.end,
+    //             path.boundary_offsets.start,
+    //             path.boundary_offsets.end,
+    //             path.merge_offsets.start,
+    //             path.merge_offsets.end,
+    //             path.span_offsets.start,
+    //             path.span_offsets.end,
     //         });
 
-    //         // const subpath_records = soup.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
-    //         // for (subpath_records) |subpath_record| {
-    //         //     const intersection_count = subpath_record.intersection_offsets.size();
+    //         // const subpath = soup.subpath.items[path.subpath_offsets.start..path.subpath_offsets.end];
+    //         // for (subpath) |subpath| {
+    //         //     const intersection_count = subpath.intersection_offsets.size();
     //         //     std.debug.print("Intersections({}), IntersectionOffsets({},{})\n", .{
     //         //         intersection_count,
-    //         //         subpath_record.intersection_offsets.start,
-    //         //         subpath_record.intersection_offsets.end,
+    //         //         subpath.intersection_offsets.start,
+    //         //         subpath.intersection_offsets.end,
     //         //     });
     //         // }
     //     }

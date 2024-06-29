@@ -13,7 +13,7 @@ const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const msaa = @import("./msaa.zig");
 
-pub const Paths = path.Paths;
+pub const Shape = path.Shape;
 pub const PathBuilder = path.PathBuilder;
 pub const Segment = path.Segment;
 

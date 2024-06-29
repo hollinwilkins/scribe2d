@@ -256,10 +256,10 @@ pub const RawTables = struct {
         mvar: ?[]const u8 = null,
         vvar: ?[]const u8 = null,
 
-        pub fn create(data: []const u8, table_records: TableRecordsList) !TableRecords {
+        pub fn create(data: []const u8, table: TableRecordsList) !TableRecords {
             var tables = TableRecords{};
             var checks = HasRequiredTables{};
-            var iter = table_records.iterator();
+            var iter = table.iterator();
 
             while (iter.next()) |tr| {
                 const tag = tr.tag.toBytes();
@@ -360,7 +360,7 @@ pub const RawTables = struct {
         }
     };
 
-    table_records: TableRecordsList,
+    table: TableRecordsList,
 
     pub fn create(data: []const u8, index: usize) !RawTables {
         var r = Reader.create(data);
@@ -392,10 +392,10 @@ pub const RawTables = struct {
 
         const num_tables = reader.readInt(u16) orelse return error.MalformedFont;
         reader.skipN(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
-        const table_records = TableRecordsList.read(reader, num_tables) orelse return error.MalformedFont;
+        const table = TableRecordsList.read(reader, num_tables) orelse return error.MalformedFont;
 
         return RawTables{
-            .table_records = table_records,
+            .table = table,
         };
     }
 };

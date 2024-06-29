@@ -7,10 +7,10 @@ const CurveRecord = soup_module.CurveRecord;
 pub fn Kernel(comptime T: type) type {
     return struct {
         pub fn flattenFill(
-            path_records: []const PathRecord,
-            subpath_records: []const SubpathRecord,
-            curve_records: []const CurveRecord,
-            source_curve_records: []const path.CurveRecord,
+            path: []const PathRecord,
+            subpath: []const SubpathRecord,
+            curve: []const CurveRecord,
+            source_curve: []const path.CurveRecord,
             items: []T,
         ) void {}
     };

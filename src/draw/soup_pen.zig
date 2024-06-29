@@ -9,7 +9,7 @@ const Allocator = mem.Allocator;
 const Color = texture_module.Color;
 const ColorBlend = texture_module.ColorBlend;
 const AlphaColorBlend = texture_module.AlphaColorBlend;
-const Paths = path_module.Paths;
+const Shape = path_module.Shape;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 const LineSoup = soup_module.LineSoup;
@@ -87,9 +87,9 @@ pub const SoupPen = struct {
 
         const blend = DEFAULT_BLEND;
 
-        for (line_soup.flat_paths.items) |path_record| {
-            const color = path_record.fill.color;
-            const merge_fragments = line_soup.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
+        for (line_soup.flat_paths.items) |path| {
+            const color = path.fill.color;
+            const merge_fragments = line_soup.merge_fragments.items[path.merge_offsets.start..path.merge_offsets.end];
 
             for (merge_fragments) |merge_fragment| {
                 const pixel = merge_fragment.pixel;
@@ -111,7 +111,7 @@ pub const SoupPen = struct {
                 }
             }
 
-            const spans = line_soup.spans.items[path_record.span_offsets.start..path_record.span_offsets.end];
+            const spans = line_soup.spans.items[path.span_offsets.start..path.span_offsets.end];
             for (spans) |span| {
                 for (0..span.x_range.size()) |x_offset| {
                     const x = @as(i32, @intCast(span.x_range.start)) + @as(i32, @intCast(x_offset));
