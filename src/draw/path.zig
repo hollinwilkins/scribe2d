@@ -83,15 +83,15 @@ pub const Paths = struct {
         self.points.deinit(self.allocator);
     }
 
-    pub fn currentPathRecord(self: *@This()) ?*Path {
+    pub fn currentPath(self: *@This()) ?*Path {
         if (self.paths.items.len > 0) {
-            return self.currentPathRecordUnsafe();
+            return self.currentPathUnsafe();
         }
 
         return null;
     }
 
-    pub fn currentPathRecordUnsafe(self: *@This()) *Path {
+    pub fn currentPathUnsafe(self: *@This()) *Path {
         return &self.paths.items[self.paths.items.len - 1];
     }
 
@@ -108,7 +108,7 @@ pub const Paths = struct {
 
     pub fn closePath(self: *@This()) !void {
         try self.closeSubpath();
-        if (self.currentPathRecord()) |path| {
+        if (self.currentPath()) |path| {
             path.subpath_offsets.end = @intCast(self.subpaths.items.len);
             if (path.is_closed) {
                 return;
@@ -158,8 +158,8 @@ pub const Paths = struct {
         std.mem.copyForwards(PointF32, points, paths.points.items[start_point_index..end_point_index]);
 
         const self_start_curve_index: u32 = @intCast(self.curves.items.len);
-        const curve_records = try self.addCurveRecords(end_curve_index - start_curve_index);
-        for (curve_records, paths.curves.items[start_curve_index..end_curve_index]) |*self_curve, curve| {
+        const curves = try self.addCurveRecords(end_curve_index - start_curve_index);
+        for (curves, paths.curves.items[start_curve_index..end_curve_index]) |*self_curve, curve| {
             self_curve.* = curve;
             self_curve.point_offsets = RangeU32{
                 .start = curve.point_offsets.start - start_point_index + self_start_point_index,
@@ -167,8 +167,8 @@ pub const Paths = struct {
             };
         }
 
-        const subpath_records = try self.addSubpathRecords(path.subpath_offsets.size());
-        for (subpath_records, paths.subpaths.items[path.subpath_offsets.start..path.subpath_offsets.end]) |*self_subpath, subpath| {
+        const subpaths = try self.addSubpathRecords(path.subpath_offsets.size());
+        for (subpaths, paths.subpaths.items[path.subpath_offsets.start..path.subpath_offsets.end]) |*self_subpath, subpath| {
             self_subpath.* = subpath;
             self_subpath.curve_offsets = RangeU32{
                 .start = subpath.curve_offsets.start - start_curve_index + self_start_curve_index,
@@ -237,25 +237,25 @@ pub const Paths = struct {
         return try self.subpaths.addManyAsSlice(self.allocator, n);
     }
 
-    pub fn isSubpathCapped(self: @This(), subpath_record: Subpath) bool {
-        const first_curve_record = self.curves.items[subpath_record.curve_offsets.start];
-        return first_curve_record.isCapped();
+    pub fn isSubpathCapped(self: @This(), subpath: Subpath) bool {
+        const first_curve = self.curves.items[subpath.curve_offsets.start];
+        return first_curve.isCapped();
     }
 
-    pub fn getCubicPoints(self: @This(), curve_record: Curve) CubicPoints {
+    pub fn getCubicPoints(self: @This(), curve: Curve) CubicPoints {
         var cubic_points = CubicPoints{};
 
-        cubic_points.point0 = self.points.items[curve_record.point_offsets.start];
-        cubic_points.point1 = self.points.items[curve_record.point_offsets.start + 1];
+        cubic_points.point0 = self.points.items[curve.point_offsets.start];
+        cubic_points.point1 = self.points.items[curve.point_offsets.start + 1];
 
-        switch (curve_record.kind) {
+        switch (curve.kind) {
             .line => {
                 cubic_points.point3 = cubic_points.point1;
                 cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
                 cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
             },
             .quadratic_bezier => {
-                cubic_points.point2 = self.points.items[curve_record.point_offsets.start + 2];
+                cubic_points.point2 = self.points.items[curve.point_offsets.start + 2];
                 cubic_points.point3 = cubic_points.point2;
                 cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
                 cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
@@ -290,7 +290,7 @@ pub const Paths = struct {
     }
 
     pub fn transformCurrentPath(self: *@This(), t: TransformF32) void {
-        if (self.currentPathRecord()) |path| {
+        if (self.currentPath()) |path| {
             const start_curve_index = self.subpaths.items[path.subpath_offsets.start].curve_offsets.start;
             const start_point_index = self.curves.items[start_curve_index].point_offsets.start;
             const end_point_index = self.points.items.len;

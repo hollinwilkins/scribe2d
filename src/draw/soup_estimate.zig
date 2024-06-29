@@ -118,12 +118,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                                 _ = try soup.addItems(fill_curve_estimate.*);
                                 const source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
-                                const curve_index = soup_subpath_record.flat_curve_offsets.start + @as(u32, @intCast(curve_offset));
+                                const flat_curve_index = soup_subpath_record.flat_curve_offsets.start + @as(u32, @intCast(curve_offset));
 
                                 fill_job.* = FillJob{
                                     .transform_index = metadata.transform_index,
                                     .source_curve_index = source_curve_index,
-                                    .curve_index = curve_index,
+                                    .flat_curve_index = flat_curve_index,
                                 };
 
                                 soup.closeFlatCurveItems(soup_curve_record);
@@ -195,15 +195,15 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                                 const stroke_jobs = try soup.addStrokeJobs(curve_record_len);
                                 for (stroke_jobs, 0..) |*stroke_job, offset| {
-                                    const left_curve_index = soup_subpath_record.flat_curve_offsets.start + @as(u32, @intCast(offset));
-                                    const right_curve_index = soup_subpath_record.flat_curve_offsets.end - (1 + @as(u32, @intCast(offset)));
+                                    const left_flat_curve_index = soup_subpath_record.flat_curve_offsets.start + @as(u32, @intCast(offset));
+                                    const right_flat_curve_index = soup_subpath_record.flat_curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = StrokeJob{
                                         .transform_index = metadata.transform_index,
                                         .style_index = metadata.style_index,
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
-                                        .left_curve_index = left_curve_index,
-                                        .right_curve_index = right_curve_index,
+                                        .left_flat_curve_index = left_flat_curve_index,
+                                        .right_flat_curve_index = right_flat_curve_index,
                                     };
                                 }
                             } else {
@@ -245,15 +245,15 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
 
                                 const stroke_jobs = try soup.addStrokeJobs(curve_record_len);
                                 for (stroke_jobs, 0..) |*stroke_job, offset| {
-                                    const left_curve_index = left_soup_subpath_record_start + @as(u32, @intCast(offset));
-                                    const right_curve_index = right_soup_subpath_record.flat_curve_offsets.end - (1 + @as(u32, @intCast(offset)));
+                                    const left_flat_curve_index = left_soup_subpath_record_start + @as(u32, @intCast(offset));
+                                    const right_flat_curve_index = right_soup_subpath_record.flat_curve_offsets.end - (1 + @as(u32, @intCast(offset)));
                                     stroke_job.* = StrokeJob{
                                         .transform_index = metadata.transform_index,
                                         .style_index = metadata.style_index,
                                         .source_subpath_index = path_record.subpath_offsets.start + @as(u32, @intCast(subpath_record_offset)),
                                         .source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(offset)),
-                                        .left_curve_index = left_curve_index,
-                                        .right_curve_index = right_curve_index,
+                                        .left_flat_curve_index = left_flat_curve_index,
+                                        .right_flat_curve_index = right_flat_curve_index,
                                     };
                                 }
                             }

@@ -149,8 +149,8 @@ fn cubicEndTangent(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) Point
 
 fn readNeighborSegment(paths: Paths, curve_range: RangeU32, index: u32) NeighborSegment {
     const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
-    const curve_record = paths.curves.items[index_shifted];
-    const cubic_points = paths.getCubicPoints(curve_record);
+    const curve = paths.curves.items[index_shifted];
+    const cubic_points = paths.getCubicPoints(curve);
     const tangent = cubicStartTangent(
         cubic_points.point0,
         cubic_points.point1,
@@ -322,11 +322,11 @@ pub const PathFlattener = struct {
         errdefer soup.deinit();
 
         for (soup.fill_jobs.items) |fill_job| {
-            const source_curve_record = paths.curves.items[fill_job.source_curve_index];
-            const cubic_points = paths.getCubicPoints(source_curve_record);
+            const curve = paths.curves.items[fill_job.source_curve_index];
+            const cubic_points = paths.getCubicPoints(curve);
             const transform = transforms[fill_job.transform_index];
-            const curve_record = &soup.flat_curves.items[fill_job.curve_index];
-            const fill_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
+            const flat_curve = &soup.flat_curves.items[fill_job.flat_curve_index];
+            const fill_items = soup.items.items[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
 
             var line_writer = LineWriter{
                 .lines = fill_items,
@@ -340,7 +340,7 @@ pub const PathFlattener = struct {
                 &line_writer,
             );
 
-            curve_record.item_offsets.end = curve_record.item_offsets.start + @as(u32, @intCast(line_writer.index));
+            flat_curve.item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(line_writer.index));
         }
 
         for (soup.stroke_jobs.items) |stroke_job| {
@@ -349,8 +349,8 @@ pub const PathFlattener = struct {
             const transform = transforms[stroke_job.transform_index];
             const style = styles[stroke_job.style_index];
             const stroke = style.stroke.?;
-            const left_curve_record = &soup.flat_curves.items[stroke_job.left_curve_index];
-            const right_curve_record = &soup.flat_curves.items[stroke_job.right_curve_index];
+            const left_curve_record = &soup.flat_curves.items[stroke_job.left_flat_curve_index];
+            const right_curve_record = &soup.flat_curves.items[stroke_job.right_flat_curve_index];
             const left_stroke_lines = soup.items.items[left_curve_record.item_offsets.start..left_curve_record.item_offsets.end];
             const right_stroke_lines = soup.items.items[right_curve_record.item_offsets.start..right_curve_record.item_offsets.end];
             var left_line_writer = LineWriter{ .lines = left_stroke_lines };
