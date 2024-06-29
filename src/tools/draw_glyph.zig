@@ -1,9 +1,9 @@
 const std = @import("std");
-const scriobh = @import("scriobh");
+const scribe = @import("scribe");
 const zstbi = @import("zstbi");
-const text = scriobh.text;
-const draw = scriobh.draw;
-const core = scriobh.core;
+const text = scribe.text;
+const draw = scribe.draw;
+const core = scribe.core;
 
 pub fn main() !void {
     var args = std.process.args();
