@@ -89,17 +89,17 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                 const path_records = paths.path_records.items[metadata.path_offsets.start..metadata.path_offsets.end];
                 if (style.fill) |fill| {
                     for (path_records) |path_record| {
-                        const soup_path_record = try soup.addPathRecord();
-                        soup.openPathSubpaths(soup_path_record);
+                        const soup_path_record = try soup.addFlatPath();
+                        soup.openFlatPathSubpaths(soup_path_record);
                         soup_path_record.fill = fill;
 
                         const subpath_records = paths.subpath_records.items[path_record.subpath_offsets.start..path_record.subpath_offsets.end];
                         for (subpath_records) |subpath_record| {
-                            const soup_subpath_record = try soup.addSubpath();
-                            soup.openSubpathCurves(soup_subpath_record);
+                            const soup_subpath_record = try soup.addFlatSubpath();
+                            soup.openFlatSubpathCurves(soup_subpath_record);
 
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
-                            const fill_curve_estimates = try soup.addCurveEstimates(subpath_base_estimates.len);
+                            const fill_curve_estimates = try soup.addFlatCurveEstimates(subpath_base_estimates.len);
                             const fill_jobs = try soup.addFillJobs(subpath_base_estimates.len);
                             for (
                                 subpath_base_estimates,
@@ -113,8 +113,8 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 curve_offset,
                             | {
                                 fill_curve_estimate.* = base_estimate;
-                                const soup_curve_record = try soup.addCurve();
-                                soup.openCurveItems(soup_curve_record);
+                                const soup_curve_record = try soup.addFlatCurve();
+                                soup.openFlatCurveItems(soup_curve_record);
 
                                 _ = try soup.addItems(fill_curve_estimate.*);
                                 const source_curve_index = subpath_record.curve_offsets.start + @as(u32, @intCast(curve_offset));
@@ -126,12 +126,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                     .curve_index = curve_index,
                                 };
 
-                                soup.closeCurveItems(soup_curve_record);
+                                soup.closeFlatCurveItems(soup_curve_record);
                             }
 
-                            soup.closeSubpathCurves(soup_subpath_record);
+                            soup.closeFlatSubpathCurves(soup_subpath_record);
                         }
-                        soup.closePathSubpaths(soup_path_record);
+                        soup.closeFlatPathSubpaths(soup_path_record);
                     }
                 }
 
@@ -148,30 +148,30 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                             const curve_records = paths.curve_records.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
                             const subpath_base_estimates = soup.base_estimates.items[subpath_record.curve_offsets.start..subpath_record.curve_offsets.end];
 
-                            const soup_path_record = try soup.addPathRecord();
-                            soup.openPathSubpaths(soup_path_record);
+                            const soup_path_record = try soup.addFlatPath();
+                            soup.openFlatPathSubpaths(soup_path_record);
                             soup_path_record.fill = fill;
 
                             if (paths.isSubpathCapped(subpath_record)) {
                                 // subpath is capped, so the stroke will be a single subpath
-                                const soup_subpath_record = try soup.addSubpath();
-                                soup.openSubpathCurves(soup_subpath_record);
+                                const soup_subpath_record = try soup.addFlatSubpath();
+                                soup.openFlatSubpathCurves(soup_subpath_record);
 
-                                const curve_estimates = try soup.addCurveEstimates(curve_record_len * 2);
+                                const curve_estimates = try soup.addFlatCurveEstimates(curve_record_len * 2);
                                 const left_curve_estimates = curve_estimates[0..curve_record_len];
                                 const right_curve_estimates = curve_estimates[curve_record_len..];
 
                                 // need two curve records per each curve record in source
                                 // calculate side without caps
                                 for (subpath_base_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
-                                    const soup_curve_record = try soup.addCurve();
-                                    soup.openCurveItems(soup_curve_record);
+                                    const soup_curve_record = try soup.addFlatCurve();
+                                    soup.openFlatCurveItems(soup_curve_record);
 
                                     curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
                                         estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit);
                                     _ = try soup.addItems(curve_estimate.*);
 
-                                    soup.closeCurveItems(soup_curve_record);
+                                    soup.closeFlatCurveItems(soup_curve_record);
                                 }
 
                                 // calculate side with caps
@@ -183,15 +183,15 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                         stroke,
                                         scaled_width,
                                     );
-                                    const soup_curve_record = try soup.addCurve();
-                                    soup.openCurveItems(soup_curve_record);
+                                    const soup_curve_record = try soup.addFlatCurve();
+                                    soup.openFlatCurveItems(soup_curve_record);
 
                                     _ = try soup.addItems(curve_estimate.*);
 
-                                    soup.closeCurveItems(soup_curve_record);
+                                    soup.closeFlatCurveItems(soup_curve_record);
                                 }
 
-                                soup.closeSubpathCurves(soup_subpath_record);
+                                soup.closeFlatSubpathCurves(soup_subpath_record);
 
                                 const stroke_jobs = try soup.addStrokeJobs(curve_record_len);
                                 for (stroke_jobs, 0..) |*stroke_job, offset| {
@@ -208,40 +208,40 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 }
                             } else {
                                 // subpath is not capped, so the stroke will be two subpaths
-                                const left_soup_subpath_record = try soup.addSubpath();
-                                soup.openSubpathCurves(left_soup_subpath_record);
+                                const left_soup_subpath_record = try soup.addFlatSubpath();
+                                soup.openFlatSubpathCurves(left_soup_subpath_record);
                                 const left_soup_subpath_record_start = left_soup_subpath_record.flat_curve_offsets.start;
 
-                                const curve_estimates = try soup.addCurveEstimates(curve_record_len * 2);
+                                const curve_estimates = try soup.addFlatCurveEstimates(curve_record_len * 2);
                                 const left_curve_estimates = curve_estimates[0..curve_record_len];
                                 const right_curve_estimates = curve_estimates[curve_record_len..];
 
                                 for (subpath_base_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
-                                    const soup_curve_record = try soup.addCurve();
-                                    soup.openCurveItems(soup_curve_record);
+                                    const soup_curve_record = try soup.addFlatCurve();
+                                    soup.openFlatCurveItems(soup_curve_record);
 
                                     curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
                                         estimateStrokeJoin(stroke.join, scaled_width, stroke.miter_limit);
                                     _ = try soup.addItems(curve_estimate.*);
 
-                                    soup.closeCurveItems(soup_curve_record);
+                                    soup.closeFlatCurveItems(soup_curve_record);
                                 }
-                                soup.closeSubpathCurves(left_soup_subpath_record);
+                                soup.closeFlatSubpathCurves(left_soup_subpath_record);
 
-                                const right_soup_subpath_record = try soup.addSubpath();
-                                soup.openSubpathCurves(right_soup_subpath_record);
+                                const right_soup_subpath_record = try soup.addFlatSubpath();
+                                soup.openFlatSubpathCurves(right_soup_subpath_record);
 
                                 for (left_curve_estimates, 0..) |*curve_estimate, offset| {
                                     const base_estimate = right_curve_estimates[left_curve_estimates.len - (1 + offset)];
                                     curve_estimate.* = base_estimate;
-                                    const soup_curve_record = try soup.addCurve();
-                                    soup.openCurveItems(soup_curve_record);
+                                    const soup_curve_record = try soup.addFlatCurve();
+                                    soup.openFlatCurveItems(soup_curve_record);
 
                                     _ = try soup.addItems(curve_estimate.*);
 
-                                    soup.closeCurveItems(soup_curve_record);
+                                    soup.closeFlatCurveItems(soup_curve_record);
                                 }
-                                soup.closeSubpathCurves(right_soup_subpath_record);
+                                soup.closeFlatSubpathCurves(right_soup_subpath_record);
 
                                 const stroke_jobs = try soup.addStrokeJobs(curve_record_len);
                                 for (stroke_jobs, 0..) |*stroke_job, offset| {
@@ -258,7 +258,7 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                                 }
                             }
 
-                            soup.closePathSubpaths(soup_path_record);
+                            soup.closeFlatPathSubpaths(soup_path_record);
                         }
                     }
                 }
@@ -281,25 +281,25 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
                             curve_intersections += EstimatorImpl.estimateIntersections(item);
                         }
 
-                        soup.openCurveIntersections(curve_record);
+                        soup.openFlatCurveIntersections(curve_record);
                         _ = try soup.addGridIntersections(curve_intersections);
-                        soup.closeCurveIntersections(curve_record);
+                        soup.closeFlatCurveIntersections(curve_record);
 
                         path_intersections += curve_intersections;
                     }
                 }
 
-                soup.openPathBoundaries(path_record);
+                soup.openFlatPathBoundaries(path_record);
                 _ = try soup.addBoundaryFragments(path_intersections);
-                soup.closePathBoundaries(path_record);
+                soup.closeFlatPathBoundaries(path_record);
 
-                soup.openPathMerges(path_record);
+                soup.openFlatPathMerges(path_record);
                 _ = try soup.addMergeFragments(path_intersections);
-                soup.closePathMerges(path_record);
+                soup.closeFlatPathMerges(path_record);
 
-                soup.openPathSpans(path_record);
+                soup.openFlatPathSpans(path_record);
                 _ = try soup.addSpans(path_intersections / 2 + 1);
-                soup.closePathSpans(path_record);
+                soup.closeFlatPathSpans(path_record);
             }
         }
 

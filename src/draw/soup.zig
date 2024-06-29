@@ -292,85 +292,85 @@ pub fn Soup(comptime T: type) type {
             self.spans.deinit(self.allocator);
         }
 
-        pub fn addPathRecord(self: *@This()) !*FlatPath {
+        pub fn addFlatPath(self: *@This()) !*FlatPath {
             const path = try self.flat_paths.addOne(self.allocator);
             path.* = FlatPath{};
             return path;
         }
 
-        pub fn openPathSubpaths(self: @This(), path_record: *FlatPath) void {
-            path_record.flat_subpath_offsets.start = @intCast(self.flat_subpaths.items.len);
+        pub fn openFlatPathSubpaths(self: @This(), flat_path: *FlatPath) void {
+            flat_path.flat_subpath_offsets.start = @intCast(self.flat_subpaths.items.len);
         }
 
-        pub fn openPathBoundaries(self: *@This(), path_record: *FlatPath) void {
-            path_record.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
+        pub fn openFlatPathBoundaries(self: *@This(), flat_path: *FlatPath) void {
+            flat_path.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
         }
 
-        pub fn openPathMerges(self: *@This(), path_record: *FlatPath) void {
-            path_record.merge_offsets.start = @intCast(self.merge_fragments.items.len);
+        pub fn openFlatPathMerges(self: *@This(), flat_path: *FlatPath) void {
+            flat_path.merge_offsets.start = @intCast(self.merge_fragments.items.len);
         }
 
-        pub fn openPathSpans(self: *@This(), path_record: *FlatPath) void {
-            path_record.span_offsets.start = @intCast(self.spans.items.len);
+        pub fn openFlatPathSpans(self: *@This(), flat_path: *FlatPath) void {
+            flat_path.span_offsets.start = @intCast(self.spans.items.len);
         }
 
-        pub fn closePathSubpaths(self: @This(), path_record: *FlatPath) void {
-            path_record.flat_subpath_offsets.end = @intCast(self.flat_subpaths.items.len);
+        pub fn closeFlatPathSubpaths(self: @This(), flat_path: *FlatPath) void {
+            flat_path.flat_subpath_offsets.end = @intCast(self.flat_subpaths.items.len);
         }
 
-        pub fn closePathBoundaries(self: *@This(), path_record: *FlatPath) void {
-            path_record.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
+        pub fn closeFlatPathBoundaries(self: *@This(), flat_path: *FlatPath) void {
+            flat_path.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
         }
 
-        pub fn closePathMerges(self: *@This(), path_record: *FlatPath) void {
-            path_record.merge_offsets.end = @intCast(self.merge_fragments.items.len);
+        pub fn closeFlatPathMerges(self: *@This(), flat_path: *FlatPath) void {
+            flat_path.merge_offsets.end = @intCast(self.merge_fragments.items.len);
         }
 
-        pub fn closePathSpans(self: *@This(), path_record: *FlatPath) void {
-            path_record.span_offsets.end = @intCast(self.spans.items.len);
+        pub fn closeFlatPathSpans(self: *@This(), flat_path: *FlatPath) void {
+            flat_path.span_offsets.end = @intCast(self.spans.items.len);
         }
 
-        pub fn addSubpath(self: *@This()) !*FlatSubpath {
+        pub fn addFlatSubpath(self: *@This()) !*FlatSubpath {
             const subpath = try self.flat_subpaths.addOne(self.allocator);
             subpath.* = FlatSubpath{};
             return subpath;
         }
 
-        pub fn openSubpathCurves(self: @This(), subpath_record: *FlatSubpath) void {
-            subpath_record.flat_curve_offsets.start = @intCast(self.flat_curves.items.len);
+        pub fn openFlatSubpathCurves(self: @This(), flat_subpath: *FlatSubpath) void {
+            flat_subpath.flat_curve_offsets.start = @intCast(self.flat_curves.items.len);
         }
 
-        pub fn closeSubpathCurves(self: @This(), subpath_record: *FlatSubpath) void {
-            subpath_record.flat_curve_offsets.end = @intCast(self.flat_curves.items.len);
+        pub fn closeFlatSubpathCurves(self: @This(), flat_subpath: *FlatSubpath) void {
+            flat_subpath.flat_curve_offsets.end = @intCast(self.flat_curves.items.len);
         }
 
-        pub fn addCurve(self: *@This()) !*FlatCurve {
+        pub fn addFlatCurve(self: *@This()) !*FlatCurve {
             const curve = try self.flat_curves.addOne(self.allocator);
             curve.* = FlatCurve{};
             return curve;
         }
 
-        pub fn openCurveItems(self: *@This(), curve_record: *FlatCurve) void {
+        pub fn openFlatCurveItems(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.item_offsets.start = @intCast(self.items.items.len);
         }
 
-        pub fn openCurveIntersections(self: *@This(), curve_record: *FlatCurve) void {
+        pub fn openFlatCurveIntersections(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
         }
 
-        pub fn closeCurveItems(self: *@This(), curve_record: *FlatCurve) void {
+        pub fn closeFlatCurveItems(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.item_offsets.end = @intCast(self.items.items.len);
         }
 
-        pub fn closeCurveIntersections(self: *@This(), curve_record: *FlatCurve) void {
+        pub fn closeFlatCurveIntersections(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
         }
 
-        pub fn addCurveEstimate(self: *@This()) !*u32 {
+        pub fn addFlatCurveEstimate(self: *@This()) !*u32 {
             return try self.flat_curve_estimates.addOne(self.allocator);
         }
 
-        pub fn addCurveEstimates(self: *@This(), n: usize) ![]u32 {
+        pub fn addFlatCurveEstimates(self: *@This(), n: usize) ![]u32 {
             return try self.flat_curve_estimates.addManyAsSlice(self.allocator, n);
         }
 
