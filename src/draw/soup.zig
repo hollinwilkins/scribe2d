@@ -28,19 +28,19 @@ const EulerSegment = euler.EulerSegment;
 const Scene = scene_module.Scene;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 
-pub const PathRecord = struct {
+pub const FlatPath = struct {
     fill: Style.Fill = Style.Fill{},
-    subpath_offsets: RangeU32 = RangeU32{},
+    flat_subpath_offsets: RangeU32 = RangeU32{},
     boundary_offsets: RangeU32 = RangeU32{},
     merge_offsets: RangeU32 = RangeU32{},
     span_offsets: RangeU32 = RangeU32{},
 };
 
-pub const SubpathRecord = struct {
-    curve_offsets: RangeU32 = RangeU32{},
+pub const FlatSubpath = struct {
+    flat_curve_offsets: RangeU32 = RangeU32{},
 };
 
-pub const CurveRecord = struct {
+pub const FlatCurve = struct {
     item_offsets: RangeU32 = RangeU32{},
     intersection_offsets: RangeU32 = RangeU32{},
 };
@@ -245,9 +245,9 @@ pub const GridIntersection = struct {
 
 pub fn Soup(comptime T: type) type {
     return struct {
-        pub const PathRecordList = std.ArrayListUnmanaged(PathRecord);
-        pub const SubpathRecordList = std.ArrayListUnmanaged(SubpathRecord);
-        pub const CurveRecordList = std.ArrayListUnmanaged(CurveRecord);
+        pub const PathRecordList = std.ArrayListUnmanaged(FlatPath);
+        pub const SubpathRecordList = std.ArrayListUnmanaged(FlatSubpath);
+        pub const CurveRecordList = std.ArrayListUnmanaged(FlatCurve);
         pub const EstimateList = std.ArrayListUnmanaged(u32);
         pub const FillJobList = std.ArrayListUnmanaged(FillJob);
         pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
@@ -258,9 +258,9 @@ pub fn Soup(comptime T: type) type {
         pub const SpanList = std.ArrayListUnmanaged(Span);
 
         allocator: Allocator,
-        path_records: PathRecordList = PathRecordList{},
-        subpath_records: SubpathRecordList = SubpathRecordList{},
-        curve_records: CurveRecordList = CurveRecordList{},
+        flat_path_records: PathRecordList = PathRecordList{},
+        flat_subpath_records: SubpathRecordList = SubpathRecordList{},
+        flat_curve_records: CurveRecordList = CurveRecordList{},
         curve_estimates: EstimateList = EstimateList{},
         base_estimates: EstimateList = EstimateList{},
         fill_jobs: FillJobList = FillJobList{},
@@ -278,9 +278,9 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn deinit(self: *@This()) void {
-            self.path_records.deinit(self.allocator);
-            self.subpath_records.deinit(self.allocator);
-            self.curve_records.deinit(self.allocator);
+            self.flat_path_records.deinit(self.allocator);
+            self.flat_subpath_records.deinit(self.allocator);
+            self.flat_curve_records.deinit(self.allocator);
             self.curve_estimates.deinit(self.allocator);
             self.base_estimates.deinit(self.allocator);
             self.fill_jobs.deinit(self.allocator);
@@ -292,77 +292,77 @@ pub fn Soup(comptime T: type) type {
             self.spans.deinit(self.allocator);
         }
 
-        pub fn addPathRecord(self: *@This()) !*PathRecord {
-            const path = try self.path_records.addOne(self.allocator);
-            path.* = PathRecord{};
+        pub fn addPathRecord(self: *@This()) !*FlatPath {
+            const path = try self.flat_path_records.addOne(self.allocator);
+            path.* = FlatPath{};
             return path;
         }
 
-        pub fn openPathSubpaths(self: @This(), path_record: *PathRecord) void {
-            path_record.subpath_offsets.start = @intCast(self.subpath_records.items.len);
+        pub fn openPathSubpaths(self: @This(), path_record: *FlatPath) void {
+            path_record.flat_subpath_offsets.start = @intCast(self.flat_subpath_records.items.len);
         }
 
-        pub fn openPathBoundaries(self: *@This(), path_record: *PathRecord) void {
+        pub fn openPathBoundaries(self: *@This(), path_record: *FlatPath) void {
             path_record.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
         }
 
-        pub fn openPathMerges(self: *@This(), path_record: *PathRecord) void {
+        pub fn openPathMerges(self: *@This(), path_record: *FlatPath) void {
             path_record.merge_offsets.start = @intCast(self.merge_fragments.items.len);
         }
 
-        pub fn openPathSpans(self: *@This(), path_record: *PathRecord) void {
+        pub fn openPathSpans(self: *@This(), path_record: *FlatPath) void {
             path_record.span_offsets.start = @intCast(self.spans.items.len);
         }
 
-        pub fn closePathSubpaths(self: @This(), path_record: *PathRecord) void {
-            path_record.subpath_offsets.end = @intCast(self.subpath_records.items.len);
+        pub fn closePathSubpaths(self: @This(), path_record: *FlatPath) void {
+            path_record.flat_subpath_offsets.end = @intCast(self.flat_subpath_records.items.len);
         }
 
-        pub fn closePathBoundaries(self: *@This(), path_record: *PathRecord) void {
+        pub fn closePathBoundaries(self: *@This(), path_record: *FlatPath) void {
             path_record.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
         }
 
-        pub fn closePathMerges(self: *@This(), path_record: *PathRecord) void {
+        pub fn closePathMerges(self: *@This(), path_record: *FlatPath) void {
             path_record.merge_offsets.end = @intCast(self.merge_fragments.items.len);
         }
 
-        pub fn closePathSpans(self: *@This(), path_record: *PathRecord) void {
+        pub fn closePathSpans(self: *@This(), path_record: *FlatPath) void {
             path_record.span_offsets.end = @intCast(self.spans.items.len);
         }
 
-        pub fn addSubpath(self: *@This()) !*SubpathRecord {
-            const subpath = try self.subpath_records.addOne(self.allocator);
-            subpath.* = SubpathRecord{};
+        pub fn addSubpath(self: *@This()) !*FlatSubpath {
+            const subpath = try self.flat_subpath_records.addOne(self.allocator);
+            subpath.* = FlatSubpath{};
             return subpath;
         }
 
-        pub fn openSubpathCurves(self: @This(), subpath_record: *SubpathRecord) void {
-            subpath_record.curve_offsets.start = @intCast(self.curve_records.items.len);
+        pub fn openSubpathCurves(self: @This(), subpath_record: *FlatSubpath) void {
+            subpath_record.flat_curve_offsets.start = @intCast(self.flat_curve_records.items.len);
         }
 
-        pub fn closeSubpathCurves(self: @This(), subpath_record: *SubpathRecord) void {
-            subpath_record.curve_offsets.end = @intCast(self.curve_records.items.len);
+        pub fn closeSubpathCurves(self: @This(), subpath_record: *FlatSubpath) void {
+            subpath_record.flat_curve_offsets.end = @intCast(self.flat_curve_records.items.len);
         }
 
-        pub fn addCurve(self: *@This()) !*CurveRecord {
-            const curve = try self.curve_records.addOne(self.allocator);
-            curve.* = CurveRecord{};
+        pub fn addCurve(self: *@This()) !*FlatCurve {
+            const curve = try self.flat_curve_records.addOne(self.allocator);
+            curve.* = FlatCurve{};
             return curve;
         }
 
-        pub fn openCurveItems(self: *@This(), curve_record: *CurveRecord) void {
+        pub fn openCurveItems(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.item_offsets.start = @intCast(self.items.items.len);
         }
 
-        pub fn openCurveIntersections(self: *@This(), curve_record: *CurveRecord) void {
+        pub fn openCurveIntersections(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
         }
 
-        pub fn closeCurveItems(self: *@This(), curve_record: *CurveRecord) void {
+        pub fn closeCurveItems(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.item_offsets.end = @intCast(self.items.items.len);
         }
 
-        pub fn closeCurveIntersections(self: *@This(), curve_record: *CurveRecord) void {
+        pub fn closeCurveIntersections(self: *@This(), curve_record: *FlatCurve) void {
             curve_record.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
         }
 

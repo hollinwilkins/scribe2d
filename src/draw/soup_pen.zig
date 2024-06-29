@@ -87,7 +87,7 @@ pub const SoupPen = struct {
 
         const blend = DEFAULT_BLEND;
 
-        for (line_soup.path_records.items) |path_record| {
+        for (line_soup.flat_path_records.items) |path_record| {
             const color = path_record.fill.color;
             const merge_fragments = line_soup.merge_fragments.items[path_record.merge_offsets.start..path_record.merge_offsets.end];
 

@@ -325,7 +325,7 @@ pub const PathFlattener = struct {
             const source_curve_record = paths.curve_records.items[fill_job.source_curve_index];
             const cubic_points = paths.getCubicPoints(source_curve_record);
             const transform = transforms[fill_job.transform_index];
-            const curve_record = &soup.curve_records.items[fill_job.curve_index];
+            const curve_record = &soup.flat_curve_records.items[fill_job.curve_index];
             const fill_items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];
 
             var line_writer = LineWriter{
@@ -349,8 +349,8 @@ pub const PathFlattener = struct {
             const transform = transforms[stroke_job.transform_index];
             const style = styles[stroke_job.style_index];
             const stroke = style.stroke.?;
-            const left_curve_record = &soup.curve_records.items[stroke_job.left_curve_index];
-            const right_curve_record = &soup.curve_records.items[stroke_job.right_curve_index];
+            const left_curve_record = &soup.flat_curve_records.items[stroke_job.left_curve_index];
+            const right_curve_record = &soup.flat_curve_records.items[stroke_job.right_curve_index];
             const left_stroke_lines = soup.items.items[left_curve_record.item_offsets.start..left_curve_record.item_offsets.end];
             const right_stroke_lines = soup.items.items[right_curve_record.item_offsets.start..right_curve_record.item_offsets.end];
             var left_line_writer = LineWriter{ .lines = left_stroke_lines };
