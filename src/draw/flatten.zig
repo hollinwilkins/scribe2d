@@ -69,6 +69,13 @@ pub const PathFlattener = struct {
         );
         errdefer soup.deinit();
 
+        var thread_pool: std.Thread.Pool = undefined;
+        try thread_pool.init(std.Thread.Pool.Options{
+            .allocator = allocator,
+            .n_jobs = config.parallelism,
+        });
+        defer thread_pool.deinit();
+
         const fill_range = RangeU32{
             .start = 0,
             .end = @intCast(soup.fill_jobs.items.len),
@@ -76,15 +83,18 @@ pub const PathFlattener = struct {
         var fill_chunks = fill_range.chunkIterator(config.fill_job_chunk_size);
 
         while (fill_chunks.next()) |chunk| {
-            LineKernel.flattenFill(
-                config,
-                transforms,
-                shape.curves.items,
-                shape.points.items,
-                soup.fill_jobs.items,
-                chunk,
-                soup.flat_curves.items,
-                soup.items.items,
+            try thread_pool.spawn(
+                LineKernel.flattenFill,
+                .{
+                    config,
+                    transforms,
+                    shape.curves.items,
+                    shape.points.items,
+                    soup.fill_jobs.items,
+                    chunk,
+                    soup.flat_curves.items,
+                    soup.items.items,
+                },
             );
         }
 
@@ -95,17 +105,20 @@ pub const PathFlattener = struct {
         var stroke_chunks = stroke_range.chunkIterator(config.stroke_job_chunk_size);
 
         while (stroke_chunks.next()) |chunk| {
-            LineKernel.flattenStroke(
-                config,
-                transforms,
-                styles,
-                shape.subpaths.items,
-                shape.curves.items,
-                shape.points.items,
-                soup.stroke_jobs.items,
-                chunk,
-                soup.flat_curves.items,
-                soup.items.items,
+            try thread_pool.spawn(
+                LineKernel.flattenStroke,
+                .{
+                    config,
+                    transforms,
+                    styles,
+                    shape.subpaths.items,
+                    shape.curves.items,
+                    shape.points.items,
+                    soup.stroke_jobs.items,
+                    chunk,
+                    soup.flat_curves.items,
+                    soup.items.items,
+                },
             );
         }
 
