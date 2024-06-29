@@ -245,9 +245,9 @@ pub const GridIntersection = struct {
 
 pub fn Soup(comptime T: type) type {
     return struct {
-        pub const PathRecordList = std.ArrayListUnmanaged(FlatPath);
-        pub const SubpathRecordList = std.ArrayListUnmanaged(FlatSubpath);
-        pub const CurveRecordList = std.ArrayListUnmanaged(FlatCurve);
+        pub const FlatPathList = std.ArrayListUnmanaged(FlatPath);
+        pub const FlatSubpathList = std.ArrayListUnmanaged(FlatSubpath);
+        pub const FlatCurveList = std.ArrayListUnmanaged(FlatCurve);
         pub const EstimateList = std.ArrayListUnmanaged(u32);
         pub const FillJobList = std.ArrayListUnmanaged(FillJob);
         pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
@@ -258,10 +258,10 @@ pub fn Soup(comptime T: type) type {
         pub const SpanList = std.ArrayListUnmanaged(Span);
 
         allocator: Allocator,
-        flat_path_records: PathRecordList = PathRecordList{},
-        flat_subpath_records: SubpathRecordList = SubpathRecordList{},
-        flat_curve_records: CurveRecordList = CurveRecordList{},
-        curve_estimates: EstimateList = EstimateList{},
+        flat_paths: FlatPathList = FlatPathList{},
+        flat_subpaths: FlatSubpathList = FlatSubpathList{},
+        flat_curves: FlatCurveList = FlatCurveList{},
+        flat_curve_estimates: EstimateList = EstimateList{},
         base_estimates: EstimateList = EstimateList{},
         fill_jobs: FillJobList = FillJobList{},
         stroke_jobs: StrokeJobList = StrokeJobList{},
@@ -278,10 +278,10 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn deinit(self: *@This()) void {
-            self.flat_path_records.deinit(self.allocator);
-            self.flat_subpath_records.deinit(self.allocator);
-            self.flat_curve_records.deinit(self.allocator);
-            self.curve_estimates.deinit(self.allocator);
+            self.flat_paths.deinit(self.allocator);
+            self.flat_subpaths.deinit(self.allocator);
+            self.flat_curves.deinit(self.allocator);
+            self.flat_curve_estimates.deinit(self.allocator);
             self.base_estimates.deinit(self.allocator);
             self.fill_jobs.deinit(self.allocator);
             self.stroke_jobs.deinit(self.allocator);
@@ -293,13 +293,13 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn addPathRecord(self: *@This()) !*FlatPath {
-            const path = try self.flat_path_records.addOne(self.allocator);
+            const path = try self.flat_paths.addOne(self.allocator);
             path.* = FlatPath{};
             return path;
         }
 
         pub fn openPathSubpaths(self: @This(), path_record: *FlatPath) void {
-            path_record.flat_subpath_offsets.start = @intCast(self.flat_subpath_records.items.len);
+            path_record.flat_subpath_offsets.start = @intCast(self.flat_subpaths.items.len);
         }
 
         pub fn openPathBoundaries(self: *@This(), path_record: *FlatPath) void {
@@ -315,7 +315,7 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn closePathSubpaths(self: @This(), path_record: *FlatPath) void {
-            path_record.flat_subpath_offsets.end = @intCast(self.flat_subpath_records.items.len);
+            path_record.flat_subpath_offsets.end = @intCast(self.flat_subpaths.items.len);
         }
 
         pub fn closePathBoundaries(self: *@This(), path_record: *FlatPath) void {
@@ -331,21 +331,21 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn addSubpath(self: *@This()) !*FlatSubpath {
-            const subpath = try self.flat_subpath_records.addOne(self.allocator);
+            const subpath = try self.flat_subpaths.addOne(self.allocator);
             subpath.* = FlatSubpath{};
             return subpath;
         }
 
         pub fn openSubpathCurves(self: @This(), subpath_record: *FlatSubpath) void {
-            subpath_record.flat_curve_offsets.start = @intCast(self.flat_curve_records.items.len);
+            subpath_record.flat_curve_offsets.start = @intCast(self.flat_curves.items.len);
         }
 
         pub fn closeSubpathCurves(self: @This(), subpath_record: *FlatSubpath) void {
-            subpath_record.flat_curve_offsets.end = @intCast(self.flat_curve_records.items.len);
+            subpath_record.flat_curve_offsets.end = @intCast(self.flat_curves.items.len);
         }
 
         pub fn addCurve(self: *@This()) !*FlatCurve {
-            const curve = try self.flat_curve_records.addOne(self.allocator);
+            const curve = try self.flat_curves.addOne(self.allocator);
             curve.* = FlatCurve{};
             return curve;
         }
@@ -367,11 +367,11 @@ pub fn Soup(comptime T: type) type {
         }
 
         pub fn addCurveEstimate(self: *@This()) !*u32 {
-            return try self.curve_estimates.addOne(self.allocator);
+            return try self.flat_curve_estimates.addOne(self.allocator);
         }
 
         pub fn addCurveEstimates(self: *@This(), n: usize) ![]u32 {
-            return try self.curve_estimates.addManyAsSlice(self.allocator, n);
+            return try self.flat_curve_estimates.addManyAsSlice(self.allocator, n);
         }
 
         pub fn addBaseEstimate(self: *@This()) !*u32 {

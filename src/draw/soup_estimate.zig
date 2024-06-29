@@ -268,12 +268,12 @@ pub fn SoupEstimator(comptime T: type, comptime EstimatorImpl: type) type {
         }
 
         pub fn estimateRaster(soup: *S) !void {
-            for (soup.flat_path_records.items) |*path_record| {
+            for (soup.flat_paths.items) |*path_record| {
                 var path_intersections: u32 = 0;
 
-                const subpath_records = soup.flat_subpath_records.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
+                const subpath_records = soup.flat_subpaths.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
                 for (subpath_records) |*subpath_record| {
-                    const curve_records = soup.flat_curve_records.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
+                    const curve_records = soup.flat_curves.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
                     for (curve_records) |*curve_record| {
                         var curve_intersections: u32 = 0;
                         const items = soup.items.items[curve_record.item_offsets.start..curve_record.item_offsets.end];

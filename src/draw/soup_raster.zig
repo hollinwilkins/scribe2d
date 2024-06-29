@@ -77,8 +77,8 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
         pub fn rasterize(self: @This(), soup: *S) !void {
             try Estimator.estimateRaster(soup);
 
-            for (soup.flat_path_records.items) |*path_record| {
-                const subpath_records = soup.flat_subpath_records.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
+            for (soup.flat_paths.items) |*path_record| {
+                const subpath_records = soup.flat_subpaths.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
                 for (subpath_records) |*subpath_record| {
                     try self.populateGridIntersections(
                         soup,
@@ -112,7 +112,7 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
         ) !void {
             _ = self;
 
-            const curve_records = soup.flat_curve_records.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
+            const curve_records = soup.flat_curves.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
             for (curve_records) |*curve_record| {
                 const intersections = soup.grid_intersections.items[curve_record.intersection_offsets.start..curve_record.intersection_offsets.end];
                 var intersection_writer = IntersectionWriter.create(intersections);
@@ -188,9 +188,9 @@ pub fn SoupRasterizer(comptime T: type, comptime Estimator: type) type {
             const boundary_fragments = soup.boundary_fragments.items[path_record.boundary_offsets.start..path_record.boundary_offsets.end];
             var boundary_fragment_writer = BoundaryFragmentWriter.create(boundary_fragments);
 
-            const subpath_records = soup.flat_subpath_records.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
+            const subpath_records = soup.flat_subpaths.items[path_record.flat_subpath_offsets.start..path_record.flat_subpath_offsets.end];
             for (subpath_records) |subpath_record| {
-                const curve_records = soup.flat_curve_records.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
+                const curve_records = soup.flat_curves.items[subpath_record.flat_curve_offsets.start..subpath_record.flat_curve_offsets.end];
                 for (curve_records, 0..) |curve_record, curve_record_index| {
                     const grid_intersections = soup.grid_intersections.items[curve_record.intersection_offsets.start..curve_record.intersection_offsets.end];
                     if (grid_intersections.len == 0) {
