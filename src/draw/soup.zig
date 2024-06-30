@@ -42,8 +42,8 @@ pub const FlatSubpath = struct {
 
 pub const FlatCurve = struct {
     segment_offsets: RangeU32 = RangeU32{},
+    buffer_offsets: RangeU32 = RangeU32{},
     intersection_offsets: RangeU32 = RangeU32{},
-    point_offsets: RangeU32 = RangeU32{},
 };
 
 pub const FlatSegment = struct {
@@ -54,16 +54,17 @@ pub const FlatSegment = struct {
     };
 
     kind: Kind = .none,
-    point_offsets: RangeU32 = RangeU32{},
-    intersection_offsets: RangeU32 = RangeU32{},
+    buffer_offsets: RangeU32 = RangeU32{},
 };
 
 pub const FlatCurveEstimate = struct {
     lines: f32 = 0,
     arcs: f32 = 0,
 
-    pub fn points(self: @This()) u32 {
-        return @as(u32, @intFromFloat(@ceil(self.lines * 2.0 + self.arcs * 4.0)));
+    pub fn bytes(self: @This()) u32 {
+        const line_bytes = @as(u32, @intFromFloat(@ceil(self.lines))) * @sizeOf(Line);
+        const arc_bytes = @as(u32, @intFromFloat(@ceil(self.arcs))) * @sizeOf(Arc);
+        return line_bytes + arc_bytes;
     }
 
     pub fn segments(self: @This()) u32 {
@@ -291,7 +292,7 @@ pub const Soup = struct {
     pub const FlatCurveEstimateList = std.ArrayListUnmanaged(FlatCurveEstimate);
     pub const FillJobList = std.ArrayListUnmanaged(FillJob);
     pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
-    pub const PointList = std.ArrayListUnmanaged(PointF32);
+    pub const Buffer = std.ArrayListUnmanaged(u8);
     pub const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     pub const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     pub const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
@@ -302,7 +303,7 @@ pub const Soup = struct {
     flat_subpaths: FlatSubpathList = FlatSubpathList{},
     flat_curves: FlatCurveList = FlatCurveList{},
     flat_segments: FlatSegmentList = FlatSegmentList{},
-    flat_points: PointList = PointList{},
+    buffer: Buffer = Buffer{},
     flat_curve_estimates: FlatCurveEstimateList = FlatCurveEstimateList{},
     base_estimates: FlatCurveEstimateList = FlatCurveEstimateList{},
     fill_jobs: FillJobList = FillJobList{},
@@ -323,7 +324,7 @@ pub const Soup = struct {
         self.flat_subpaths.deinit(self.allocator);
         self.flat_curves.deinit(self.allocator);
         self.flat_segments.deinit(self.allocator);
-        self.flat_points.deinit(self.allocator);
+        self.buffer.deinit(self.allocator);
         self.flat_curve_estimates.deinit(self.allocator);
         self.base_estimates.deinit(self.allocator);
         self.fill_jobs.deinit(self.allocator);
@@ -396,24 +397,24 @@ pub const Soup = struct {
         curve.segment_offsets.start = @intCast(self.flat_segments.items.len);
     }
 
-    pub fn openFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
-        curve.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
+    pub fn openFlatCurveBuffer(self: *@This(), curve: *FlatCurve) void {
+        curve.buffer_offsets.start = @intCast(self.buffer_offsets.items.len);
     }
 
-    pub fn openFlatCurvePoints(self: *@This(), curve: *FlatCurve) void {
-        curve.point_offsets.start = @intCast(self.flat_points.items.len);
+    pub fn openFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
+        curve.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
     }
 
     pub fn closeFlatCurveSegments(self: *@This(), curve: *FlatCurve) void {
         curve.segment_offsets.end = @intCast(self.flat_segments.items.len);
     }
 
-    pub fn closeFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
-        curve.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
+    pub fn closeFlatCurveBuffer(self: *@This(), curve: *FlatCurve) void {
+        curve.buffer_offsets.end = @intCast(self.buffer_offsets.items.len);
     }
 
-    pub fn closeFlatCurvePoints(self: *@This(), curve: *FlatCurve) void {
-        curve.point_offsets.end = @intCast(self.flat_points.items.len);
+    pub fn closeFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
+        curve.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
     }
 
     pub fn addFlatSegment(self: *@This()) !*FlatSegment {
@@ -426,16 +427,26 @@ pub const Soup = struct {
         return try self.flat_segments.addManyAsSlice(self.allocator, n);
     }
 
-    pub fn openFlatSegmentPoints(self: *@This(), segment: *FlatSegment) void {
-        segment.point_offsets.start = @intCast(self.flat_points.items.len);
+    pub fn getFlatSegmentLine(self: @This(), flat_segment: FlatSegment) Line {
+        const bytes = self.buffer.items[flat_segment.buffer_offsets.start..flat_segment.buffer_offsets.end];
+        return std.mem.bytesToValue(Line, bytes);
     }
 
-    pub fn closeFlatSegmentPoints(self: *@This(), segment: *FlatSegment) void {
-        segment.point_offsets.end = @intCast(self.flat_points.items.len);
+    pub fn getFlatSegmentArc(self: @This(), flat_segment: FlatSegment) Arc {
+        const bytes = self.buffer.items[flat_segment.buffer_offsets.start..flat_segment.buffer_offsets.end];
+        return std.mem.bytesToValue(Arc, bytes);
     }
 
-    pub fn addFlatPoints(self: *@This(), n: usize) ![]PointF32 {
-        return try self.flat_points.addManyAsSlice(self.allocator, n);
+    pub fn openFlatSegmentBuffer(self: *@This(), segment: *FlatSegment) void {
+        segment.buffer_offsets.start = @intCast(self.buffer.items.len);
+    }
+
+    pub fn closeFlatSegmentBuffer(self: *@This(), segment: *FlatSegment) void {
+        segment.buffer_offsets.end = @intCast(self.buffer.items.len);
+    }
+
+    pub fn addBufferBytes(self: *@This(), n: usize) ![]u8 {
+        return try self.buffer.addManyAsSlice(self.allocator, n);
     }
 
     pub fn addFlatCurveEstimate(self: *@This()) !*FlatCurveEstimate {

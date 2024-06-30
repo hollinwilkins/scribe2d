@@ -116,12 +116,12 @@ pub const Estimator = struct {
                             fill_curve_estimate.* = base_estimate;
                             const flat_curve = try soup.addFlatCurve();
                             soup.openFlatCurveSegments(flat_curve);
-                            soup.openFlatCurvePoints(flat_curve);
+                            soup.openFlatCurveBuffer(flat_curve);
 
                             _ = try soup.addFlatSegments(fill_curve_estimate.segments());
-                            _ = try soup.addFlatPoints(fill_curve_estimate.points());
+                            _ = try soup.addBufferBytes(fill_curve_estimate.bytes());
 
-                            soup.closeFlatCurvePoints(flat_curve);
+                            soup.closeFlatCurveBuffer(flat_curve);
                             soup.closeFlatCurveSegments(flat_curve);
 
                             const curve_index = subpath.curve_offsets.start + @as(u32, @intCast(curve_offset));
@@ -173,12 +173,12 @@ pub const Estimator = struct {
 
                                 const flat_curve = try soup.addFlatCurve();
                                 soup.openFlatCurveSegments(flat_curve);
-                                soup.openFlatCurvePoints(flat_curve);
+                                soup.openFlatCurveBuffer(flat_curve);
 
                                 _ = try soup.addFlatSegments(curve_estimate.segments());
-                                _ = try soup.addFlatPoints(curve_estimate.points());
+                                _ = try soup.addBufferBytes(curve_estimate.bytes());
 
-                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveBuffer(flat_curve);
                                 soup.closeFlatCurveSegments(flat_curve);
                             }
 
@@ -195,12 +195,12 @@ pub const Estimator = struct {
 
                                 const flat_curve = try soup.addFlatCurve();
                                 soup.openFlatCurveSegments(flat_curve);
-                                soup.openFlatCurvePoints(flat_curve);
+                                soup.openFlatCurveBuffer(flat_curve);
 
                                 _ = try soup.addFlatSegments(curve_estimate.segments());
-                                _ = try soup.addFlatPoints(curve_estimate.points());
+                                _ = try soup.addBufferBytes(curve_estimate.bytes());
 
-                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveBuffer(flat_curve);
                                 soup.closeFlatCurveSegments(flat_curve);
                             }
 
@@ -235,12 +235,12 @@ pub const Estimator = struct {
 
                                 const flat_curve = try soup.addFlatCurve();
                                 soup.openFlatCurveSegments(flat_curve);
-                                soup.openFlatCurvePoints(flat_curve);
+                                soup.openFlatCurveBuffer(flat_curve);
 
                                 _ = try soup.addFlatSegments(curve_estimate.segments());
-                                _ = try soup.addFlatPoints(curve_estimate.points());
+                                _ = try soup.addBufferBytes(curve_estimate.bytes());
 
-                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveBuffer(flat_curve);
                                 soup.closeFlatCurveSegments(flat_curve);
                             }
                             soup.closeFlatSubpathCurves(left_soup_subpath);
@@ -254,12 +254,12 @@ pub const Estimator = struct {
 
                                 const flat_curve = try soup.addFlatCurve();
                                 soup.openFlatCurveSegments(flat_curve);
-                                soup.openFlatCurvePoints(flat_curve);
+                                soup.openFlatCurveBuffer(flat_curve);
 
                                 _ = try soup.addFlatSegments(curve_estimate.segments());
-                                _ = try soup.addFlatPoints(curve_estimate.points());
+                                _ = try soup.addBufferBytes(curve_estimate.bytes());
 
-                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveBuffer(flat_curve);
                                 soup.closeFlatCurveSegments(flat_curve);
                             }
                             soup.closeFlatSubpathCurves(right_soup_subpath);
@@ -300,13 +300,14 @@ pub const Estimator = struct {
 
                     const segments = soup.flat_segments.items[curve.segment_offsets.start..curve.segment_offsets.end];
                     for (segments) |segment| {
-                        const points = soup.flat_points.items[segment.point_offsets.start..segment.point_offsets.end];
                         switch (segment.kind) {
                             .line => {
-                                curve_intersections += estimateLineIntersections(points[0], points[1]);
+                                const line = soup.getFlatSegmentLine(segment);
+                                curve_intersections += estimateLineIntersections(line.start, line.end);
                             },
                             .arc => {
-                                curve_intersections += estimateArcIntersections(points[0], points[3]);
+                                const arc = soup.getFlatSegmentArc(segment);
+                                curve_intersections += estimateArcIntersections(arc.start, arc.end);
                             },
                             else => unreachable,
                         }
