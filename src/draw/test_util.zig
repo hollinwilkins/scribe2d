@@ -1,9 +1,9 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const curve = @import("./curve.zig");
-const soup_raster = @import("./soup_raster.zig");
+const raster_module = @import("./raster.zig");
 const Intersection = curve.Intersection;
-const PathIntersection = soup_raster.PathIntersection;
+const PathIntersection = raster_module.PathIntersection;
 const PointF32 = core.PointF32;
 
 pub const DEFAULT_TOLERANCE: f32 = 0.00001;

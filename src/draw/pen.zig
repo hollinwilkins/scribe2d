@@ -1,7 +1,7 @@
 const std = @import("std");
 const shape_module = @import("./shape.zig");
 const soup_module = @import("./soup.zig");
-const soup_raster = @import("./soup_raster.zig");
+const raster_module = @import("./raster.zig");
 const texture_module = @import("./texture.zig");
 const core = @import("../core/root.zig");
 const mem = std.mem;
@@ -13,7 +13,7 @@ const Shape = shape_module.Shape;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 const Soup = soup_module.Soup;
-const SoupRasterizer = soup_raster.SoupRasterizer;
+const SoupRasterizer = raster_module.SoupRasterizer;
 const PathMetadata = shape_module.PathMetadata;
 
 pub const Style = struct {

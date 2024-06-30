@@ -6,9 +6,9 @@ const shape = @import("./shape.zig");
 const flatten = @import("./flatten.zig");
 const scene = @import("./scene.zig");
 const soup = @import("./soup.zig");
-const soup_estimate = @import("./soup_estimate.zig");
-const soup_raster = @import("./soup_raster.zig");
-const soup_pen = @import("./soup_pen.zig");
+const estimate = @import("./estimate.zig");
+const raster = @import("./raster.zig");
+const pen = @import("./pen.zig");
 const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const msaa = @import("./msaa.zig");
@@ -18,11 +18,11 @@ pub const Shape = shape.Shape;
 pub const ShapeBuilder = shape.ShapeBuilder;
 
 pub const Soup = soup.Soup;
-pub const SoupEstimator = soup_estimate.SoupEstimator;
-pub const SoupRasterizer = soup_raster.SoupRasterizer;
+pub const SoupEstimator = estimate.SoupEstimator;
+pub const SoupRasterizer = raster.SoupRasterizer;
 
-pub const SoupPen = soup_pen.SoupPen;
-pub const Style = soup_pen.Style;
+pub const SoupPen = pen.SoupPen;
+pub const Style = pen.Style;
 
 pub const Color = texture.Color;
 pub const Texture = texture.Texture;

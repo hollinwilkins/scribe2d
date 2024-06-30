@@ -3,7 +3,7 @@ const text = @import("../text/root.zig");
 const core = @import("../core/root.zig");
 const curve_module = @import("./curve.zig");
 const euler = @import("./euler.zig");
-const soup_pen = @import("./soup_pen.zig");
+const pen_module = @import("./pen.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const RectF32 = core.RectF32;
@@ -16,7 +16,7 @@ const GlyphPen = text.GlyphPen;
 const Line = curve_module.Line;
 const QuadraticBezier = curve_module.QuadraticBezier;
 const CubicPoints = euler.CubicPoints;
-const Style = soup_pen.Style;
+const Style = pen_module.Style;
 
 pub const PathMetadata = struct {
     style_index: u16,
