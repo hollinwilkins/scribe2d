@@ -398,7 +398,7 @@ pub const Soup = struct {
     }
 
     pub fn openFlatCurveBuffer(self: *@This(), curve: *FlatCurve) void {
-        curve.buffer_offsets.start = @intCast(self.buffer_offsets.items.len);
+        curve.buffer_offsets.start = @intCast(self.buffer.items.len);
     }
 
     pub fn openFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
@@ -410,7 +410,7 @@ pub const Soup = struct {
     }
 
     pub fn closeFlatCurveBuffer(self: *@This(), curve: *FlatCurve) void {
-        curve.buffer_offsets.end = @intCast(self.buffer_offsets.items.len);
+        curve.buffer_offsets.end = @intCast(self.buffer.items.len);
     }
 
     pub fn closeFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {

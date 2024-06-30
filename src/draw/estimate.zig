@@ -55,7 +55,6 @@ pub const Estimator = struct {
 
     pub fn estimateAlloc(
         allocator: Allocator,
-        config: KernelConfig,
         metadatas: []const PathMetadata,
         styles: []const Style,
         transforms: []const TransformF32.Matrix,
@@ -187,10 +186,8 @@ pub const Estimator = struct {
                                 const curve = curves[curves.len - (1 + offset)];
                                 const base_estimate = right_curve_estimates[left_curve_estimates.len - (1 + offset)];
                                 curve_estimate.* = base_estimate.add(estimateCurveCap(
-                                    config,
                                     curve,
                                     stroke,
-                                    scaled_width,
                                 ));
 
                                 const flat_curve = try soup.addFlatCurve();
@@ -230,8 +227,7 @@ pub const Estimator = struct {
                             const right_curve_estimates = curve_estimates[curve_len..];
 
                             for (subpath_base_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
-                                curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
-                                    estimateStrokeJoin(config, stroke.join, scaled_width, stroke.miter_limit);
+                                curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(estimateStrokeJoin(stroke.join));
 
                                 const flat_curve = try soup.addFlatCurve();
                                 soup.openFlatCurveSegments(flat_curve);
@@ -348,13 +344,13 @@ pub const Estimator = struct {
             },
             .quadratic_bezier => {
                 const points = shape.points.items[curve.point_offsets.start..curve.point_offsets.end];
-                estimate.arcs += @as(u32, @intFromFloat(Wang.quadratic(
+                estimate.arcs += Wang.quadratic(
                     @floatCast(RSQRT_OF_TOL),
                     points[0],
                     points[1],
                     points[2],
                     transform,
-                )));
+                );
             },
         }
 
@@ -362,17 +358,15 @@ pub const Estimator = struct {
     }
 
     fn estimateCurveCap(
-        config: KernelConfig,
         curve: shape_module.Curve,
         stroke: Style.Stroke,
-        scaled_width: f32,
     ) FlatCurveEstimate {
         switch (curve.cap) {
             .start => {
-                return estimateStrokeCap(config, stroke.start_cap, scaled_width);
+                return estimateStrokeCap(stroke.start_cap);
             },
             .end => {
-                return estimateStrokeCap(config, stroke.end_cap, scaled_width);
+                return estimateStrokeCap(stroke.end_cap);
             },
             .none => {
                 return FlatCurveEstimate{};

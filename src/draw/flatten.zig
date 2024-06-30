@@ -61,7 +61,6 @@ pub const Flattener = struct {
     ) !Soup {
         var soup = try Estimator.estimateAlloc(
             allocator,
-            config,
             metadatas,
             styles,
             transforms,
