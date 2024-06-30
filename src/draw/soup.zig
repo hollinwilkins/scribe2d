@@ -41,8 +41,48 @@ pub const FlatSubpath = struct {
 };
 
 pub const FlatCurve = struct {
-    item_offsets: RangeU32 = RangeU32{},
+    segment_offsets: RangeU32 = RangeU32{},
     intersection_offsets: RangeU32 = RangeU32{},
+    point_offsets: RangeU32 = RangeU32{},
+};
+
+pub const FlatSegment = struct {
+    pub const Kind = enum(u8) {
+        none = 0,
+        line = 1,
+        arc = 2,
+    };
+
+    kind: Kind = .none,
+    point_offsets: RangeU32 = RangeU32{},
+    intersection_offsets: RangeU32 = RangeU32{},
+};
+
+pub const FlatCurveEstimate = struct {
+    lines: f32 = 0,
+    arcs: f32 = 0,
+
+    pub fn points(self: @This()) u32 {
+        return @as(u32, @intFromFloat(@ceil(self.lines * 2.0 + self.arcs * 4.0)));
+    }
+
+    pub fn segments(self: @This()) u32 {
+        return @as(u32, @intFromFloat(@ceil(self.lines + self.arcs)));
+    }
+
+    pub fn mulScalar(self: @This(), scalar: f32) @This() {
+        return @This(){
+            .lines = self.lines * scalar,
+            .arcs = self.arcs * scalar,
+        };
+    }
+
+    pub fn add(self: @This(), other: @This()) @This() {
+        return @This(){
+            .lines = self.lines + other.lines,
+            .arcs = self.arcs + other.arcs,
+        };
+    }
 };
 
 pub const FillJob = struct {
@@ -247,10 +287,11 @@ pub const Soup = struct {
     pub const FlatPathList = std.ArrayListUnmanaged(FlatPath);
     pub const FlatSubpathList = std.ArrayListUnmanaged(FlatSubpath);
     pub const FlatCurveList = std.ArrayListUnmanaged(FlatCurve);
-    pub const EstimateList = std.ArrayListUnmanaged(u32);
+    pub const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
+    pub const FlatCurveEstimateList = std.ArrayListUnmanaged(FlatCurveEstimate);
     pub const FillJobList = std.ArrayListUnmanaged(FillJob);
     pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
-    pub const LineList = std.ArrayListUnmanaged(Line);
+    pub const PointList = std.ArrayListUnmanaged(PointF32);
     pub const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     pub const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     pub const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
@@ -260,11 +301,12 @@ pub const Soup = struct {
     flat_paths: FlatPathList = FlatPathList{},
     flat_subpaths: FlatSubpathList = FlatSubpathList{},
     flat_curves: FlatCurveList = FlatCurveList{},
-    flat_curve_estimates: EstimateList = EstimateList{},
-    base_estimates: EstimateList = EstimateList{},
+    flat_segments: FlatSegmentList = FlatSegmentList{},
+    flat_points: PointList = PointList{},
+    flat_curve_estimates: FlatCurveEstimateList = FlatCurveEstimateList{},
+    base_estimates: FlatCurveEstimateList = FlatCurveEstimateList{},
     fill_jobs: FillJobList = FillJobList{},
     stroke_jobs: StrokeJobList = StrokeJobList{},
-    lines: LineList = LineList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
     merge_fragments: MergeFragmentList = MergeFragmentList{},
@@ -280,11 +322,12 @@ pub const Soup = struct {
         self.flat_paths.deinit(self.allocator);
         self.flat_subpaths.deinit(self.allocator);
         self.flat_curves.deinit(self.allocator);
+        self.flat_segments.deinit(self.allocator);
+        self.flat_points.deinit(self.allocator);
         self.flat_curve_estimates.deinit(self.allocator);
         self.base_estimates.deinit(self.allocator);
         self.fill_jobs.deinit(self.allocator);
         self.stroke_jobs.deinit(self.allocator);
-        self.lines.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
         self.merge_fragments.deinit(self.allocator);
@@ -349,44 +392,66 @@ pub const Soup = struct {
         return curve;
     }
 
-    pub fn openFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
-        curve.item_offsets.start = @intCast(self.lines.items.len);
+    pub fn openFlatCurveSegments(self: *@This(), curve: *FlatCurve) void {
+        curve.segment_offsets.start = @intCast(self.flat_segments.items.len);
     }
 
     pub fn openFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
         curve.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
     }
 
-    pub fn closeFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
-        curve.item_offsets.end = @intCast(self.lines.items.len);
+    pub fn openFlatCurvePoints(self: *@This(), curve: *FlatCurve) void {
+        curve.point_offsets.start = @intCast(self.flat_points.items.len);
+    }
+
+    pub fn closeFlatCurveSegments(self: *@This(), curve: *FlatCurve) void {
+        curve.segment_offsets.end = @intCast(self.flat_segments.items.len);
     }
 
     pub fn closeFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
         curve.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
     }
 
-    pub fn addFlatCurveEstimate(self: *@This()) !*u32 {
+    pub fn closeFlatCurvePoints(self: *@This(), curve: *FlatCurve) void {
+        curve.point_offsets.end = @intCast(self.flat_points.items.len);
+    }
+
+    pub fn addFlatSegment(self: *@This()) !*FlatSegment {
+        const segment = try self.flat_segments.addOne(self.allocator);
+        segment.* = FlatSegment{};
+        return segment;
+    }
+
+    pub fn addFlatSegments(self: *@This(), n: usize) ![]FlatSegment {
+        return try self.flat_segments.addManyAsSlice(self.allocator, n);
+    }
+
+    pub fn openFlatSegmentPoints(self: *@This(), segment: *FlatSegment) void {
+        segment.point_offsets.start = @intCast(self.flat_points.items.len);
+    }
+
+    pub fn closeFlatSegmentPoints(self: *@This(), segment: *FlatSegment) void {
+        segment.point_offsets.end = @intCast(self.flat_points.items.len);
+    }
+
+    pub fn addFlatPoints(self: *@This(), n: usize) ![]PointF32 {
+        return try self.flat_points.addManyAsSlice(self.allocator, n);
+    }
+
+    pub fn addFlatCurveEstimate(self: *@This()) !*FlatCurveEstimate {
         return try self.flat_curve_estimates.addOne(self.allocator);
     }
 
-    pub fn addFlatCurveEstimates(self: *@This(), n: usize) ![]u32 {
+    pub fn addFlatCurveEstimates(self: *@This(), n: usize) ![]FlatCurveEstimate {
         return try self.flat_curve_estimates.addManyAsSlice(self.allocator, n);
     }
 
-    pub fn addBaseEstimate(self: *@This()) !*u32 {
+    pub fn addBaseEstimate(self: *@This()) !*FlatCurveEstimate {
         return try self.base_estimates.addOne(self.allocator);
     }
 
-    pub fn addBaseEstimates(self: *@This(), n: usize) ![]u32 {
+    pub fn addBaseEstimates(self: *@This(), n: usize) ![]FlatCurveEstimate {
         return try self.base_estimates.addManyAsSlice(self.allocator, n);
-    }
-
-    pub fn addItem(self: *@This()) !*Line {
-        return try self.lines.addOne(self.allocator);
-    }
-
-    pub fn addItems(self: *@This(), n: usize) ![]Line {
-        return try self.lines.addManyAsSlice(self.allocator, n);
     }
 
     pub fn addFillJob(self: *@This()) !*FillJob {

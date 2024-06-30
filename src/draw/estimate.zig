@@ -28,7 +28,7 @@ const Scene = scene_module.Scene;
 const Soup = soup_module.Soup;
 const Estimate = soup_module.Estimate;
 const SubpathEstimate = soup_module.SubpathEstimate;
-const CurveEstimate = soup_module.CurveEstimate;
+const FlatCurveEstimate = soup_module.FlatCurveEstimate;
 const FillJob = soup_module.FillJob;
 const StrokeJob = soup_module.StrokeJob;
 const KernelConfig = kernel_module.KernelConfig;
@@ -40,6 +40,8 @@ pub const ArcEstimate = struct {
 
 pub const Estimator = struct {
     const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
+    const VIRTUAL_INTERSECTIONS: u32 = 2;
+    const INTERSECTION_FUDGE: u32 = 2;
 
     pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !Soup {
         return try estimateAlloc(
@@ -112,10 +114,16 @@ pub const Estimator = struct {
                             curve_offset,
                         | {
                             fill_curve_estimate.* = base_estimate;
-                            const soup_curve = try soup.addFlatCurve();
-                            soup.openFlatCurveItems(soup_curve);
+                            const flat_curve = try soup.addFlatCurve();
+                            soup.openFlatCurveSegments(flat_curve);
+                            soup.openFlatCurvePoints(flat_curve);
 
-                            _ = try soup.addItems(fill_curve_estimate.*);
+                            _ = try soup.addFlatSegments(fill_curve_estimate.segments());
+                            _ = try soup.addFlatPoints(fill_curve_estimate.points());
+
+                            soup.closeFlatCurvePoints(flat_curve);
+                            soup.closeFlatCurveSegments(flat_curve);
+
                             const curve_index = subpath.curve_offsets.start + @as(u32, @intCast(curve_offset));
                             const flat_curve_index = soup_subpath.flat_curve_offsets.start + @as(u32, @intCast(curve_offset));
 
@@ -124,8 +132,6 @@ pub const Estimator = struct {
                                 .curve_index = curve_index,
                                 .flat_curve_index = flat_curve_index,
                             };
-
-                            soup.closeFlatCurveItems(soup_curve);
                         }
 
                         soup.closeFlatSubpathCurves(soup_subpath);
@@ -163,32 +169,39 @@ pub const Estimator = struct {
                             // need two curve records per each curve record in source
                             // calculate side without caps
                             for (subpath_base_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
-                                const soup_curve = try soup.addFlatCurve();
-                                soup.openFlatCurveItems(soup_curve);
+                                curve_estimate.* = base_estimate.mulScalar(offset_fudge).add(estimateStrokeJoin(stroke.join));
 
-                                curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
-                                    estimateStrokeJoin(config, stroke.join, scaled_width, stroke.miter_limit);
-                                _ = try soup.addItems(curve_estimate.*);
+                                const flat_curve = try soup.addFlatCurve();
+                                soup.openFlatCurveSegments(flat_curve);
+                                soup.openFlatCurvePoints(flat_curve);
 
-                                soup.closeFlatCurveItems(soup_curve);
+                                _ = try soup.addFlatSegments(curve_estimate.segments());
+                                _ = try soup.addFlatPoints(curve_estimate.points());
+
+                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveSegments(flat_curve);
                             }
 
                             // calculate side with caps
                             for (left_curve_estimates, 0..) |*curve_estimate, offset| {
                                 const curve = curves[curves.len - (1 + offset)];
                                 const base_estimate = right_curve_estimates[left_curve_estimates.len - (1 + offset)];
-                                curve_estimate.* = base_estimate + estimateCurveCap(
+                                curve_estimate.* = base_estimate.add(estimateCurveCap(
                                     config,
                                     curve,
                                     stroke,
                                     scaled_width,
-                                );
-                                const soup_curve = try soup.addFlatCurve();
-                                soup.openFlatCurveItems(soup_curve);
+                                ));
 
-                                _ = try soup.addItems(curve_estimate.*);
+                                const flat_curve = try soup.addFlatCurve();
+                                soup.openFlatCurveSegments(flat_curve);
+                                soup.openFlatCurvePoints(flat_curve);
 
-                                soup.closeFlatCurveItems(soup_curve);
+                                _ = try soup.addFlatSegments(curve_estimate.segments());
+                                _ = try soup.addFlatPoints(curve_estimate.points());
+
+                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveSegments(flat_curve);
                             }
 
                             soup.closeFlatSubpathCurves(soup_subpath);
@@ -217,14 +230,18 @@ pub const Estimator = struct {
                             const right_curve_estimates = curve_estimates[curve_len..];
 
                             for (subpath_base_estimates, right_curve_estimates) |base_estimate, *curve_estimate| {
-                                const soup_curve = try soup.addFlatCurve();
-                                soup.openFlatCurveItems(soup_curve);
-
                                 curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
                                     estimateStrokeJoin(config, stroke.join, scaled_width, stroke.miter_limit);
-                                _ = try soup.addItems(curve_estimate.*);
 
-                                soup.closeFlatCurveItems(soup_curve);
+                                const flat_curve = try soup.addFlatCurve();
+                                soup.openFlatCurveSegments(flat_curve);
+                                soup.openFlatCurvePoints(flat_curve);
+
+                                _ = try soup.addFlatSegments(curve_estimate.segments());
+                                _ = try soup.addFlatPoints(curve_estimate.points());
+
+                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveSegments(flat_curve);
                             }
                             soup.closeFlatSubpathCurves(left_soup_subpath);
 
@@ -234,12 +251,16 @@ pub const Estimator = struct {
                             for (left_curve_estimates, 0..) |*curve_estimate, offset| {
                                 const base_estimate = right_curve_estimates[left_curve_estimates.len - (1 + offset)];
                                 curve_estimate.* = base_estimate;
-                                const soup_curve = try soup.addFlatCurve();
-                                soup.openFlatCurveItems(soup_curve);
 
-                                _ = try soup.addItems(curve_estimate.*);
+                                const flat_curve = try soup.addFlatCurve();
+                                soup.openFlatCurveSegments(flat_curve);
+                                soup.openFlatCurvePoints(flat_curve);
 
-                                soup.closeFlatCurveItems(soup_curve);
+                                _ = try soup.addFlatSegments(curve_estimate.segments());
+                                _ = try soup.addFlatPoints(curve_estimate.points());
+
+                                soup.closeFlatCurvePoints(flat_curve);
+                                soup.closeFlatCurveSegments(flat_curve);
                             }
                             soup.closeFlatSubpathCurves(right_soup_subpath);
 
@@ -276,9 +297,19 @@ pub const Estimator = struct {
                 const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
                 for (curves) |*curve| {
                     var curve_intersections: u32 = 0;
-                    const lines = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
-                    for (lines) |line| {
-                        curve_intersections += LineEstimatorImpl.estimateIntersections(line);
+
+                    const segments = soup.flat_segments.items[curve.segment_offsets.start..curve.segment_offsets.end];
+                    for (segments) |segment| {
+                        const points = soup.flat_points.items[segment.point_offsets.start..segment.point_offsets.end];
+                        switch (segment.kind) {
+                            .line => {
+                                curve_intersections += estimateLineIntersections(points[0], points[1]);
+                            },
+                            .arc => {
+                                curve_intersections += estimateArcIntersections(points[0], points[3]);
+                            },
+                            else => unreachable,
+                        }
                     }
 
                     soup.openFlatCurveIntersections(curve);
@@ -307,17 +338,16 @@ pub const Estimator = struct {
         shape: Shape,
         curve: shape_module.Curve,
         transform: TransformF32.Matrix,
-    ) u32 {
-        var estimate: u32 = 0;
+    ) FlatCurveEstimate {
+        var estimate: FlatCurveEstimate = FlatCurveEstimate{};
 
         switch (curve.kind) {
             .line => {
-                const points = shape.points.items[curve.point_offsets.start..curve.point_offsets.end];
-                estimate += @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineItems(points[0], points[1], transform)));
+                estimate.lines += 1;
             },
             .quadratic_bezier => {
                 const points = shape.points.items[curve.point_offsets.start..curve.point_offsets.end];
-                estimate += @as(u32, @intFromFloat(Wang.quadratic(
+                estimate.arcs += @as(u32, @intFromFloat(Wang.quadratic(
                     @floatCast(RSQRT_OF_TOL),
                     points[0],
                     points[1],
@@ -335,7 +365,7 @@ pub const Estimator = struct {
         curve: shape_module.Curve,
         stroke: Style.Stroke,
         scaled_width: f32,
-    ) u32 {
+    ) FlatCurveEstimate {
         switch (curve.cap) {
             .start => {
                 return estimateStrokeCap(config, stroke.start_cap, scaled_width);
@@ -344,84 +374,63 @@ pub const Estimator = struct {
                 return estimateStrokeCap(config, stroke.end_cap, scaled_width);
             },
             .none => {
-                return 0;
+                return FlatCurveEstimate{};
             },
         }
     }
 
-    fn estimateStrokeCap(config: KernelConfig, cap: Style.Cap, scaled_width: f32) u32 {
+    fn estimateStrokeCap(cap: Style.Cap) FlatCurveEstimate {
         switch (cap) {
             .butt => {
-                return @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
+                return FlatCurveEstimate{
+                    .lines = 1,
+                };
             },
             .square => {
-                var items = @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
-                items += 2 * @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(0.5 * scaled_width)));
-                return items;
+                return FlatCurveEstimate{
+                    .lines = 3,
+                };
             },
             .round => {
-                const arc_estimate: ArcEstimate = LineEstimatorImpl.estimateArc(config, scaled_width);
-                return arc_estimate.items;
+                return FlatCurveEstimate{
+                    .arcs = 1,
+                };
             },
         }
     }
 
-    fn estimateStrokeJoin(config: KernelConfig, join: Style.Join, scaled_width: f32, miter_limit: f32) u32 {
-        const inner_estimate = @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
-        var outer_estimate: u32 = 0;
+    fn estimateStrokeJoin(join: Style.Join) FlatCurveEstimate {
+        var estimate = FlatCurveEstimate{
+            .lines = 1, // for inner join
+        };
 
         switch (join) {
             .bevel => {
-                outer_estimate += @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
+                estimate.lines += 1;
             },
             .miter => {
-                const max_miter_len = scaled_width * miter_limit;
-                outer_estimate += @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(max_miter_len))) * 2;
+                estimate.lines += 2;
             },
             .round => {
-                const arc_estimate: ArcEstimate = LineEstimatorImpl.estimateArc(config, scaled_width);
-                outer_estimate += @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(arc_estimate.length))) * arc_estimate.items;
+                estimate.arcs += 1;
             },
         }
 
-        return @max(inner_estimate, outer_estimate);
-    }
-};
-
-pub const LineEstimatorImpl = struct {
-    const VIRTUAL_INTERSECTIONS: u32 = 2;
-    const INTERSECTION_FUDGE: u32 = 2;
-
-    pub fn estimateLineItems(_: PointF32, _: PointF32, _: TransformF32.Matrix) f32 {
-        return 1.0;
+        return estimate;
     }
 
-    pub fn estimateLineLengthItems(_: f32) f32 {
-        return 1.0;
-    }
-
-    fn approxArcLengthCubic(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) f32 {
-        const chord_len = (p3.sub(p0)).length();
-        // Length of the control polygon
-        const poly_len = (p1.sub(p0)).length() + (p2.sub(p1)).length() + (p3.sub(p2)).length();
-        return 0.5 * (chord_len + poly_len);
-    }
-
-    fn estimateArc(config: KernelConfig, scaled_width: f32) ArcEstimate {
-        const radius = @max(config.error_tolerance, scaled_width * 0.5);
-        const theta = @max(config.min_theta2, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
-        const arc_lines = @max(2, @as(u32, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
-
-        return ArcEstimate{
-            .items = arc_lines,
-            .length = 2.0 * std.math.sin(theta) * radius,
-        };
-    }
-
-    pub fn estimateIntersections(line: Line) u32 {
-        const dxdy = line.end.sub(line.start);
+    pub fn estimateLineIntersections(p0: PointF32, p1: PointF32) u32 {
+        const dxdy = p1.sub(p0);
         const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
         return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
+    }
+
+    pub fn estimateArcIntersections(p0: PointF32, p1: PointF32) u32 {
+        const square_point = PointF32{
+            .x = p0.x,
+            .y = p1.y,
+        };
+        return estimateLineIntersections(p0, square_point) + estimateLineIntersections(square_point, p1);
     }
 };
 
