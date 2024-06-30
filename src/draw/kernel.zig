@@ -509,7 +509,9 @@ pub const Kernel = struct {
         const normalized_offset = lowering.offset / lowering.chord_len;
         const offset = lowering.offset;
         const arclen = euler_segment.p1.sub(euler_segment.p0).length() / euler_segment.params.ch;
-        const est_err: f32 = (1.0 / 120.0) / config.error_tolerance * @abs(k1) * (arclen * 0.4 * @abs(k1 * offset));
+        const est_err1: f32 = (1.0 / 120.0) / config.error_tolerance;
+        const est_err2: f32 = (arclen * 0.4 * @abs(k1 * offset));
+        const est_err: f32 = est_err1 * @abs(k1) * est_err2;
         const n_subdiv = cbrt(config, est_err);
         const n = @max(@as(u32, @intFromFloat(n_subdiv * range_size)), 1);
         const arc_dt = 1.0 / @as(f32, @floatFromInt(n));
@@ -747,6 +749,10 @@ pub const EspcRobust = enum(u8) {
 };
 
 fn cbrt(config: KernelConfig, x: f32) f32 {
+    if (x == 0.0) {
+        return 0.0;
+    }
+
     // var y = sign(x) * bitcast<f32>(bitcast<u32>(abs(x)) / 3u + 0x2a514067u);
     var y = std.math.sign(x) * @as(f32, @bitCast((@as(u32, @bitCast(@abs(x))) / 3 + 0x2a514067)));
 

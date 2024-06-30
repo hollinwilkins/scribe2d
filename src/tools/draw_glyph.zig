@@ -15,7 +15,7 @@ pub fn main() !void {
     const glyph_id: u16 = try std.fmt.parseInt(u16, codepoint_str, 10);
     const size_str = args.next() orelse "16";
     const size = try std.fmt.parseInt(u32, size_str, 10);
-    const output_file = args.next() orelse @panic("need to provide output file");
+    // const output_file = args.next() orelse @panic("need to provide output file");
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -60,10 +60,10 @@ pub fn main() !void {
     // soup.path.items = soup.path.items[2..3];
     // soup.path.items[0].subpath_offsets.start += 1;
 
-    const dimensions = core.DimensionsU32{
-        .width = size,
-        .height = size,
-    };
+    // const dimensions = core.DimensionsU32{
+    //     .width = size,
+    //     .height = size,
+    // };
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
@@ -102,52 +102,57 @@ pub fn main() !void {
                 std.debug.print("-- Subpath({}) --\n", .{subpath_index});
                 const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
                 for (curves) |curve| {
-                    const lines = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
-                    for (lines) |*line| {
-                        std.debug.print("{}: {}\n", .{ line_count, line });
-                        line_count += 1;
-
-                        const offset = 16.0;
-                        line.start.x += offset;
-                        line.start.y += offset;
-                        line.end.x += offset;
-                        line.end.y += offset;
+                    const segments = soup.flat_segments.items[curve.segment_offsets.start..curve.segment_offsets.end];
+                    for (segments, 0..) |segment, segment_index| {
+                        switch (segment.kind) {
+                            .line => {
+                                const line = segment.getBufferLine(soup.buffer.items);
+                                std.debug.print("({},{}): {}\n", .{ line_count, segment_index, line });
+                            },
+                            .arc => {
+                                const arc = segment.getBufferArc(soup.buffer.items);
+                                std.debug.print("({},{}): {}\n", .{ line_count, segment_index, arc });
+                            },
+                            else => unreachable,
+                        }
                     }
+
+                    line_count += 1;
                 }
             }
         }
         std.debug.print("-----------------------------\n", .{});
     }
-    const rasterizer = draw.Rasterizer.create(&half_planes);
+    // const rasterizer = draw.Rasterizer.create(&half_planes);
 
-    zstbi.init(allocator);
-    defer zstbi.deinit();
+    // zstbi.init(allocator);
+    // defer zstbi.deinit();
 
-    var image = try zstbi.Image.createEmpty(
-        dimensions.width,
-        dimensions.height,
-        3,
-        .{},
-    );
-    defer image.deinit();
+    // var image = try zstbi.Image.createEmpty(
+    //     dimensions.width,
+    //     dimensions.height,
+    //     3,
+    //     .{},
+    // );
+    // defer image.deinit();
 
-    var texture = draw.TextureUnmanaged{
-        .dimensions = dimensions,
-        .format = draw.TextureFormat.SrgbU8,
-        .bytes = image.data,
-    };
-    texture.clear(draw.Color{
-        .r = 1.0,
-        .g = 1.0,
-        .b = 1.0,
-        .a = 1.0,
-    });
+    // var texture = draw.TextureUnmanaged{
+    //     .dimensions = dimensions,
+    //     .format = draw.TextureFormat.SrgbU8,
+    //     .bytes = image.data,
+    // };
+    // texture.clear(draw.Color{
+    //     .r = 1.0,
+    //     .g = 1.0,
+    //     .b = 1.0,
+    //     .a = 1.0,
+    // });
 
-    var pen = draw.SoupPen.init(allocator, &rasterizer);
-    try pen.draw(
-        &soup,
-        &texture,
-    );
+    // var pen = draw.SoupPen.init(allocator, &rasterizer);
+    // try pen.draw(
+    //     &soup,
+    //     &texture,
+    // );
 
     // {
     //     std.debug.print("\n", .{});
@@ -222,27 +227,27 @@ pub fn main() !void {
     //     std.debug.print("-----------------------------\n", .{});
     // }
 
-    {
-        std.debug.print("\n============== Boundary Texture\n\n", .{});
-        for (0..texture.dimensions.height) |y| {
-            std.debug.print("{:0>4}: ", .{y});
-            for (0..texture.dimensions.height) |x| {
-                const pixel = texture.getPixelUnsafe(core.PointU32{
-                    .x = @intCast(x),
-                    .y = @intCast(y),
-                });
+    // {
+    //     std.debug.print("\n============== Boundary Texture\n\n", .{});
+    //     for (0..texture.dimensions.height) |y| {
+    //         std.debug.print("{:0>4}: ", .{y});
+    //         for (0..texture.dimensions.height) |x| {
+    //             const pixel = texture.getPixelUnsafe(core.PointU32{
+    //                 .x = @intCast(x),
+    //                 .y = @intCast(y),
+    //             });
 
-                if (pixel.r < 1.0) {
-                    std.debug.print("#", .{});
-                } else {
-                    std.debug.print(";", .{});
-                }
-            }
+    //             if (pixel.r < 1.0) {
+    //                 std.debug.print("#", .{});
+    //             } else {
+    //                 std.debug.print(";", .{});
+    //             }
+    //         }
 
-            std.debug.print("\n", .{});
-        }
+    //         std.debug.print("\n", .{});
+    //     }
 
-        std.debug.print("==============\n", .{});
-    }
-    try image.writeToFile(output_file, .png);
+    //     std.debug.print("==============\n", .{});
+    // }
+    // try image.writeToFile(output_file, .png);
 }
