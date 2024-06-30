@@ -20,6 +20,7 @@ const CubicPoints = euler_module.CubicPoints;
 const CubicParams = euler_module.CubicParams;
 const EulerParams = euler_module.EulerParams;
 const EulerSegment = euler_module.EulerSegment;
+const Arc = curve_module.Arc;
 const Line = curve_module.Line;
 const Style = pen_module.Style;
 
@@ -92,16 +93,25 @@ pub const KernelConfig = struct {
 };
 
 const Writer = struct {
-    lines: []Line,
+    buffer: []u8,
     index: usize = 0,
 
-    pub fn write(self: *@This(), line: Line) void {
+    pub fn writeLine(self: *@This(), line: Line) void {
         if (line.isEmpty()) {
             return;
         }
 
-        self.lines[self.index] = line;
-        self.index += 1;
+        std.mem.copyForwards(u8, self.buffer[self.index..], @alignCast(std.mem.asBytes(&line)));
+        self.index += @sizeOf(Line);
+    }
+
+    pub fn writeArc(self: *@This(), arc: Arc) void {
+        if (arc.isEmpty()) {
+            return;
+        }
+
+        std.mem.copyForwards(u8, self.buffer[self.index..], @alignCast(std.mem.asBytes(&arc)));
+        self.index += @sizeOf(Arc);
     }
 };
 
@@ -116,7 +126,7 @@ pub const Kernel = struct {
         fill_range: RangeU32,
         // write destination
         flat_curves: []FlatCurve,
-        lines: []Line,
+        buffer: []u8,
     ) void {
         for (fill_jobs[fill_range.start..fill_range.end]) |fill_job| {
             flattenFillJob(
@@ -130,7 +140,7 @@ pub const Kernel = struct {
                 fill_job.flat_curve_index,
                 // output
                 flat_curves,
-                lines,
+                buffer,
             );
         }
     }
@@ -147,7 +157,7 @@ pub const Kernel = struct {
         stroke_range: RangeU32,
         // write destination
         flat_curves: []FlatCurve,
-        lines: []Line,
+        buffer: []u8,
     ) void {
         for (stroke_jobs[stroke_range.start..stroke_range.end]) |stroke_job| {
             flattenStrokeJob(
@@ -166,7 +176,7 @@ pub const Kernel = struct {
                 stroke_job.right_flat_curve_index,
                 // output
                 flat_curves,
-                lines,
+                buffer,
             );
         }
     }
@@ -184,14 +194,14 @@ pub const Kernel = struct {
         flat_curve_index: u32,
         // write destination
         flat_curves: []FlatCurve,
-        lines: []Line,
+        buffer: []u8,
     ) void {
         const transform = transforms[transform_index];
         const curve = curves[curve_index];
         const flat_curve = flat_curves[flat_curve_index];
-        const fill_lines = lines[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
+        const flat_curve_buffer = buffer[flat_curve.buffer_offsets.start..flat_curve.buffer_offsets.end];
         var writer = Writer{
-            .lines = fill_lines,
+            .buffer = flat_curve_buffer,
         };
 
         const cubic_points = getCubicPoints(
@@ -209,7 +219,7 @@ pub const Kernel = struct {
             &writer,
         );
 
-        flat_curves[flat_curve_index].item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(writer.index));
+        flat_curves[flat_curve_index].buffer_offsets.end = flat_curve.buffer_offsets.start + @as(u32, @intCast(writer.index));
     }
 
     pub fn flattenStrokeJob(
@@ -230,19 +240,19 @@ pub const Kernel = struct {
         right_flat_curve_index: u32,
         // write destination
         flat_curves: []FlatCurve,
-        lines: []Line,
+        buffer: []u8,
     ) void {
         const transform = transforms[transform_index];
         const curve = curves[curve_index];
         const left_flat_curve = flat_curves[left_flat_curve_index];
         const right_flat_curve = flat_curves[right_flat_curve_index];
-        const left_stroke_lines = lines[left_flat_curve.item_offsets.start..left_flat_curve.item_offsets.end];
-        const right_stroke_lines = lines[right_flat_curve.item_offsets.start..right_flat_curve.item_offsets.end];
+        const left_flat_curve_buffer = buffer[left_flat_curve.item_offsets.start..left_flat_curve.item_offsets.end];
+        const right_flat_curve_buffer = buffer[right_flat_curve.item_offsets.start..right_flat_curve.item_offsets.end];
         var left_writer = Writer{
-            .lines = left_stroke_lines,
+            .buffer = left_flat_curve_buffer,
         };
         var right_writer = Writer{
-            .lines = right_stroke_lines,
+            .buffer = right_flat_curve_buffer,
         };
         const style = styles[style_index];
         const stroke = style.stroke.?;
@@ -302,7 +312,6 @@ pub const Kernel = struct {
         if (curve.cap == .start) {
             // draw start cap on left side
             drawCap(
-                config,
                 stroke.start_cap,
                 cubic_points.point0,
                 cubic_points.point0.sub(n_start),
@@ -327,7 +336,6 @@ pub const Kernel = struct {
         if (curve.cap == .end) {
             // draw end cap on left side
             drawCap(
-                config,
                 stroke.end_cap,
                 cubic_points.point3,
                 cubic_points.point3.add(n_prev),
@@ -338,7 +346,6 @@ pub const Kernel = struct {
             );
         } else {
             drawJoin(
-                config,
                 stroke,
                 cubic_points.point3,
                 tan_prev,
@@ -550,7 +557,6 @@ pub const Kernel = struct {
     }
 
     fn drawCap(
-        config: KernelConfig,
         cap_style: Style.Cap,
         point: PointF32,
         cap0: PointF32,
@@ -560,15 +566,12 @@ pub const Kernel = struct {
         writer: *Writer,
     ) void {
         if (cap_style == .round) {
-            flattenArc(
-                config,
+            writer.writeArc(Arc.create(
                 cap0,
-                cap1,
                 point,
+                cap1,
                 std.math.pi,
-                transform,
-                writer,
-            );
+            ).transform(transform));
             return;
         }
 
@@ -578,18 +581,17 @@ pub const Kernel = struct {
             const v = offset_tangent;
             const p0 = start.add(v);
             const p1 = end.add(v);
-            writer.write(Line.create(transform.apply(start), transform.apply(p0)));
-            writer.write(Line.create(transform.apply(p1), transform.apply(end)));
+            writer.writeLine(Line.create(start, p0).transform(transform));
+            writer.writeLine(Line.create(p1, end).transform(transform));
 
             start = p0;
             end = p1;
         }
 
-        writer.write(Line.create(transform.apply(start), transform.apply(end)));
+        writer.writeLine(Line.create(start, end).transform(transform));
     }
 
     fn drawJoin(
-        config: KernelConfig,
         stroke: Style.Stroke,
         p0: PointF32,
         tan_prev: PointF32,
@@ -611,8 +613,8 @@ pub const Kernel = struct {
         switch (stroke.join) {
             .bevel => {
                 if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
-                    left_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
-                    right_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
+                    left_writer.write(Line.create(front0, front1).transform(transform));
+                    right_writer.write(Line.create(back0, back1).transform(transform));
                 }
             },
             .miter => {
@@ -633,81 +635,39 @@ pub const Kernel = struct {
                     }));
 
                     if (is_backside) {
-                        right_writer.write(Line.create(transform.apply(p), transform.apply(miter_pt)));
+                        right_writer.writeLine(Line.create(p, miter_pt).transform(transform));
                         back0 = miter_pt;
                     } else {
-                        left_writer.write(Line.create(transform.apply(p), transform.apply(miter_pt)));
+                        left_writer.writeLine(Line.create(p, miter_pt).transform(transform));
                         front0 = miter_pt;
                     }
                 }
 
-                left_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
-                right_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
+                left_writer.writeLine(Line.create(front0, front1).transform(transform));
+                right_writer.writeLine(Line.create(back0, back1).transform(transform));
             },
             .round => {
                 if (cr > 0.0) {
-                    flattenArc(
-                        config,
+                    right_writer.writeArc(Arc.create(
                         back0,
+                        p0,
                         back1,
-                        p0,
-                        @abs(std.math.atan2(cr, d)),
-                        transform,
-                        right_writer,
-                    );
+                        @abs(std.math.atan2(cr, d))
+                    ).transform(transform));
 
-                    left_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
+                    left_writer.writeLine(Line.create(front0, front1).transform(transform));
                 } else {
-                    flattenArc(
-                        config,
+                    left_writer.writeArc(Arc.create(
                         front0,
-                        front1,
                         p0,
-                        @abs(std.math.atan2(cr, d)),
-                        transform,
-                        left_writer,
-                    );
+                        front1,
+                        @abs(std.math.atan2(cr, d))
+                    ).transform(transform));
 
-                    right_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
+                    right_writer.writeLine(Line.create(back0, back1).transform(transform));
                 }
             },
         }
-    }
-
-    fn flattenArc(
-        config: KernelConfig,
-        start: PointF32,
-        end: PointF32,
-        center: PointF32,
-        angle: f32,
-        transform: TransformF32.Matrix,
-        writer: *Writer,
-    ) void {
-        var p0 = transform.apply(start);
-        var r = start.sub(center);
-        const radius = @max(config.error_tolerance, (p0.sub(transform.apply(center))).length());
-        const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
-
-        // Always output at least one line so that we always draw the chord.
-        const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
-
-        // let (s, c) = theta.sin_cos();
-        const s = std.math.sin(theta);
-        const c = std.math.cos(theta);
-        const rot = TransformF32.Matrix{
-            .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
-        };
-
-        for (0..n_lines - 1) |n| {
-            _ = n;
-            r = rot.apply(r);
-            const p1 = transform.apply(center.add(r));
-            writer.write(Line.create(p0, p1));
-            p0 = p1;
-        }
-
-        const p1 = transform.apply(end);
-        writer.write(Line.create(p0, p1));
     }
 };
 
