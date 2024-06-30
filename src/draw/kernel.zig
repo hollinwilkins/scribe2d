@@ -29,6 +29,7 @@ pub const KernelConfig = struct {
     parallelism: u8 = 8,
     fill_job_chunk_size: u8 = 8,
     stroke_job_chunk_size: u8 = 2,
+    arcs_enabled: bool = false,
 
     k1_threshold: f32 = 1e-3,
     distance_threshold: f32 = 1e-3,
@@ -60,6 +61,7 @@ pub const KernelConfig = struct {
             .parallelism = config.parallelism,
             .fill_job_chunk_size = config.fill_job_chunk_size,
             .stroke_job_chunk_size = config.stroke_job_chunk_size,
+            .arcs_enabled = config.arcs_enabled,
 
             .k1_threshold = config.k1_threshold,
             .distance_threshold = config.distance_threshold,
@@ -89,629 +91,625 @@ pub const KernelConfig = struct {
     }
 };
 
-pub fn Kernel(comptime T: type) type {
-    const Writer = struct {
-        items: []T,
-        index: usize = 0,
+const Writer = struct {
+    lines: []Line,
+    index: usize = 0,
 
-        pub fn write(self: *@This(), item: T) void {
-            if (item.isEmpty()) {
-                return;
-            }
-
-            self.items[self.index] = item;
-            self.index += 1;
-        }
-    };
-
-    return struct {
-        pub fn flattenFill(
-            config: KernelConfig,
-            // input buffers
-            transforms: []const TransformF32.Matrix,
-            curves: []const Curve,
-            points: []const PointF32,
-            fill_jobs: []const FillJob,
-            fill_range: RangeU32,
-            // write destination
-            flat_curves: []FlatCurve,
-            items: []T,
-        ) void {
-            for (fill_jobs[fill_range.start..fill_range.end]) |fill_job| {
-                flattenFillJob(
-                    config,
-                    // inputs
-                    transforms,
-                    curves,
-                    points,
-                    fill_job.transform_index,
-                    fill_job.curve_index,
-                    fill_job.flat_curve_index,
-                    // output
-                    flat_curves,
-                    items,
-                );
-            }
+    pub fn write(self: *@This(), line: Line) void {
+        if (line.isEmpty()) {
+            return;
         }
 
-        pub fn flattenStroke(
-            config: KernelConfig,
-            // input buffers
-            transforms: []const TransformF32.Matrix,
-            styles: []const Style,
-            subpaths: []const Subpath,
-            curves: []const Curve,
-            points: []const PointF32,
-            stroke_jobs: []const StrokeJob,
-            stroke_range: RangeU32,
-            // write destination
-            flat_curves: []FlatCurve,
-            items: []T,
-        ) void {
-            for (stroke_jobs[stroke_range.start..stroke_range.end]) |stroke_job| {
-                flattenStrokeJob(
-                    config,
-                    // input
-                    transforms,
-                    styles,
-                    subpaths,
-                    curves,
-                    points,
-                    stroke_job.transform_index,
-                    stroke_job.style_index,
-                    stroke_job.curve_index,
-                    stroke_job.subpath_index,
-                    stroke_job.left_flat_curve_index,
-                    stroke_job.right_flat_curve_index,
-                    // output
-                    flat_curves,
-                    items,
-                );
-            }
-        }
+        self.lines[self.index] = line;
+        self.index += 1;
+    }
+};
 
-        pub fn flattenFillJob(
-            // input uniform
-            config: KernelConfig,
-            // input buffers
-            transforms: []const TransformF32.Matrix,
-            curves: []const Curve,
-            points: []const PointF32,
-            // job parameters
-            transform_index: u32,
-            curve_index: u32,
-            flat_curve_index: u32,
-            // write destination
-            flat_curves: []FlatCurve,
-            items: []T,
-        ) void {
-            const transform = transforms[transform_index];
-            const curve = curves[curve_index];
-            const flat_curve = flat_curves[flat_curve_index];
-            const fill_items = items[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
-            var writer = Writer{
-                .items = fill_items,
-            };
-
-            const cubic_points = getCubicPoints(
-                curve,
-                points[curve.point_offsets.start..curve.point_offsets.end],
-            );
-
-            flattenEuler(
+pub const Kernel = struct {
+    pub fn flattenFill(
+        config: KernelConfig,
+        // input buffers
+        transforms: []const TransformF32.Matrix,
+        curves: []const Curve,
+        points: []const PointF32,
+        fill_jobs: []const FillJob,
+        fill_range: RangeU32,
+        // write destination
+        flat_curves: []FlatCurve,
+        lines: []Line,
+    ) void {
+        for (fill_jobs[fill_range.start..fill_range.end]) |fill_job| {
+            flattenFillJob(
                 config,
-                cubic_points,
-                transform,
-                0.0,
+                // inputs
+                transforms,
+                curves,
+                points,
+                fill_job.transform_index,
+                fill_job.curve_index,
+                fill_job.flat_curve_index,
+                // output
+                flat_curves,
+                lines,
+            );
+        }
+    }
+
+    pub fn flattenStroke(
+        config: KernelConfig,
+        // input buffers
+        transforms: []const TransformF32.Matrix,
+        styles: []const Style,
+        subpaths: []const Subpath,
+        curves: []const Curve,
+        points: []const PointF32,
+        stroke_jobs: []const StrokeJob,
+        stroke_range: RangeU32,
+        // write destination
+        flat_curves: []FlatCurve,
+        lines: []Line,
+    ) void {
+        for (stroke_jobs[stroke_range.start..stroke_range.end]) |stroke_job| {
+            flattenStrokeJob(
+                config,
+                // input
+                transforms,
+                styles,
+                subpaths,
+                curves,
+                points,
+                stroke_job.transform_index,
+                stroke_job.style_index,
+                stroke_job.curve_index,
+                stroke_job.subpath_index,
+                stroke_job.left_flat_curve_index,
+                stroke_job.right_flat_curve_index,
+                // output
+                flat_curves,
+                lines,
+            );
+        }
+    }
+
+    pub fn flattenFillJob(
+        // input uniform
+        config: KernelConfig,
+        // input buffers
+        transforms: []const TransformF32.Matrix,
+        curves: []const Curve,
+        points: []const PointF32,
+        // job parameters
+        transform_index: u32,
+        curve_index: u32,
+        flat_curve_index: u32,
+        // write destination
+        flat_curves: []FlatCurve,
+        lines: []Line,
+    ) void {
+        const transform = transforms[transform_index];
+        const curve = curves[curve_index];
+        const flat_curve = flat_curves[flat_curve_index];
+        const fill_lines = lines[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
+        var writer = Writer{
+            .lines = fill_lines,
+        };
+
+        const cubic_points = getCubicPoints(
+            curve,
+            points[curve.point_offsets.start..curve.point_offsets.end],
+        );
+
+        flattenEuler(
+            config,
+            cubic_points,
+            transform,
+            0.0,
+            cubic_points.point0,
+            cubic_points.point3,
+            &writer,
+        );
+
+        flat_curves[flat_curve_index].item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(writer.index));
+    }
+
+    pub fn flattenStrokeJob(
+        // input uniform
+        config: KernelConfig,
+        // input buffers
+        transforms: []const TransformF32.Matrix,
+        styles: []const Style,
+        subpaths: []const Subpath,
+        curves: []const Curve,
+        points: []const PointF32,
+        // job parameters
+        transform_index: u32,
+        style_index: u32,
+        curve_index: u32,
+        subpath_index: u32,
+        left_flat_curve_index: u32,
+        right_flat_curve_index: u32,
+        // write destination
+        flat_curves: []FlatCurve,
+        lines: []Line,
+    ) void {
+        const transform = transforms[transform_index];
+        const curve = curves[curve_index];
+        const left_flat_curve = flat_curves[left_flat_curve_index];
+        const right_flat_curve = flat_curves[right_flat_curve_index];
+        const left_stroke_lines = lines[left_flat_curve.item_offsets.start..left_flat_curve.item_offsets.end];
+        const right_stroke_lines = lines[right_flat_curve.item_offsets.start..right_flat_curve.item_offsets.end];
+        var left_writer = Writer{
+            .lines = left_stroke_lines,
+        };
+        var right_writer = Writer{
+            .lines = right_stroke_lines,
+        };
+        const style = styles[style_index];
+        const stroke = style.stroke.?;
+
+        const offset = 0.5 * stroke.width;
+        const offset_point = PointF32{
+            .x = offset,
+            .y = offset,
+        };
+
+        const curve_range = subpaths[subpath_index].curve_offsets;
+        const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
+        const cubic_points = getCubicPoints(
+            curve,
+            points[curve.point_offsets.start..curve.point_offsets.end],
+        );
+        var tan_prev = cubicEndTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+        var tan_next = neighbor.tangent;
+        var tan_start = cubicStartTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+
+        if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
+            tan_start = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        if (tan_prev.dot(tan_prev) < config.tangent_threshold_pow2) {
+            tan_prev = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        if (tan_next.dot(tan_next) < config.tangent_threshold_pow2) {
+            tan_next = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        const n_start = offset_point.mul((PointF32{
+            .x = -tan_start.y,
+            .y = tan_start.x,
+        }).normalizeUnsafe());
+        const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
+        const n_prev = PointF32{
+            .x = -offset_tangent.y,
+            .y = offset_tangent.x,
+        };
+        const tan_next_norm = tan_next.normalizeUnsafe();
+        const n_next = offset_point.mul(PointF32{
+            .x = -tan_next_norm.y,
+            .y = tan_next_norm.x,
+        });
+
+        if (curve.cap == .start) {
+            // draw start cap on left side
+            drawCap(
+                config,
+                stroke.start_cap,
                 cubic_points.point0,
-                cubic_points.point3,
-                &writer,
-            );
-
-            flat_curves[flat_curve_index].item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(writer.index));
-        }
-
-        pub fn flattenStrokeJob(
-            // input uniform
-            config: KernelConfig,
-            // input buffers
-            transforms: []const TransformF32.Matrix,
-            styles: []const Style,
-            subpaths: []const Subpath,
-            curves: []const Curve,
-            points: []const PointF32,
-            // job parameters
-            transform_index: u32,
-            style_index: u32,
-            curve_index: u32,
-            subpath_index: u32,
-            left_flat_curve_index: u32,
-            right_flat_curve_index: u32,
-            // write destination
-            flat_curves: []FlatCurve,
-            items: []T,
-        ) void {
-            const transform = transforms[transform_index];
-            const curve = curves[curve_index];
-            const left_flat_curve = flat_curves[left_flat_curve_index];
-            const right_flat_curve = flat_curves[right_flat_curve_index];
-            const left_stroke_items = items[left_flat_curve.item_offsets.start..left_flat_curve.item_offsets.end];
-            const right_stroke_items = items[right_flat_curve.item_offsets.start..right_flat_curve.item_offsets.end];
-            var left_writer = Writer{
-                .items = left_stroke_items,
-            };
-            var right_writer = Writer{
-                .items = right_stroke_items,
-            };
-            const style = styles[style_index];
-            const stroke = style.stroke.?;
-
-            const offset = 0.5 * stroke.width;
-            const offset_point = PointF32{
-                .x = offset,
-                .y = offset,
-            };
-
-            const curve_range = subpaths[subpath_index].curve_offsets;
-            const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
-            const cubic_points = getCubicPoints(
-                curve,
-                points[curve.point_offsets.start..curve.point_offsets.end],
-            );
-            var tan_prev = cubicEndTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
-            var tan_next = neighbor.tangent;
-            var tan_start = cubicStartTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
-
-            if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
-                tan_start = PointF32{
-                    .x = config.tangent_threshold,
-                    .y = 0.0,
-                };
-            }
-
-            if (tan_prev.dot(tan_prev) < config.tangent_threshold_pow2) {
-                tan_prev = PointF32{
-                    .x = config.tangent_threshold,
-                    .y = 0.0,
-                };
-            }
-
-            if (tan_next.dot(tan_next) < config.tangent_threshold_pow2) {
-                tan_next = PointF32{
-                    .x = config.tangent_threshold,
-                    .y = 0.0,
-                };
-            }
-
-            const n_start = offset_point.mul((PointF32{
-                .x = -tan_start.y,
-                .y = tan_start.x,
-            }).normalizeUnsafe());
-            const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
-            const n_prev = PointF32{
-                .x = -offset_tangent.y,
-                .y = offset_tangent.x,
-            };
-            const tan_next_norm = tan_next.normalizeUnsafe();
-            const n_next = offset_point.mul(PointF32{
-                .x = -tan_next_norm.y,
-                .y = tan_next_norm.x,
-            });
-
-            if (curve.cap == .start) {
-                // draw start cap on left side
-                drawCap(
-                    config,
-                    stroke.start_cap,
-                    cubic_points.point0,
-                    cubic_points.point0.sub(n_start),
-                    cubic_points.point0.add(n_start),
-                    offset_tangent.negate(),
-                    transform,
-                    &left_writer,
-                );
-            }
-
-            flattenEuler(
-                config,
-                cubic_points,
-                transform,
-                offset,
+                cubic_points.point0.sub(n_start),
                 cubic_points.point0.add(n_start),
-                cubic_points.point3.add(n_prev),
+                offset_tangent.negate(),
+                transform,
                 &left_writer,
             );
+        }
 
-            var right_join_index: usize = 0;
-            if (curve.cap == .end) {
-                // draw end cap on left side
-                drawCap(
-                    config,
-                    stroke.end_cap,
-                    cubic_points.point3,
-                    cubic_points.point3.add(n_prev),
-                    cubic_points.point3.sub(n_prev),
-                    offset_tangent,
-                    transform,
-                    &left_writer,
-                );
-            } else {
-                drawJoin(
-                    config,
-                    stroke,
-                    cubic_points.point3,
-                    tan_prev,
-                    tan_next,
-                    n_prev,
-                    n_next,
-                    transform,
-                    &left_writer,
-                    &right_writer,
-                );
-                right_join_index = right_writer.index;
-            }
+        flattenEuler(
+            config,
+            cubic_points,
+            transform,
+            offset,
+            cubic_points.point0.add(n_start),
+            cubic_points.point3.add(n_prev),
+            &left_writer,
+        );
 
-            flattenEuler(
+        var right_join_index: usize = 0;
+        if (curve.cap == .end) {
+            // draw end cap on left side
+            drawCap(
                 config,
-                cubic_points,
-                transform,
-                -offset,
-                cubic_points.point0.sub(n_start),
+                stroke.end_cap,
+                cubic_points.point3,
+                cubic_points.point3.add(n_prev),
                 cubic_points.point3.sub(n_prev),
+                offset_tangent,
+                transform,
+                &left_writer,
+            );
+        } else {
+            drawJoin(
+                config,
+                stroke,
+                cubic_points.point3,
+                tan_prev,
+                tan_next,
+                n_prev,
+                n_next,
+                transform,
+                &left_writer,
                 &right_writer,
             );
-
-            std.mem.reverse(T, right_writer.items[right_join_index..right_writer.index]);
-
-            flat_curves[left_flat_curve_index].item_offsets.end = left_flat_curve.item_offsets.start + @as(u32, @intCast(left_writer.index));
-            flat_curves[right_flat_curve_index].item_offsets.end = right_flat_curve.item_offsets.start + @as(u32, @intCast(right_writer.index));
+            right_join_index = right_writer.index;
         }
 
-        fn flattenEuler(
-            config: KernelConfig,
-            cubic_points: CubicPoints,
-            transform: TransformF32.Matrix,
-            offset: f32,
-            start_point: PointF32,
-            end_point: PointF32,
-            writer: *Writer,
-        ) void {
-            const p0 = transform.apply(cubic_points.point0);
-            const p1 = transform.apply(cubic_points.point1);
-            const p2 = transform.apply(cubic_points.point2);
-            const p3 = transform.apply(cubic_points.point3);
-            const scale = 0.5 * transform.getScale();
+        flattenEuler(
+            config,
+            cubic_points,
+            transform,
+            -offset,
+            cubic_points.point0.sub(n_start),
+            cubic_points.point3.sub(n_prev),
+            &right_writer,
+        );
 
-            var t_start: PointF32 = undefined;
-            var t_end: PointF32 = undefined;
-            if (offset == 0.0) {
-                t_start = p0;
-                t_end = p3;
-            } else {
-                t_start = start_point;
-                t_end = end_point;
+        std.mem.reverse(Line, right_writer.lines[right_join_index..right_writer.index]);
+
+        flat_curves[left_flat_curve_index].item_offsets.end = left_flat_curve.item_offsets.start + @as(u32, @intCast(left_writer.index));
+        flat_curves[right_flat_curve_index].item_offsets.end = right_flat_curve.item_offsets.start + @as(u32, @intCast(right_writer.index));
+    }
+
+    fn flattenEuler(
+        config: KernelConfig,
+        cubic_points: CubicPoints,
+        transform: TransformF32.Matrix,
+        offset: f32,
+        start_point: PointF32,
+        end_point: PointF32,
+        writer: *Writer,
+    ) void {
+        const p0 = transform.apply(cubic_points.point0);
+        const p1 = transform.apply(cubic_points.point1);
+        const p2 = transform.apply(cubic_points.point2);
+        const p3 = transform.apply(cubic_points.point3);
+        const scale = 0.5 * transform.getScale();
+
+        var t_start: PointF32 = undefined;
+        var t_end: PointF32 = undefined;
+        if (offset == 0.0) {
+            t_start = p0;
+            t_end = p3;
+        } else {
+            t_start = start_point;
+            t_end = end_point;
+        }
+
+        // Drop zero length lines. This is an exact equality test because dropping very short
+        // line segments may result in loss of watertightness. The parallel curves of zero
+        // length lines add nothing to stroke outlines, but we still may need to draw caps.
+        if (std.meta.eql(p0, p1) and std.meta.eql(p0, p2) and std.meta.eql(p0, p3)) {
+            return;
+        }
+
+        var t0_u: u32 = 0;
+        var dt: f32 = 1.0;
+        var last_p = p0;
+        var last_q = p1.sub(p0);
+
+        // We want to avoid near zero derivatives, so the general technique is to
+        // detect, then sample a nearby t value if it fails to meet the threshold.
+        if (last_q.lengthSquared() < config.derivative_threshold_pow2) {
+            last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, config.derivative_eps).derivative;
+        }
+        var last_t: f32 = 0.0;
+        var lp0 = t_start;
+
+        while (true) {
+            const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
+            if (t0 == 1.0) {
+                break;
             }
+            var t1 = t0 + dt;
+            const this_p0 = last_p;
+            const this_q0 = last_q;
+            const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
+            var this_p1 = cd1.point;
+            var this_q1 = cd1.derivative;
+            if (this_q1.lengthSquared() < config.derivative_threshold_pow2) {
+                const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - config.derivative_eps);
+                const new_p1 = cd2.point;
+                const new_q1 = cd2.derivative;
+                this_q1 = new_q1;
 
-            // Drop zero length lines. This is an exact equality test because dropping very short
-            // line segments may result in loss of watertightness. The parallel curves of zero
-            // length lines add nothing to stroke outlines, but we still may need to draw caps.
-            if (std.meta.eql(p0, p1) and std.meta.eql(p0, p2) and std.meta.eql(p0, p3)) {
-                return;
-            }
-
-            var t0_u: u32 = 0;
-            var dt: f32 = 1.0;
-            var last_p = p0;
-            var last_q = p1.sub(p0);
-
-            // We want to avoid near zero derivatives, so the general technique is to
-            // detect, then sample a nearby t value if it fails to meet the threshold.
-            if (last_q.lengthSquared() < config.derivative_threshold_pow2) {
-                last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, config.derivative_eps).derivative;
-            }
-            var last_t: f32 = 0.0;
-            var lp0 = t_start;
-
-            while (true) {
-                const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
-                if (t0 == 1.0) {
-                    break;
+                // Change just the derivative at the endpoint, but also move the point so it
+                // matches the derivative exactly if in the interior.
+                if (t1 < 1.0) {
+                    this_p1 = new_p1;
+                    t1 -= config.derivative_eps;
                 }
-                var t1 = t0 + dt;
-                const this_p0 = last_p;
-                const this_q0 = last_q;
-                const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
-                var this_p1 = cd1.point;
-                var this_q1 = cd1.derivative;
-                if (this_q1.lengthSquared() < config.derivative_threshold_pow2) {
-                    const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - config.derivative_eps);
-                    const new_p1 = cd2.point;
-                    const new_q1 = cd2.derivative;
-                    this_q1 = new_q1;
+            }
+            const actual_dt = t1 - last_t;
+            const cubic_params = CubicParams.create(this_p0, this_p1, this_q0, this_q1, actual_dt);
+            if (cubic_params.err * scale <= config.error_tolerance or dt <= config.subdivision_limit) {
+                const euler_params = EulerParams.create(cubic_params.th0, cubic_params.th1);
+                const es = EulerSegment{
+                    .p0 = this_p0,
+                    .p1 = this_p1,
+                    .params = euler_params,
+                };
 
-                    // Change just the derivative at the endpoint, but also move the point so it
-                    // matches the derivative exactly if in the interior.
-                    if (t1 < 1.0) {
-                        this_p1 = new_p1;
-                        t1 -= config.derivative_eps;
-                    }
-                }
-                const actual_dt = t1 - last_t;
-                const cubic_params = CubicParams.create(this_p0, this_p1, this_q0, this_q1, actual_dt);
-                if (cubic_params.err * scale <= config.error_tolerance or dt <= config.subdivision_limit) {
-                    const euler_params = EulerParams.create(cubic_params.th0, cubic_params.th1);
-                    const es = EulerSegment{
-                        .p0 = this_p0,
-                        .p1 = this_p1,
-                        .params = euler_params,
-                    };
+                const k0 = es.params.k0 - 0.5 * es.params.k1;
+                const k1 = es.params.k1;
 
-                    const k0 = es.params.k0 - 0.5 * es.params.k1;
-                    const k1 = es.params.k1;
+                // compute forward integral to determine number of subdivisions
+                const normalized_offset = offset / cubic_params.chord_len;
+                const dist_scaled = normalized_offset * es.params.ch;
 
-                    // compute forward integral to determine number of subdivisions
-                    const normalized_offset = offset / cubic_params.chord_len;
-                    const dist_scaled = normalized_offset * es.params.ch;
+                // The number of subdivisions for curvature = 1
+                const scale_multiplier = 0.5 * std.math.sqrt1_2 * std.math.sqrt((scale * cubic_params.chord_len / (es.params.ch * config.error_tolerance)));
+                var a: f32 = 0.0;
+                var b: f32 = 0.0;
+                var integral: f32 = 0.0;
+                var int0: f32 = 0.0;
 
-                    // The number of subdivisions for curvature = 1
-                    const scale_multiplier = 0.5 * std.math.sqrt1_2 * std.math.sqrt((scale * cubic_params.chord_len / (es.params.ch * config.error_tolerance)));
-                    var a: f32 = 0.0;
-                    var b: f32 = 0.0;
-                    var integral: f32 = 0.0;
-                    var int0: f32 = 0.0;
+                var n_frac: f32 = undefined;
+                var robust: EspcRobust = undefined;
 
-                    var n_frac: f32 = undefined;
-                    var robust: EspcRobust = undefined;
-
-                    if (@abs(k1) < config.k1_threshold) {
-                        const k = k0 + 0.5 * k1;
-                        n_frac = std.math.sqrt(@abs(k * (k * dist_scaled + 1.0)));
-                        robust = .low_k1;
-                    } else if (@abs(dist_scaled) < config.distance_threshold) {
-                        a = k1;
-                        b = k0;
-                        int0 = b * std.math.sqrt(@abs(b));
-                        const int1 = (a + b) * std.math.sqrt(@abs(a + b));
-                        integral = int1 - int0;
-                        n_frac = (2.0 / 3.0) * integral / a;
-                        robust = .low_dist;
-                    } else {
-                        a = -2.0 * dist_scaled * k1;
-                        b = -1.0 - 2.0 * dist_scaled * k0;
-                        int0 = EspcRobust.intApproximation(config, b);
-                        const int1 = EspcRobust.intApproximation(config, a + b);
-                        integral = int1 - int0;
-                        const k_peak = k0 - k1 * b / a;
-                        const integrand_peak = std.math.sqrt(@abs(k_peak * (k_peak * dist_scaled + 1.0)));
-                        const scaled_int = integral * integrand_peak / a;
-                        n_frac = scaled_int;
-                        robust = .normal;
-                    }
-
-                    const n = std.math.clamp(@ceil(n_frac * scale_multiplier), 1.0, 100.0);
-
-                    // Flatten line segments
-                    std.debug.assert(!std.math.isNan(n));
-                    for (0..@intFromFloat(n)) |i| {
-                        var lp1: PointF32 = undefined;
-
-                        if (i == (@as(usize, @intFromFloat(n)) - 1) and t1 == 1.0) {
-                            lp1 = t_end;
-                        } else {
-                            const t = @as(f32, @floatFromInt(i + 1)) / n;
-
-                            var s: f32 = undefined;
-                            switch (robust) {
-                                .low_k1 => {
-                                    s = t;
-                                },
-                                .low_dist => {
-                                    const c = std.math.cbrt(integral * t + int0);
-                                    const inv = c * @abs(c);
-                                    s = (inv - b) / a;
-                                },
-                                .normal => {
-                                    const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
-                                    s = (inv - b) / a;
-                                    // TODO: probably shouldn't have to do this, it differs from Vello
-                                    s = std.math.clamp(s, 0.0, 1.0);
-                                },
-                            }
-                            lp1 = es.applyOffset(s, normalized_offset);
-                        }
-
-                        const l0 = if (offset >= 0.0) lp0 else lp1;
-                        const l1 = if (offset >= 0.0) lp1 else lp0;
-                        const line = T.create(transform.apply(l0), transform.apply(l1));
-                        writer.write(line);
-
-                        lp0 = lp1;
-                    }
-
-                    last_p = this_p1;
-                    last_q = this_q1;
-                    last_t = t1;
-
-                    // Advance segment to next range. Beginning of segment is the end of
-                    // this one. The number of trailing zeros represents the number of stack
-                    // frames to pop in the recursive version of adaptive subdivision, and
-                    // each stack pop represents doubling of the size of the range.
-                    t0_u += 1;
-                    const shift: u5 = @intCast(@ctz(t0_u));
-                    t0_u >>= shift;
-                    dt *= @as(f32, @floatFromInt(@as(u32, 1) << shift));
+                if (@abs(k1) < config.k1_threshold) {
+                    const k = k0 + 0.5 * k1;
+                    n_frac = std.math.sqrt(@abs(k * (k * dist_scaled + 1.0)));
+                    robust = .low_k1;
+                } else if (@abs(dist_scaled) < config.distance_threshold) {
+                    a = k1;
+                    b = k0;
+                    int0 = b * std.math.sqrt(@abs(b));
+                    const int1 = (a + b) * std.math.sqrt(@abs(a + b));
+                    integral = int1 - int0;
+                    n_frac = (2.0 / 3.0) * integral / a;
+                    robust = .low_dist;
                 } else {
-                    // Subdivide; halve the size of the range while retaining its start.
-                    t0_u *|= 2;
-                    dt *= 0.5;
+                    a = -2.0 * dist_scaled * k1;
+                    b = -1.0 - 2.0 * dist_scaled * k0;
+                    int0 = EspcRobust.intApproximation(config, b);
+                    const int1 = EspcRobust.intApproximation(config, a + b);
+                    integral = int1 - int0;
+                    const k_peak = k0 - k1 * b / a;
+                    const integrand_peak = std.math.sqrt(@abs(k_peak * (k_peak * dist_scaled + 1.0)));
+                    const scaled_int = integral * integrand_peak / a;
+                    n_frac = scaled_int;
+                    robust = .normal;
                 }
-            }
-        }
 
-        fn drawCap(
-            config: KernelConfig,
-            cap_style: Style.Cap,
-            point: PointF32,
-            cap0: PointF32,
-            cap1: PointF32,
-            offset_tangent: PointF32,
-            transform: TransformF32.Matrix,
-            writer: *Writer,
-        ) void {
-            if (cap_style == .round) {
-                flattenArc(
-                    config,
-                    cap0,
-                    cap1,
-                    point,
-                    std.math.pi,
-                    transform,
-                    writer,
-                );
-                return;
-            }
+                const n = std.math.clamp(@ceil(n_frac * scale_multiplier), 1.0, 100.0);
 
-            var start = cap0;
-            var end = cap1;
-            if (cap_style == .square) {
-                const v = offset_tangent;
-                const p0 = start.add(v);
-                const p1 = end.add(v);
-                writer.write(T.create(transform.apply(start), transform.apply(p0)));
-                writer.write(T.create(transform.apply(p1), transform.apply(end)));
+                // Flatten line segments
+                std.debug.assert(!std.math.isNan(n));
+                for (0..@intFromFloat(n)) |i| {
+                    var lp1: PointF32 = undefined;
 
-                start = p0;
-                end = p1;
-            }
-
-            writer.write(T.create(transform.apply(start), transform.apply(end)));
-        }
-
-        fn drawJoin(
-            config: KernelConfig,
-            stroke: Style.Stroke,
-            p0: PointF32,
-            tan_prev: PointF32,
-            tan_next: PointF32,
-            n_prev: PointF32,
-            n_next: PointF32,
-            transform: TransformF32.Matrix,
-            left_writer: *Writer,
-            right_writer: *Writer,
-        ) void {
-            var front0 = p0.add(n_prev);
-            const front1 = p0.add(n_next);
-            var back0 = p0.sub(n_next);
-            const back1 = p0.sub(n_prev);
-
-            const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
-            const d = tan_prev.dot(tan_next);
-
-            switch (stroke.join) {
-                .bevel => {
-                    if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
-                        left_writer.write(T.create(transform.apply(front0), transform.apply(front1)));
-                        right_writer.write(T.create(transform.apply(back0), transform.apply(back1)));
-                    }
-                },
-                .miter => {
-                    const hypot = std.math.hypot(cr, d);
-                    const miter_limit = stroke.miter_limit;
-
-                    if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
-                        const is_backside = cr > 0.0;
-                        const fp_last = if (is_backside) back1 else front0;
-                        const fp_this = if (is_backside) back0 else front1;
-                        const p = if (is_backside) back0 else front0;
-
-                        const v = fp_this.sub(fp_last);
-                        const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
-                        const miter_pt = fp_this.sub(tan_next.mul(PointF32{
-                            .x = h,
-                            .y = h,
-                        }));
-
-                        if (is_backside) {
-                            right_writer.write(T.create(transform.apply(p), transform.apply(miter_pt)));
-                            back0 = miter_pt;
-                        } else {
-                            left_writer.write(T.create(transform.apply(p), transform.apply(miter_pt)));
-                            front0 = miter_pt;
-                        }
-                    }
-
-                    left_writer.write(T.create(transform.apply(front0), transform.apply(front1)));
-                    right_writer.write(T.create(transform.apply(back0), transform.apply(back1)));
-                },
-                .round => {
-                    if (cr > 0.0) {
-                        flattenArc(
-                            config,
-                            back0,
-                            back1,
-                            p0,
-                            @abs(std.math.atan2(cr, d)),
-                            transform,
-                            right_writer,
-                        );
-
-                        left_writer.write(T.create(transform.apply(front0), transform.apply(front1)));
+                    if (i == (@as(usize, @intFromFloat(n)) - 1) and t1 == 1.0) {
+                        lp1 = t_end;
                     } else {
-                        flattenArc(
-                            config,
-                            front0,
-                            front1,
-                            p0,
-                            @abs(std.math.atan2(cr, d)),
-                            transform,
-                            left_writer,
-                        );
+                        const t = @as(f32, @floatFromInt(i + 1)) / n;
 
-                        right_writer.write(T.create(transform.apply(back0), transform.apply(back1)));
+                        var s: f32 = undefined;
+                        switch (robust) {
+                            .low_k1 => {
+                                s = t;
+                            },
+                            .low_dist => {
+                                const c = std.math.cbrt(integral * t + int0);
+                                const inv = c * @abs(c);
+                                s = (inv - b) / a;
+                            },
+                            .normal => {
+                                const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
+                                s = (inv - b) / a;
+                                // TODO: probably shouldn't have to do this, it differs from Vello
+                                s = std.math.clamp(s, 0.0, 1.0);
+                            },
+                        }
+                        lp1 = es.applyOffset(s, normalized_offset);
                     }
-                },
+
+                    const l0 = if (offset >= 0.0) lp0 else lp1;
+                    const l1 = if (offset >= 0.0) lp1 else lp0;
+                    const line = Line.create(transform.apply(l0), transform.apply(l1));
+                    writer.write(line);
+
+                    lp0 = lp1;
+                }
+
+                last_p = this_p1;
+                last_q = this_q1;
+                last_t = t1;
+
+                // Advance segment to next range. Beginning of segment is the end of
+                // this one. The number of trailing zeros represents the number of stack
+                // frames to pop in the recursive version of adaptive subdivision, and
+                // each stack pop represents doubling of the size of the range.
+                t0_u += 1;
+                const shift: u5 = @intCast(@ctz(t0_u));
+                t0_u >>= shift;
+                dt *= @as(f32, @floatFromInt(@as(u32, 1) << shift));
+            } else {
+                // Subdivide; halve the size of the range while retaining its start.
+                t0_u *|= 2;
+                dt *= 0.5;
             }
         }
+    }
 
-        fn flattenArc(
-            config: KernelConfig,
-            start: PointF32,
-            end: PointF32,
-            center: PointF32,
-            angle: f32,
-            transform: TransformF32.Matrix,
-            writer: *Writer,
-        ) void {
-            var p0 = transform.apply(start);
-            var r = start.sub(center);
-            const radius = @max(config.error_tolerance, (p0.sub(transform.apply(center))).length());
-            const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
-
-            // Always output at least one line so that we always draw the chord.
-            const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
-
-            // let (s, c) = theta.sin_cos();
-            const s = std.math.sin(theta);
-            const c = std.math.cos(theta);
-            const rot = TransformF32.Matrix{
-                .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
-            };
-
-            for (0..n_lines - 1) |n| {
-                _ = n;
-                r = rot.apply(r);
-                const p1 = transform.apply(center.add(r));
-                writer.write(T.create(p0, p1));
-                p0 = p1;
-            }
-
-            const p1 = transform.apply(end);
-            writer.write(T.create(p0, p1));
+    fn drawCap(
+        config: KernelConfig,
+        cap_style: Style.Cap,
+        point: PointF32,
+        cap0: PointF32,
+        cap1: PointF32,
+        offset_tangent: PointF32,
+        transform: TransformF32.Matrix,
+        writer: *Writer,
+    ) void {
+        if (cap_style == .round) {
+            flattenArc(
+                config,
+                cap0,
+                cap1,
+                point,
+                std.math.pi,
+                transform,
+                writer,
+            );
+            return;
         }
-    };
-}
 
-pub const LineKernel = Kernel(Line);
+        var start = cap0;
+        var end = cap1;
+        if (cap_style == .square) {
+            const v = offset_tangent;
+            const p0 = start.add(v);
+            const p1 = end.add(v);
+            writer.write(Line.create(transform.apply(start), transform.apply(p0)));
+            writer.write(Line.create(transform.apply(p1), transform.apply(end)));
+
+            start = p0;
+            end = p1;
+        }
+
+        writer.write(Line.create(transform.apply(start), transform.apply(end)));
+    }
+
+    fn drawJoin(
+        config: KernelConfig,
+        stroke: Style.Stroke,
+        p0: PointF32,
+        tan_prev: PointF32,
+        tan_next: PointF32,
+        n_prev: PointF32,
+        n_next: PointF32,
+        transform: TransformF32.Matrix,
+        left_writer: *Writer,
+        right_writer: *Writer,
+    ) void {
+        var front0 = p0.add(n_prev);
+        const front1 = p0.add(n_next);
+        var back0 = p0.sub(n_next);
+        const back1 = p0.sub(n_prev);
+
+        const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
+        const d = tan_prev.dot(tan_next);
+
+        switch (stroke.join) {
+            .bevel => {
+                if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
+                    left_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
+                    right_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
+                }
+            },
+            .miter => {
+                const hypot = std.math.hypot(cr, d);
+                const miter_limit = stroke.miter_limit;
+
+                if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
+                    const is_backside = cr > 0.0;
+                    const fp_last = if (is_backside) back1 else front0;
+                    const fp_this = if (is_backside) back0 else front1;
+                    const p = if (is_backside) back0 else front0;
+
+                    const v = fp_this.sub(fp_last);
+                    const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+                    const miter_pt = fp_this.sub(tan_next.mul(PointF32{
+                        .x = h,
+                        .y = h,
+                    }));
+
+                    if (is_backside) {
+                        right_writer.write(Line.create(transform.apply(p), transform.apply(miter_pt)));
+                        back0 = miter_pt;
+                    } else {
+                        left_writer.write(Line.create(transform.apply(p), transform.apply(miter_pt)));
+                        front0 = miter_pt;
+                    }
+                }
+
+                left_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
+                right_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
+            },
+            .round => {
+                if (cr > 0.0) {
+                    flattenArc(
+                        config,
+                        back0,
+                        back1,
+                        p0,
+                        @abs(std.math.atan2(cr, d)),
+                        transform,
+                        right_writer,
+                    );
+
+                    left_writer.write(Line.create(transform.apply(front0), transform.apply(front1)));
+                } else {
+                    flattenArc(
+                        config,
+                        front0,
+                        front1,
+                        p0,
+                        @abs(std.math.atan2(cr, d)),
+                        transform,
+                        left_writer,
+                    );
+
+                    right_writer.write(Line.create(transform.apply(back0), transform.apply(back1)));
+                }
+            },
+        }
+    }
+
+    fn flattenArc(
+        config: KernelConfig,
+        start: PointF32,
+        end: PointF32,
+        center: PointF32,
+        angle: f32,
+        transform: TransformF32.Matrix,
+        writer: *Writer,
+    ) void {
+        var p0 = transform.apply(start);
+        var r = start.sub(center);
+        const radius = @max(config.error_tolerance, (p0.sub(transform.apply(center))).length());
+        const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
+
+        // Always output at least one line so that we always draw the chord.
+        const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
+
+        // let (s, c) = theta.sin_cos();
+        const s = std.math.sin(theta);
+        const c = std.math.cos(theta);
+        const rot = TransformF32.Matrix{
+            .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
+        };
+
+        for (0..n_lines - 1) |n| {
+            _ = n;
+            r = rot.apply(r);
+            const p1 = transform.apply(center.add(r));
+            writer.write(Line.create(p0, p1));
+            p0 = p1;
+        }
+
+        const p1 = transform.apply(end);
+        writer.write(Line.create(p0, p1));
+    }
+};
 
 pub const EspcRobust = enum(u8) {
     normal = 0,

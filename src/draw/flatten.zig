@@ -28,7 +28,7 @@ const EulerSegment = euler.EulerSegment;
 const Soup = soup_module.Soup;
 const Estimator = estimate_module.Estimator;
 const Scene = scene_module.Scene;
-const LineKernel = kernel_module.LineKernel;
+const Kernel = kernel_module.Kernel;
 const KernelConfig = kernel_module.KernelConfig;
 
 pub const Flattener = struct {
@@ -84,7 +84,7 @@ pub const Flattener = struct {
 
         while (fill_chunks.next()) |chunk| {
             try thread_pool.spawn(
-                LineKernel.flattenFill,
+                Kernel.flattenFill,
                 .{
                     config,
                     transforms,
@@ -106,7 +106,7 @@ pub const Flattener = struct {
 
         while (stroke_chunks.next()) |chunk| {
             try thread_pool.spawn(
-                LineKernel.flattenStroke,
+                Kernel.flattenStroke,
                 .{
                     config,
                     transforms,
