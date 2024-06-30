@@ -189,14 +189,15 @@ pub fn Kernel(comptime T: type) type {
             const curve = curves[curve_index];
             const flat_curve = flat_curves[flat_curve_index];
             const fill_items = items[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
+            var writer = Writer{
+                .items = fill_items,
+            };
+
             const cubic_points = getCubicPoints(
                 curve,
                 points[curve.point_offsets.start..curve.point_offsets.end],
             );
 
-            var writer = Writer{
-                .items = fill_items,
-            };
             flattenEuler(
                 config,
                 cubic_points,
@@ -234,10 +235,6 @@ pub fn Kernel(comptime T: type) type {
             const curve = curves[curve_index];
             const left_flat_curve = flat_curves[left_flat_curve_index];
             const right_flat_curve = flat_curves[right_flat_curve_index];
-            const cubic_points = getCubicPoints(
-                curve,
-                points[curve.point_offsets.start..curve.point_offsets.end],
-            );
             const left_stroke_items = items[left_flat_curve.item_offsets.start..left_flat_curve.item_offsets.end];
             const right_stroke_items = items[right_flat_curve.item_offsets.start..right_flat_curve.item_offsets.end];
             var left_writer = Writer{
@@ -257,6 +254,10 @@ pub fn Kernel(comptime T: type) type {
 
             const curve_range = subpaths[subpath_index].curve_offsets;
             const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
+            const cubic_points = getCubicPoints(
+                curve,
+                points[curve.point_offsets.start..curve.point_offsets.end],
+            );
             var tan_prev = cubicEndTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
             var tan_next = neighbor.tangent;
             var tan_start = cubicStartTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
