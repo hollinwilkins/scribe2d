@@ -104,23 +104,25 @@ const SegmentWriter = struct {
     flat_segments: []FlatSegment,
     buffer: []u8,
     buffer_start: u32,
-    index: usize = 0,
+    flat_segment_index: usize = 0,
+    buffer_index: usize = 0,
 
     pub fn writeLine(self: *@This(), line: Line) void {
         if (line.isEmpty()) {
             return;
         }
 
-        const segment_buffer_start: u32 = @intCast(self.buffer_start + self.index);
-        self.flat_segments[self.index] = FlatSegment{
+        const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
+        self.flat_segments[self.flat_segment_index] = FlatSegment{
             .kind = .line,
             .buffer_offsets = RangeU32{
                 .start = segment_buffer_start,
                 .end = segment_buffer_start + @sizeOf(Line),
             },
         };
-        std.mem.copyForwards(u8, self.buffer[self.index..], @alignCast(std.mem.asBytes(&line)));
-        self.index += @sizeOf(Line);
+        std.mem.copyForwards(u8, self.buffer[self.buffer_index..], @alignCast(std.mem.asBytes(&line)));
+        self.flat_segment_index += 1;
+        self.buffer_index += @sizeOf(Line);
     }
 
     pub fn writeArc(self: *@This(), arc: Arc) void {
@@ -128,16 +130,17 @@ const SegmentWriter = struct {
             return;
         }
 
-        const segment_buffer_start: u32 = @intCast(self.buffer_start + self.index);
-        self.flat_segments[self.index] = FlatSegment{
+        const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
+        self.flat_segments[self.flat_segment_index] = FlatSegment{
             .kind = .arc,
             .buffer_offsets = RangeU32{
                 .start = segment_buffer_start,
                 .end = segment_buffer_start + @sizeOf(Arc),
             },
         };
-        std.mem.copyForwards(u8, self.buffer[self.index..], @alignCast(std.mem.asBytes(&arc)));
-        self.index += @sizeOf(Arc);
+        std.mem.copyForwards(u8, self.buffer[self.buffer_index..], @alignCast(std.mem.asBytes(&arc)));
+        self.flat_segment_index += 1;
+        self.buffer_index += @sizeOf(Arc);
     }
 };
 
@@ -253,7 +256,8 @@ pub const Kernel = struct {
             &writer,
         );
 
-        flat_curves[flat_curve_index].buffer_offsets.end = flat_curve.buffer_offsets.start + @as(u32, @intCast(writer.index));
+        flat_curves[flat_curve_index].segment_offsets.end = flat_curve.segment_offsets.start + @as(u32, @intCast(writer.flat_segment_index));
+        flat_curves[flat_curve_index].buffer_offsets.end = flat_curve.buffer_offsets.start + @as(u32, @intCast(writer.buffer_index));
     }
 
     pub fn flattenStrokeJob(
@@ -397,7 +401,7 @@ pub const Kernel = struct {
                 &left_writer,
                 &right_writer,
             );
-            right_join_index = right_writer.index;
+            right_join_index = right_writer.buffer_index;
         }
 
         flattenEuler(
@@ -412,8 +416,10 @@ pub const Kernel = struct {
 
         // std.mem.reverse(Line, right_writer.lines[right_join_index..right_writer.index]);
 
-        flat_curves[left_flat_curve_index].buffer_offsets.end = left_flat_curve.buffer_offsets.start + @as(u32, @intCast(left_writer.index));
-        flat_curves[right_flat_curve_index].buffer_offsets.end = right_flat_curve.buffer_offsets.start + @as(u32, @intCast(right_writer.index));
+        flat_curves[left_flat_curve_index].segment_offsets.end = left_flat_curve.segment_offsets.start + @as(u32, @intCast(left_writer.flat_segment_index));
+        flat_curves[right_flat_curve_index].segment_offsets.end = right_flat_curve.segment_offsets.start + @as(u32, @intCast(right_writer.flat_segment_index));
+        flat_curves[left_flat_curve_index].buffer_offsets.end = left_flat_curve.buffer_offsets.start + @as(u32, @intCast(left_writer.buffer_index));
+        flat_curves[right_flat_curve_index].buffer_offsets.end = right_flat_curve.buffer_offsets.start + @as(u32, @intCast(right_writer.buffer_index));
     }
 
     fn flattenEuler(
