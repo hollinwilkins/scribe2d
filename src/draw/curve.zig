@@ -52,15 +52,6 @@ pub const Arc = struct {
         return std.meta.eql(self.start, self.end);
     }
 
-    pub fn translate(self: @This(), point: PointF32) @This() {
-        return @This(){
-            .start = self.start.add(point),
-            .center = self.center.add(point),
-            .end = self.end.add(point),
-            .angle = self.angle,
-        };
-    }
-
     pub fn applyT(self: @This(), t: f32) @This() {
         if (t == 0.0) {
             // special check to avoid floating point errors
@@ -80,6 +71,15 @@ pub const Arc = struct {
     }
 
     pub fn transform(self: @This(), t: TransformF32) @This() {
+        return @This(){
+            .start = t.apply(self.start),
+            .center = t.apply(self.center),
+            .end = t.apply(self.end),
+            .angle = self.angle,
+        };
+    }
+
+    pub fn transformMatrix(self: @This(), t: TransformF32.Matrix) @This() {
         return @This(){
             .start = t.apply(self.start),
             .center = t.apply(self.center),
@@ -182,6 +182,13 @@ pub const Line = struct {
 
     pub fn transform(self: Line, t: TransformF32) Line {
         return Line{
+            .start = t.apply(self.start),
+            .end = t.apply(self.end),
+        };
+    }
+
+    pub fn transformMatrix(self: @This(), t: TransformF32.Matrix) @This() {
+        return @This(){
             .start = t.apply(self.start),
             .end = t.apply(self.end),
         };
