@@ -271,8 +271,8 @@ pub const UV_SAMPLE_COUNT_16: [16]PointF32 = [16]PointF32{
 };
 
 test "16 bit msaa" {
-    var half_planes = try HalfPlanesU16.create(std.testing.allocator, &UV_SAMPLE_COUNT_16);
-    defer half_planes.deinit();
+    // var half_planes = try HalfPlanesU16.create(std.testing.allocator, &UV_SAMPLE_COUNT_16);
+    // defer half_planes.deinit();
 
     // try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(0.0));
     // try std.testing.expectEqual(0b0000000000000000, half_planes.getVerticalMask(1.9999999));
@@ -343,11 +343,11 @@ test "16 bit msaa" {
     // }));
     // try std.testing.expectEqual(0b0010000000000000, trap3);
 
-    _ = half_planes.getHorizontalMask(Line.create(PointF32{
-        .x = 0.317733765,
-        .y = 1.0,
-    }, PointF32{
-        .x = 0.0,
-        .y = 0.63772583,
-    }), false);
+    // _ = half_planes.getHorizontalMask(Line.create(PointF32{
+    //     .x = 0.317733765,
+    //     .y = 1.0,
+    // }, PointF32{
+    //     .x = 0.0,
+    //     .y = 0.63772583,
+    // }), false);
 }

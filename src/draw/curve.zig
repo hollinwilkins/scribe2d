@@ -26,7 +26,7 @@ pub const Intersection = struct {
             point.y = rounded_y;
         }
 
-        return @This() {
+        return @This(){
             .t = self.t,
             .point = point,
         };
@@ -37,7 +37,93 @@ pub const Arc = struct {
     start: PointF32,
     center: PointF32,
     end: PointF32,
-    angle: PointF32,
+    angle: f32,
+
+    pub fn create(start: PointF32, center: PointF32, end: PointF32, angle: f32) @This() {
+        return @This(){
+            .start = start,
+            .center = center,
+            .end = end,
+            .angle = angle,
+        };
+    }
+
+    pub fn isEmpty(self: @This()) bool {
+        return std.meta.eql(self.start, self.end);
+    }
+
+    pub fn translate(self: @This(), point: PointF32) @This() {
+        return @This(){
+            .start = self.start.add(point),
+            .center = self.center.add(point),
+            .end = self.end.add(point),
+            .angle = self.angle,
+        };
+    }
+
+    pub fn applyT(self: @This(), t: f32) @This() {
+        if (t == 0.0) {
+            // special check to avoid floating point errors
+            return self.start;
+        } else if (t == 1.0) {
+            return self.end;
+        }
+
+        const point = self.start.sub(self.center);
+        const radius = point.length();
+        const start_angle = point.atan2();
+        const angle = start_angle + self.angle * t;
+        return PointF32{
+            .x = radius * std.math.cos(angle),
+            .y = radius * std.math.sin(angle),
+        };
+    }
+
+    pub fn transform(self: @This(), t: TransformF32) @This() {
+        return @This(){
+            .start = t.apply(self.start),
+            .center = t.apply(self.center),
+            .end = t.apply(self.end),
+            .angle = self.angle,
+        };
+    }
+
+    pub fn intersectLine(self: @This(), line: Line, result: *[2]Intersection) []Intersection {
+        const dxdy = line.end.sub(line.start);
+        const dxdy_arc = line.end.sub(self.center);
+        const point = self.start.sub(self.center);
+        const start_angle = point.atan2();
+        const end_angle = start_angle + self.angle;
+        const radius = point.length();
+        const a = dxdy.lengthSquared();
+        const b = 2 * dxdy.dot(dxdy_arc);
+        const c = dxdy_arc.lengthSquared() - radius;
+        var roots_result: [2]f32 = [_]f32{undefined} ** 2;
+        const roots = getQuadraticRoots(a, b, c, &roots_result);
+
+        var intersections: usize = 0;
+        for (roots) |root| {
+            if (root < 0.0 or root > 1.0) {
+                continue;
+            }
+
+            const intersection_point = line.applyT(root);
+            const intersection_angle = intersection_point.sub(self.center).atan2();
+            const arc_t = intersection_angle - start_angle / (end_angle - start_angle);
+
+            if (arc_t < 0.0 or arc_t > 1.0) {
+                continue;
+            }
+
+            result[intersections] = Intersection{ .t = arc_t, .point = PointF32{
+                .x = intersection_point.x,
+                .y = intersection_point.y,
+            } };
+            intersections += 1;
+        }
+
+        return result[0..intersections];
+    }
 };
 
 pub const Line = struct {
@@ -101,27 +187,6 @@ pub const Line = struct {
         };
     }
 
-    pub fn invert(self: Line) Line {
-        return Line{
-            .start = self.start.invert(),
-            .end = self.end.invert(),
-        };
-    }
-
-    pub fn invertX(self: Line) Line {
-        return Line{
-            .start = self.start.invertX(),
-            .end = self.end.invertX(),
-        };
-    }
-
-    pub fn invertY(self: Line) Line {
-        return Line{
-            .start = self.start.invertY(),
-            .end = self.end.invertY(),
-        };
-    }
-
     pub fn getBounds(self: Line) RectF32 {
         return RectF32.create(self.start, self.end);
     }
@@ -145,7 +210,7 @@ pub const Line = struct {
         return self.getDeltaY() / self.getDeltaX();
     }
 
-    pub fn intersectHorizontalLineGeneric(self: Line, other: Line, result: *[3]Intersection) []Intersection{
+    pub fn intersectHorizontalLineGeneric(self: Line, other: Line, result: *[3]Intersection) []Intersection {
         if (self.intersectHorizontalLine(other)) |intersection| {
             result[0] = intersection;
             return result[0..1];
@@ -179,7 +244,7 @@ pub const Line = struct {
         };
     }
 
-    pub fn intersectVerticalLineGeneric(self: Line, other: Line, result: *[3]Intersection) []Intersection{
+    pub fn intersectVerticalLineGeneric(self: Line, other: Line, result: *[3]Intersection) []Intersection {
         if (self.intersectVerticalLine(other)) |intersection| {
             result[0] = intersection;
             return result[0..1];
@@ -275,41 +340,13 @@ pub const QuadraticBezier = struct {
         };
     }
 
-    pub fn invert(self: QuadraticBezier) QuadraticBezier {
-        return QuadraticBezier{
-            .start = self.start.invert(),
-            .end = self.end.invert(),
-            .control = self.control.invert(),
-        };
-    }
-
-    pub fn invertX(self: QuadraticBezier) QuadraticBezier {
-        return QuadraticBezier{
-            .start = self.start.invertX(),
-            .end = self.end.invertX(),
-            .control = self.control.invertX(),
-        };
-    }
-
-    pub fn invertY(self: QuadraticBezier) QuadraticBezier {
-        return QuadraticBezier{
-            .start = self.start.invertY(),
-            .end = self.end.invertY(),
-            .control = self.control.invertY(),
-        };
-    }
-
-    pub fn intersectHorizontalLineGeneric(self: QuadraticBezier, line: Line, result: *[3]Intersection) []const Intersection {
-        return self.intersectHorizontalLine(line, result);
-    }
-
     pub fn intersectHorizontalLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {
         std.debug.assert(line.isHorizontal());
         const a = self.start.y - (2.0 * self.control.y) + self.end.y;
         const b = 2.0 * (self.control.y - self.start.y);
         const c = self.start.y - line.start.y;
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
-        const roots = getRoots(a, b, c, &roots_result);
+        const roots = getQuadraticRoots(a, b, c, &roots_result);
 
         var intersections: usize = 0;
         for (roots) |root| {
@@ -332,17 +369,13 @@ pub const QuadraticBezier = struct {
         return result[0..intersections];
     }
 
-    pub fn intersectVerticalLineGeneric(self: QuadraticBezier, line: Line, result: *[3]Intersection) []const Intersection {
-        return self.intersectVerticalLine(line, result);
-    }
-
     pub fn intersectVerticalLine(self: QuadraticBezier, line: Line, result: *[2]Intersection) []const Intersection {
         std.debug.assert(line.isVertical());
         const a = self.start.x - (2.0 * self.control.x) + self.end.x;
         const b = 2.0 * (self.control.x - self.start.x);
         const c = self.start.x - line.start.x;
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
-        const roots = getRoots(a, b, c, &roots_result);
+        const roots = getQuadraticRoots(a, b, c, &roots_result);
 
         var intersections: usize = 0;
         for (roots) |root| {
@@ -364,29 +397,29 @@ pub const QuadraticBezier = struct {
 
         return result[0..intersections];
     }
-
-    pub fn getRoots(a: f32, b: f32, c: f32, result: *[2]f32) []const f32 {
-        if (a == 0) {
-            result[0] = -c / b;
-            return result[0..1];
-        }
-
-        const d = b * b - 4 * a * c;
-
-        if (d > 0) {
-            const e = std.math.sqrt(d);
-            const two_a = 2.0 * a;
-            result[0] = (-b + e) / two_a;
-            result[1] = (-b - e) / two_a;
-            return result[0..2];
-        } else if (d == 0) {
-            result[0] = -b / (2.0 * a);
-            return result[0..1];
-        }
-
-        return &.{};
-    }
 };
+
+pub fn getQuadraticRoots(a: f32, b: f32, c: f32, result: *[2]f32) []const f32 {
+    if (a == 0) {
+        result[0] = -c / b;
+        return result[0..1];
+    }
+
+    const d = b * b - 4 * a * c;
+
+    if (d > 0) {
+        const e = std.math.sqrt(d);
+        const two_a = 2.0 * a;
+        result[0] = (-b + e) / two_a;
+        result[1] = (-b - e) / two_a;
+        return result[0..2];
+    } else if (d == 0) {
+        result[0] = -b / (2.0 * a);
+        return result[0..1];
+    }
+
+    return &.{};
+}
 
 test "horizontal line intersections" {
     const test_util = @import("./test_util.zig");
