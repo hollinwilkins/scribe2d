@@ -12,6 +12,7 @@ const RangeF32 = core.RangeF32;
 const FlatPath = soup_module.FlatPath;
 const FlatSubpath = soup_module.FlatSubpath;
 const FlatCurve = soup_module.FlatCurve;
+const FlatSegment = soup_module.FlatSegment;
 const FillJob = soup_module.FillJob;
 const StrokeJob = soup_module.StrokeJob;
 const Path = shape_module.Path;
@@ -99,8 +100,10 @@ pub const KernelConfig = struct {
     }
 };
 
-const Writer = struct {
+const SegmentWriter = struct {
+    flat_segments: []FlatSegment,
     buffer: []u8,
+    buffer_start: u32,
     index: usize = 0,
 
     pub fn writeLine(self: *@This(), line: Line) void {
@@ -108,6 +111,14 @@ const Writer = struct {
             return;
         }
 
+        const segment_buffer_start: u32 = @intCast(self.buffer_start + self.index);
+        self.flat_segments[self.index] = FlatSegment{
+            .kind = .line,
+            .buffer_offsets = RangeU32{
+                .start = segment_buffer_start,
+                .end = segment_buffer_start + @sizeOf(Line),
+            },
+        };
         std.mem.copyForwards(u8, self.buffer[self.index..], @alignCast(std.mem.asBytes(&line)));
         self.index += @sizeOf(Line);
     }
@@ -117,6 +128,14 @@ const Writer = struct {
             return;
         }
 
+        const segment_buffer_start: u32 = @intCast(self.buffer_start + self.index);
+        self.flat_segments[self.index] = FlatSegment{
+            .kind = .arc,
+            .buffer_offsets = RangeU32{
+                .start = segment_buffer_start,
+                .end = segment_buffer_start + @sizeOf(Arc),
+            },
+        };
         std.mem.copyForwards(u8, self.buffer[self.index..], @alignCast(std.mem.asBytes(&arc)));
         self.index += @sizeOf(Arc);
     }
@@ -133,6 +152,7 @@ pub const Kernel = struct {
         fill_range: RangeU32,
         // write destination
         flat_curves: []FlatCurve,
+        flat_segments: []FlatSegment,
         buffer: []u8,
     ) void {
         for (fill_jobs[fill_range.start..fill_range.end]) |fill_job| {
@@ -147,6 +167,7 @@ pub const Kernel = struct {
                 fill_job.flat_curve_index,
                 // output
                 flat_curves,
+                flat_segments,
                 buffer,
             );
         }
@@ -164,6 +185,7 @@ pub const Kernel = struct {
         stroke_range: RangeU32,
         // write destination
         flat_curves: []FlatCurve,
+        flat_segments: []FlatSegment,
         buffer: []u8,
     ) void {
         for (stroke_jobs[stroke_range.start..stroke_range.end]) |stroke_job| {
@@ -183,6 +205,7 @@ pub const Kernel = struct {
                 stroke_job.right_flat_curve_index,
                 // output
                 flat_curves,
+                flat_segments,
                 buffer,
             );
         }
@@ -201,14 +224,18 @@ pub const Kernel = struct {
         flat_curve_index: u32,
         // write destination
         flat_curves: []FlatCurve,
+        flat_segments: []FlatSegment,
         buffer: []u8,
     ) void {
         const transform = transforms[transform_index];
         const curve = curves[curve_index];
         const flat_curve = flat_curves[flat_curve_index];
+        const flat_curve_segments = flat_segments[flat_curve.segment_offsets.start..flat_curve.segment_offsets.end];
         const flat_curve_buffer = buffer[flat_curve.buffer_offsets.start..flat_curve.buffer_offsets.end];
-        var writer = Writer{
+        var writer = SegmentWriter{
+            .flat_segments = flat_curve_segments,
             .buffer = flat_curve_buffer,
+            .buffer_start = flat_curve.buffer_offsets.start,
         };
 
         const cubic_points = getCubicPoints(
@@ -247,19 +274,26 @@ pub const Kernel = struct {
         right_flat_curve_index: u32,
         // write destination
         flat_curves: []FlatCurve,
+        flat_segments: []FlatSegment,
         buffer: []u8,
     ) void {
         const transform = transforms[transform_index];
         const curve = curves[curve_index];
         const left_flat_curve = flat_curves[left_flat_curve_index];
         const right_flat_curve = flat_curves[right_flat_curve_index];
+        const left_flat_segments = flat_segments[left_flat_curve.segment_offsets.start..left_flat_curve.segment_offsets.end];
+        const right_flat_segments = flat_segments[right_flat_curve.segment_offsets.start..right_flat_curve.segment_offsets.end];
         const left_flat_curve_buffer = buffer[left_flat_curve.buffer_offsets.start..left_flat_curve.buffer_offsets.end];
         const right_flat_curve_buffer = buffer[right_flat_curve.buffer_offsets.start..right_flat_curve.buffer_offsets.end];
-        var left_writer = Writer{
+        var left_writer = SegmentWriter{
+            .flat_segments = left_flat_segments,
             .buffer = left_flat_curve_buffer,
+            .buffer_start = left_flat_curve.segment_offsets.start,
         };
-        var right_writer = Writer{
+        var right_writer = SegmentWriter{
+            .flat_segments = right_flat_segments,
             .buffer = right_flat_curve_buffer,
+            .buffer_start = right_flat_curve.segment_offsets.start,
         };
         const style = styles[style_index];
         const stroke = style.stroke.?;
@@ -389,7 +423,7 @@ pub const Kernel = struct {
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
-        writer: *Writer,
+        writer: *SegmentWriter,
     ) void {
         const p0 = transform.apply(cubic_points.point0);
         const p1 = transform.apply(cubic_points.point1);
@@ -501,7 +535,7 @@ pub const Kernel = struct {
         lowering: EulerLoweringParams,
         p0: PointF32,
         t_range: RangeF32,
-        writer: *Writer,
+        writer: *SegmentWriter,
     ) PointF32 {
         const euler_segment = lowering.euler_segment;
         const range_size = t_range.end - t_range.start;
@@ -572,7 +606,7 @@ pub const Kernel = struct {
         cap1: PointF32,
         offset_tangent: PointF32,
         transform: TransformF32.Matrix,
-        writer: *Writer,
+        writer: *SegmentWriter,
     ) void {
         if (cap_style == .round) {
             writer.writeArc(Arc.create(
@@ -608,8 +642,8 @@ pub const Kernel = struct {
         n_prev: PointF32,
         n_next: PointF32,
         transform: TransformF32.Matrix,
-        left_writer: *Writer,
-        right_writer: *Writer,
+        left_writer: *SegmentWriter,
+        right_writer: *SegmentWriter,
     ) void {
         var front0 = p0.add(n_prev);
         const front1 = p0.add(n_next);

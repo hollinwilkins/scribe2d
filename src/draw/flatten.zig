@@ -92,6 +92,7 @@ pub const Flattener = struct {
                     soup.fill_jobs.items,
                     chunk,
                     soup.flat_curves.items,
+                    soup.flat_segments.items,
                     soup.buffer.items,
                 },
             );
@@ -116,6 +117,7 @@ pub const Flattener = struct {
                     soup.stroke_jobs.items,
                     chunk,
                     soup.flat_curves.items,
+                    soup.flat_segments.items,
                     soup.buffer.items,
                 },
             );
