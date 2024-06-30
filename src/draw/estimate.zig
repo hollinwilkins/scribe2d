@@ -38,7 +38,7 @@ pub const ArcEstimate = struct {
     length: f32 = 0.0,
 };
 
-pub const SoupEstimator = struct {
+pub const Estimator = struct {
     const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
     pub fn estimateSceneAlloc(allocator: Allocator, scene: Scene) !Soup {
@@ -276,9 +276,9 @@ pub const SoupEstimator = struct {
                 const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
                 for (curves) |*curve| {
                     var curve_intersections: u32 = 0;
-                    const items = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
-                    for (items) |item| {
-                        curve_intersections += LineEstimatorImpl.estimateIntersections(item);
+                    const lines = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
+                    for (lines) |line| {
+                        curve_intersections += LineEstimatorImpl.estimateIntersections(line);
                     }
 
                     soup.openFlatCurveIntersections(curve);

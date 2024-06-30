@@ -13,7 +13,7 @@ const Shape = shape_module.Shape;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
 const Soup = soup_module.Soup;
-const SoupRasterizer = raster_module.SoupRasterizer;
+const SoupRasterizer = raster_module.Rasterizer;
 const PathMetadata = shape_module.PathMetadata;
 
 pub const Style = struct {
@@ -61,7 +61,7 @@ pub const Style = struct {
     }
 };
 
-pub const SoupPen = struct {
+pub const Pen = struct {
     pub const DEFAULT_BLEND: ColorBlend = ColorBlend.Alpha;
 
     allocator: Allocator,

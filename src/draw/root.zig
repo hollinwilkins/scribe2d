@@ -18,10 +18,10 @@ pub const Shape = shape.Shape;
 pub const ShapeBuilder = shape.ShapeBuilder;
 
 pub const Soup = soup.Soup;
-pub const SoupEstimator = estimate.SoupEstimator;
-pub const SoupRasterizer = raster.SoupRasterizer;
+pub const Estimator = estimate.Estimator;
+pub const Rasterizer = raster.Rasterizer;
 
-pub const SoupPen = pen.SoupPen;
+pub const SoupPen = pen.Pen;
 pub const Style = pen.Style;
 
 pub const Color = texture.Color;
@@ -35,7 +35,7 @@ pub const Arc = curve.Arc;
 pub const Line = curve.Line;
 pub const QuadraticBezier = curve.QuadraticBezier;
 
-pub const PathFlattener = flatten.PathFlattener;
+pub const PathFlattener = flatten.Flattener;
 
 pub const Scene = scene.Scene;
 

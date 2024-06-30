@@ -26,12 +26,12 @@ const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
 const Soup = soup_module.Soup;
-const SoupEstimator = estimate_module.SoupEstimator;
+const Estimator = estimate_module.Estimator;
 const Scene = scene_module.Scene;
 const LineKernel = kernel_module.LineKernel;
 const KernelConfig = kernel_module.KernelConfig;
 
-pub const PathFlattener = struct {
+pub const Flattener = struct {
     const PathRecord = struct {
         path_index: u32,
     };
@@ -59,7 +59,7 @@ pub const PathFlattener = struct {
         transforms: []const TransformF32.Matrix,
         shape: Shape,
     ) !Soup {
-        var soup = try SoupEstimator.estimateAlloc(
+        var soup = try Estimator.estimateAlloc(
             allocator,
             config,
             metadatas,

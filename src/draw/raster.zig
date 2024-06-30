@@ -30,7 +30,7 @@ const GridIntersection = soup_module.GridIntersection;
 const BoundaryFragment = soup_module.BoundaryFragment;
 const MergeFragment = soup_module.MergeFragment;
 const Span = soup_module.Span;
-const SoupEstimator = soup_estimate_module.SoupEstimator;
+const Estimator = soup_estimate_module.Estimator;
 
 pub fn Writer(comptime T: type) type {
     return struct {
@@ -60,7 +60,7 @@ const BoundaryFragmentWriter = Writer(BoundaryFragment);
 const MergeFragmentWriter = Writer(MergeFragment);
 const SpanWriter = Writer(Span);
 
-pub const SoupRasterizer = struct {
+pub const Rasterizer = struct {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
     half_planes: *const HalfPlanesU16,
 
@@ -71,7 +71,7 @@ pub const SoupRasterizer = struct {
     }
 
     pub fn rasterize(self: @This(), soup: *Soup) !void {
-        try SoupEstimator.estimateRaster(soup);
+        try Estimator.estimateRaster(soup);
 
         for (soup.flat_paths.items) |*path| {
             const subpaths = soup.flat_subpaths.items[path.flat_subpath_offsets.start..path.flat_subpath_offsets.end];

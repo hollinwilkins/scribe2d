@@ -118,7 +118,7 @@ pub fn main() !void {
         }
         std.debug.print("-----------------------------\n", .{});
     }
-    const rasterizer = draw.SoupRasterizer.create(&half_planes);
+    const rasterizer = draw.Rasterizer.create(&half_planes);
 
     zstbi.init(allocator);
     defer zstbi.deinit();
