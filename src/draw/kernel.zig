@@ -112,6 +112,7 @@ const SegmentWriter = struct {
             return;
         }
 
+        std.debug.print("WriteLine({})\n", .{line});
         const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
         self.flat_segments[self.flat_segment_index] = FlatSegment{
             .kind = .line,
@@ -130,6 +131,7 @@ const SegmentWriter = struct {
             return;
         }
 
+        std.debug.print("WriteArc({})\n", .{arc});
         const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
         self.flat_segments[self.flat_segment_index] = FlatSegment{
             .kind = .arc,
@@ -141,6 +143,24 @@ const SegmentWriter = struct {
         std.mem.copyForwards(u8, self.buffer[self.buffer_index..], @alignCast(std.mem.asBytes(&arc)));
         self.flat_segment_index += 1;
         self.buffer_index += @sizeOf(Arc);
+    }
+
+    pub fn debugPrint(self: @This(), buffer: []const u8) void {
+        std.debug.print("=============== DEBUG FLAT SEGMENT =============\n", .{});
+        for (self.flat_segments[0..self.flat_segment_index]) |flat_segment| {
+            switch (flat_segment.kind) {
+                .line => {
+                    const line = flat_segment.getBufferLine(buffer);
+                    std.debug.print("{}\n", .{line});
+                },
+                .arc => {
+                    const arc = flat_segment.getBufferArc(buffer);
+                    std.debug.print("{}\n", .{arc});
+                },
+                else => unreachable,
+            }
+        }
+        std.debug.print("=============== DEBUG FLAT SEGMENT =============\n", .{});
     }
 };
 
@@ -292,12 +312,12 @@ pub const Kernel = struct {
         var left_writer = SegmentWriter{
             .flat_segments = left_flat_segments,
             .buffer = left_flat_curve_buffer,
-            .buffer_start = left_flat_curve.segment_offsets.start,
+            .buffer_start = left_flat_curve.buffer_offsets.start,
         };
         var right_writer = SegmentWriter{
             .flat_segments = right_flat_segments,
             .buffer = right_flat_curve_buffer,
-            .buffer_start = right_flat_curve.segment_offsets.start,
+            .buffer_start = right_flat_curve.buffer_offsets.start,
         };
         const style = styles[style_index];
         const stroke = style.stroke.?;
@@ -309,11 +329,11 @@ pub const Kernel = struct {
         };
 
         const curve_range = subpaths[subpath_index].curve_offsets;
-        const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
         const cubic_points = getCubicPoints(
             curve,
             points[curve.point_offsets.start..curve.point_offsets.end],
         );
+        const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
         var tan_prev = cubicEndTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
         var tan_next = neighbor.tangent;
         var tan_start = cubicStartTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
@@ -413,8 +433,6 @@ pub const Kernel = struct {
             cubic_points.point3.sub(n_prev),
             &right_writer,
         );
-
-        // std.mem.reverse(Line, right_writer.lines[right_join_index..right_writer.index]);
 
         flat_curves[left_flat_curve_index].segment_offsets.end = left_flat_curve.segment_offsets.start + @as(u32, @intCast(left_writer.flat_segment_index));
         flat_curves[right_flat_curve_index].segment_offsets.end = right_flat_curve.segment_offsets.start + @as(u32, @intCast(right_writer.flat_segment_index));
@@ -549,9 +567,7 @@ pub const Kernel = struct {
         const normalized_offset = lowering.offset / lowering.chord_len;
         const offset = lowering.offset;
         const arclen = euler_segment.p1.sub(euler_segment.p0).length() / euler_segment.params.ch;
-        const est_err1: f32 = (1.0 / 120.0) / config.error_tolerance;
-        const est_err2: f32 = (arclen * 0.4 * @abs(k1 * offset));
-        const est_err: f32 = est_err1 * @abs(k1) * est_err2;
+        const est_err: f32 = (1.0 / 120.0) / config.error_tolerance * @abs(k1) * (arclen * 0.4 * @abs(k1 * offset));
         const n_subdiv = cbrt(config, est_err);
         const n = @max(@as(u32, @intFromFloat(n_subdiv * range_size)), 1);
         const arc_dt = 1.0 / @as(f32, @floatFromInt(n));
@@ -562,8 +578,8 @@ pub const Kernel = struct {
             const arc_t0 = @as(f32, @floatFromInt(i)) * arc_dt;
             const arc_t1 = arc_t0 + arc_dt;
             if (i + 1 == n) {
-                // ap1 = euler_segment.p1; // should be this probably
-                ap1 = euler_segment.applyOffset(t_range.end, normalized_offset);
+                ap1 = euler_segment.p1; // should be this probably
+                // ap1 = euler_segment.applyOffset(t_range.end, normalized_offset);
             } else {
                 ap1 = euler_segment.applyOffset(t_range.start + range_size * arc_t1, normalized_offset);
             }
@@ -594,8 +610,8 @@ pub const Kernel = struct {
                 });
                 writer.writeArc(Arc.create(
                     l0,
-                    l1,
                     center,
+                    l1,
                     2.0 * angle,
                 ).transformMatrix(lowering.transform));
             }

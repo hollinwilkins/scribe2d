@@ -48,9 +48,9 @@ pub fn main() !void {
         .width = 2.0,
         .join = .round,
     };
-    style.fill = draw.Style.Fill{
-        .color = draw.Color.BLUE,
-    };
+    // style.fill = draw.Style.Fill{
+    //     .color = draw.Color.BLUE,
+    // };
     try scene.shape.copyPath(glyph_paths, 0);
     try scene.close();
 
