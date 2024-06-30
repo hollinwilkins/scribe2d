@@ -55,6 +55,18 @@ pub const FlatSegment = struct {
 
     kind: Kind = .none,
     buffer_offsets: RangeU32 = RangeU32{},
+
+    pub fn getBufferLine(self: @This(), buffer: []const u8) Line {
+        std.debug.assert(self.kind == .line);
+        const bytes = buffer[self.buffer_offsets.start..self.buffer_offsets.end];
+        return std.mem.bytesToValue(Line, bytes);
+    }
+
+    pub fn getBufferArc(self: @This(), buffer: []const u8) Arc {
+        std.debug.assert(self.kind == .arc);
+        const bytes = buffer[self.buffer_offsets.start..self.buffer_offsets.end];
+        return std.mem.bytesToValue(Arc, bytes);
+    }
 };
 
 pub const FlatCurveEstimate = struct {
@@ -425,16 +437,6 @@ pub const Soup = struct {
 
     pub fn addFlatSegments(self: *@This(), n: usize) ![]FlatSegment {
         return try self.flat_segments.addManyAsSlice(self.allocator, n);
-    }
-
-    pub fn getFlatSegmentLine(self: @This(), flat_segment: FlatSegment) Line {
-        const bytes = self.buffer.items[flat_segment.buffer_offsets.start..flat_segment.buffer_offsets.end];
-        return std.mem.bytesToValue(Line, bytes);
-    }
-
-    pub fn getFlatSegmentArc(self: @This(), flat_segment: FlatSegment) Arc {
-        const bytes = self.buffer.items[flat_segment.buffer_offsets.start..flat_segment.buffer_offsets.end];
-        return std.mem.bytesToValue(Arc, bytes);
     }
 
     pub fn openFlatSegmentBuffer(self: *@This(), segment: *FlatSegment) void {

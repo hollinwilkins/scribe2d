@@ -298,11 +298,11 @@ pub const Estimator = struct {
                     for (segments) |segment| {
                         switch (segment.kind) {
                             .line => {
-                                const line = soup.getFlatSegmentLine(segment);
+                                const line = segment.getBufferLine(soup.buffer.items);
                                 curve_intersections += estimateLineIntersections(line.start, line.end);
                             },
                             .arc => {
-                                const arc = soup.getFlatSegmentArc(segment);
+                                const arc = segment.getBufferArc(soup.buffer.items);
                                 curve_intersections += estimateArcIntersections(arc.start, arc.end);
                             },
                             else => unreachable,
