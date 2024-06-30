@@ -12,8 +12,8 @@ const AlphaColorBlend = texture_module.AlphaColorBlend;
 const Shape = shape_module.Shape;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const PointU32 = core.PointU32;
-const LineSoup = soup_module.LineSoup;
-const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
+const Soup = soup_module.Soup;
+const SoupRasterizer = soup_raster.SoupRasterizer;
 const PathMetadata = shape_module.PathMetadata;
 
 pub const Style = struct {
@@ -65,9 +65,9 @@ pub const SoupPen = struct {
     pub const DEFAULT_BLEND: ColorBlend = ColorBlend.Alpha;
 
     allocator: Allocator,
-    rasterizer: *const LineSoupRasterizer,
+    rasterizer: *const SoupRasterizer,
 
-    pub fn init(allocator: Allocator, rasterizer: *const LineSoupRasterizer) @This() {
+    pub fn init(allocator: Allocator, rasterizer: *const SoupRasterizer) @This() {
         return @This(){
             .allocator = allocator,
             .rasterizer = rasterizer,
@@ -80,16 +80,16 @@ pub const SoupPen = struct {
 
     pub fn draw(
         self: @This(),
-        line_soup: *LineSoup,
+        soup: *Soup,
         texture: *TextureUnmanaged,
     ) !void {
-        try self.rasterizer.rasterize(line_soup);
+        try self.rasterizer.rasterize(soup);
 
         const blend = DEFAULT_BLEND;
 
-        for (line_soup.flat_paths.items) |path| {
+        for (soup.flat_paths.items) |path| {
             const color = path.fill.color;
-            const merge_fragments = line_soup.merge_fragments.items[path.merge_offsets.start..path.merge_offsets.end];
+            const merge_fragments = soup.merge_fragments.items[path.merge_offsets.start..path.merge_offsets.end];
 
             for (merge_fragments) |merge_fragment| {
                 const pixel = merge_fragment.pixel;
@@ -111,7 +111,7 @@ pub const SoupPen = struct {
                 }
             }
 
-            const spans = line_soup.spans.items[path.span_offsets.start..path.span_offsets.end];
+            const spans = soup.spans.items[path.span_offsets.start..path.span_offsets.end];
             for (spans) |span| {
                 for (0..span.x_range.size()) |x_offset| {
                     const x = @as(i32, @intCast(span.x_range.start)) + @as(i32, @intCast(x_offset));

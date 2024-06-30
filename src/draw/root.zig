@@ -17,9 +17,9 @@ const kernel = @import("./kernel.zig");
 pub const Shape = shape.Shape;
 pub const ShapeBuilder = shape.ShapeBuilder;
 
-pub const LineSoup = soup.LineSoup;
-pub const LineSoupEstimator = soup_estimate.LineSoupEstimator;
-pub const LineSoupRasterizer = soup_raster.LineSoupRasterizer;
+pub const Soup = soup.Soup;
+pub const SoupEstimator = soup_estimate.SoupEstimator;
+pub const SoupRasterizer = soup_raster.SoupRasterizer;
 
 pub const SoupPen = soup_pen.SoupPen;
 pub const Style = soup_pen.Style;

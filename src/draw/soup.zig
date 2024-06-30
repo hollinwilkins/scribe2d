@@ -243,201 +243,197 @@ pub const GridIntersection = struct {
     }
 };
 
-pub fn Soup(comptime T: type) type {
-    return struct {
-        pub const FlatPathList = std.ArrayListUnmanaged(FlatPath);
-        pub const FlatSubpathList = std.ArrayListUnmanaged(FlatSubpath);
-        pub const FlatCurveList = std.ArrayListUnmanaged(FlatCurve);
-        pub const EstimateList = std.ArrayListUnmanaged(u32);
-        pub const FillJobList = std.ArrayListUnmanaged(FillJob);
-        pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
-        pub const ItemList = std.ArrayListUnmanaged(T);
-        pub const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
-        pub const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
-        pub const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
-        pub const SpanList = std.ArrayListUnmanaged(Span);
+pub const Soup = struct {
+    pub const FlatPathList = std.ArrayListUnmanaged(FlatPath);
+    pub const FlatSubpathList = std.ArrayListUnmanaged(FlatSubpath);
+    pub const FlatCurveList = std.ArrayListUnmanaged(FlatCurve);
+    pub const EstimateList = std.ArrayListUnmanaged(u32);
+    pub const FillJobList = std.ArrayListUnmanaged(FillJob);
+    pub const StrokeJobList = std.ArrayListUnmanaged(StrokeJob);
+    pub const LineList = std.ArrayListUnmanaged(Line);
+    pub const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
+    pub const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
+    pub const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
+    pub const SpanList = std.ArrayListUnmanaged(Span);
 
-        allocator: Allocator,
-        flat_paths: FlatPathList = FlatPathList{},
-        flat_subpaths: FlatSubpathList = FlatSubpathList{},
-        flat_curves: FlatCurveList = FlatCurveList{},
-        flat_curve_estimates: EstimateList = EstimateList{},
-        base_estimates: EstimateList = EstimateList{},
-        fill_jobs: FillJobList = FillJobList{},
-        stroke_jobs: StrokeJobList = StrokeJobList{},
-        items: ItemList = ItemList{},
-        grid_intersections: GridIntersectionList = GridIntersectionList{},
-        boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
-        merge_fragments: MergeFragmentList = MergeFragmentList{},
-        spans: SpanList = SpanList{},
+    allocator: Allocator,
+    flat_paths: FlatPathList = FlatPathList{},
+    flat_subpaths: FlatSubpathList = FlatSubpathList{},
+    flat_curves: FlatCurveList = FlatCurveList{},
+    flat_curve_estimates: EstimateList = EstimateList{},
+    base_estimates: EstimateList = EstimateList{},
+    fill_jobs: FillJobList = FillJobList{},
+    stroke_jobs: StrokeJobList = StrokeJobList{},
+    lines: LineList = LineList{},
+    grid_intersections: GridIntersectionList = GridIntersectionList{},
+    boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
+    merge_fragments: MergeFragmentList = MergeFragmentList{},
+    spans: SpanList = SpanList{},
 
-        pub fn init(allocator: Allocator) @This() {
-            return @This(){
-                .allocator = allocator,
-            };
-        }
+    pub fn init(allocator: Allocator) @This() {
+        return @This(){
+            .allocator = allocator,
+        };
+    }
 
-        pub fn deinit(self: *@This()) void {
-            self.flat_paths.deinit(self.allocator);
-            self.flat_subpaths.deinit(self.allocator);
-            self.flat_curves.deinit(self.allocator);
-            self.flat_curve_estimates.deinit(self.allocator);
-            self.base_estimates.deinit(self.allocator);
-            self.fill_jobs.deinit(self.allocator);
-            self.stroke_jobs.deinit(self.allocator);
-            self.items.deinit(self.allocator);
-            self.grid_intersections.deinit(self.allocator);
-            self.boundary_fragments.deinit(self.allocator);
-            self.merge_fragments.deinit(self.allocator);
-            self.spans.deinit(self.allocator);
-        }
+    pub fn deinit(self: *@This()) void {
+        self.flat_paths.deinit(self.allocator);
+        self.flat_subpaths.deinit(self.allocator);
+        self.flat_curves.deinit(self.allocator);
+        self.flat_curve_estimates.deinit(self.allocator);
+        self.base_estimates.deinit(self.allocator);
+        self.fill_jobs.deinit(self.allocator);
+        self.stroke_jobs.deinit(self.allocator);
+        self.lines.deinit(self.allocator);
+        self.grid_intersections.deinit(self.allocator);
+        self.boundary_fragments.deinit(self.allocator);
+        self.merge_fragments.deinit(self.allocator);
+        self.spans.deinit(self.allocator);
+    }
 
-        pub fn addFlatPath(self: *@This()) !*FlatPath {
-            const path = try self.flat_paths.addOne(self.allocator);
-            path.* = FlatPath{};
-            return path;
-        }
+    pub fn addFlatPath(self: *@This()) !*FlatPath {
+        const path = try self.flat_paths.addOne(self.allocator);
+        path.* = FlatPath{};
+        return path;
+    }
 
-        pub fn openFlatPathSubpaths(self: @This(), flat_path: *FlatPath) void {
-            flat_path.flat_subpath_offsets.start = @intCast(self.flat_subpaths.items.len);
-        }
+    pub fn openFlatPathSubpaths(self: @This(), flat_path: *FlatPath) void {
+        flat_path.flat_subpath_offsets.start = @intCast(self.flat_subpaths.items.len);
+    }
 
-        pub fn openFlatPathBoundaries(self: *@This(), flat_path: *FlatPath) void {
-            flat_path.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
-        }
+    pub fn openFlatPathBoundaries(self: *@This(), flat_path: *FlatPath) void {
+        flat_path.boundary_offsets.start = @intCast(self.boundary_fragments.items.len);
+    }
 
-        pub fn openFlatPathMerges(self: *@This(), flat_path: *FlatPath) void {
-            flat_path.merge_offsets.start = @intCast(self.merge_fragments.items.len);
-        }
+    pub fn openFlatPathMerges(self: *@This(), flat_path: *FlatPath) void {
+        flat_path.merge_offsets.start = @intCast(self.merge_fragments.items.len);
+    }
 
-        pub fn openFlatPathSpans(self: *@This(), flat_path: *FlatPath) void {
-            flat_path.span_offsets.start = @intCast(self.spans.items.len);
-        }
+    pub fn openFlatPathSpans(self: *@This(), flat_path: *FlatPath) void {
+        flat_path.span_offsets.start = @intCast(self.spans.items.len);
+    }
 
-        pub fn closeFlatPathSubpaths(self: @This(), flat_path: *FlatPath) void {
-            flat_path.flat_subpath_offsets.end = @intCast(self.flat_subpaths.items.len);
-        }
+    pub fn closeFlatPathSubpaths(self: @This(), flat_path: *FlatPath) void {
+        flat_path.flat_subpath_offsets.end = @intCast(self.flat_subpaths.items.len);
+    }
 
-        pub fn closeFlatPathBoundaries(self: *@This(), flat_path: *FlatPath) void {
-            flat_path.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
-        }
+    pub fn closeFlatPathBoundaries(self: *@This(), flat_path: *FlatPath) void {
+        flat_path.boundary_offsets.end = @intCast(self.boundary_fragments.items.len);
+    }
 
-        pub fn closeFlatPathMerges(self: *@This(), flat_path: *FlatPath) void {
-            flat_path.merge_offsets.end = @intCast(self.merge_fragments.items.len);
-        }
+    pub fn closeFlatPathMerges(self: *@This(), flat_path: *FlatPath) void {
+        flat_path.merge_offsets.end = @intCast(self.merge_fragments.items.len);
+    }
 
-        pub fn closeFlatPathSpans(self: *@This(), flat_path: *FlatPath) void {
-            flat_path.span_offsets.end = @intCast(self.spans.items.len);
-        }
+    pub fn closeFlatPathSpans(self: *@This(), flat_path: *FlatPath) void {
+        flat_path.span_offsets.end = @intCast(self.spans.items.len);
+    }
 
-        pub fn addFlatSubpath(self: *@This()) !*FlatSubpath {
-            const subpath = try self.flat_subpaths.addOne(self.allocator);
-            subpath.* = FlatSubpath{};
-            return subpath;
-        }
+    pub fn addFlatSubpath(self: *@This()) !*FlatSubpath {
+        const subpath = try self.flat_subpaths.addOne(self.allocator);
+        subpath.* = FlatSubpath{};
+        return subpath;
+    }
 
-        pub fn openFlatSubpathCurves(self: @This(), flat_subpath: *FlatSubpath) void {
-            flat_subpath.flat_curve_offsets.start = @intCast(self.flat_curves.items.len);
-        }
+    pub fn openFlatSubpathCurves(self: @This(), flat_subpath: *FlatSubpath) void {
+        flat_subpath.flat_curve_offsets.start = @intCast(self.flat_curves.items.len);
+    }
 
-        pub fn closeFlatSubpathCurves(self: @This(), flat_subpath: *FlatSubpath) void {
-            flat_subpath.flat_curve_offsets.end = @intCast(self.flat_curves.items.len);
-        }
+    pub fn closeFlatSubpathCurves(self: @This(), flat_subpath: *FlatSubpath) void {
+        flat_subpath.flat_curve_offsets.end = @intCast(self.flat_curves.items.len);
+    }
 
-        pub fn addFlatCurve(self: *@This()) !*FlatCurve {
-            const curve = try self.flat_curves.addOne(self.allocator);
-            curve.* = FlatCurve{};
-            return curve;
-        }
+    pub fn addFlatCurve(self: *@This()) !*FlatCurve {
+        const curve = try self.flat_curves.addOne(self.allocator);
+        curve.* = FlatCurve{};
+        return curve;
+    }
 
-        pub fn openFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
-            curve.item_offsets.start = @intCast(self.items.items.len);
-        }
+    pub fn openFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
+        curve.item_offsets.start = @intCast(self.lines.items.len);
+    }
 
-        pub fn openFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
-            curve.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
-        }
+    pub fn openFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
+        curve.intersection_offsets.start = @intCast(self.grid_intersections.items.len);
+    }
 
-        pub fn closeFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
-            curve.item_offsets.end = @intCast(self.items.items.len);
-        }
+    pub fn closeFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
+        curve.item_offsets.end = @intCast(self.lines.items.len);
+    }
 
-        pub fn closeFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
-            curve.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
-        }
+    pub fn closeFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
+        curve.intersection_offsets.end = @intCast(self.grid_intersections.items.len);
+    }
 
-        pub fn addFlatCurveEstimate(self: *@This()) !*u32 {
-            return try self.flat_curve_estimates.addOne(self.allocator);
-        }
+    pub fn addFlatCurveEstimate(self: *@This()) !*u32 {
+        return try self.flat_curve_estimates.addOne(self.allocator);
+    }
 
-        pub fn addFlatCurveEstimates(self: *@This(), n: usize) ![]u32 {
-            return try self.flat_curve_estimates.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addFlatCurveEstimates(self: *@This(), n: usize) ![]u32 {
+        return try self.flat_curve_estimates.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addBaseEstimate(self: *@This()) !*u32 {
-            return try self.base_estimates.addOne(self.allocator);
-        }
+    pub fn addBaseEstimate(self: *@This()) !*u32 {
+        return try self.base_estimates.addOne(self.allocator);
+    }
 
-        pub fn addBaseEstimates(self: *@This(), n: usize) ![]u32 {
-            return try self.base_estimates.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addBaseEstimates(self: *@This(), n: usize) ![]u32 {
+        return try self.base_estimates.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addItem(self: *@This()) !*T {
-            return try self.items.addOne(self.allocator);
-        }
+    pub fn addItem(self: *@This()) !*Line {
+        return try self.lines.addOne(self.allocator);
+    }
 
-        pub fn addItems(self: *@This(), n: usize) ![]T {
-            return try self.items.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addItems(self: *@This(), n: usize) ![]Line {
+        return try self.lines.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addFillJob(self: *@This()) !*FillJob {
-            return try self.fill_jobs.addOne(self.allocator);
-        }
+    pub fn addFillJob(self: *@This()) !*FillJob {
+        return try self.fill_jobs.addOne(self.allocator);
+    }
 
-        pub fn addFillJobs(self: *@This(), n: usize) ![]FillJob {
-            return try self.fill_jobs.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addFillJobs(self: *@This(), n: usize) ![]FillJob {
+        return try self.fill_jobs.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addStrokeJob(self: *@This()) !*FillJob {
-            return try self.stroke_jobs.addOne(self.allocator);
-        }
+    pub fn addStrokeJob(self: *@This()) !*FillJob {
+        return try self.stroke_jobs.addOne(self.allocator);
+    }
 
-        pub fn addStrokeJobs(self: *@This(), n: usize) ![]StrokeJob {
-            return try self.stroke_jobs.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addStrokeJobs(self: *@This(), n: usize) ![]StrokeJob {
+        return try self.stroke_jobs.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addGridIntersection(self: *@This()) !*GridIntersection {
-            return try self.grid_intersections.addOne(self.allocator);
-        }
+    pub fn addGridIntersection(self: *@This()) !*GridIntersection {
+        return try self.grid_intersections.addOne(self.allocator);
+    }
 
-        pub fn addGridIntersections(self: *@This(), n: usize) ![]GridIntersection {
-            return try self.grid_intersections.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addGridIntersections(self: *@This(), n: usize) ![]GridIntersection {
+        return try self.grid_intersections.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addBoundaryFragment(self: *@This()) !*BoundaryFragment {
-            return try self.boundary_fragments.addOne(self.allocator);
-        }
+    pub fn addBoundaryFragment(self: *@This()) !*BoundaryFragment {
+        return try self.boundary_fragments.addOne(self.allocator);
+    }
 
-        pub fn addBoundaryFragments(self: *@This(), n: usize) ![]BoundaryFragment {
-            return try self.boundary_fragments.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addBoundaryFragments(self: *@This(), n: usize) ![]BoundaryFragment {
+        return try self.boundary_fragments.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addMergeFragment(self: *@This()) !*MergeFragment {
-            return try self.merge_fragments.addOne(self.allocator);
-        }
+    pub fn addMergeFragment(self: *@This()) !*MergeFragment {
+        return try self.merge_fragments.addOne(self.allocator);
+    }
 
-        pub fn addMergeFragments(self: *@This(), n: usize) ![]MergeFragment {
-            return try self.merge_fragments.addManyAsSlice(self.allocator, n);
-        }
+    pub fn addMergeFragments(self: *@This(), n: usize) ![]MergeFragment {
+        return try self.merge_fragments.addManyAsSlice(self.allocator, n);
+    }
 
-        pub fn addSpan(self: *@This()) !*Span {
-            return try self.spans.addOne(self.allocator);
-        }
+    pub fn addSpan(self: *@This()) !*Span {
+        return try self.spans.addOne(self.allocator);
+    }
 
-        pub fn addSpans(self: *@This(), n: usize) ![]Span {
-            return try self.spans.addManyAsSlice(self.allocator, n);
-        }
-    };
-}
-
-pub const LineSoup = Soup(Line);
+    pub fn addSpans(self: *@This(), n: usize) ![]Span {
+        return try self.spans.addManyAsSlice(self.allocator, n);
+    }
+};

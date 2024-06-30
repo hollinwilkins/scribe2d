@@ -25,8 +25,8 @@ const CubicPoints = euler.CubicPoints;
 const CubicParams = euler.CubicParams;
 const EulerParams = euler.EulerParams;
 const EulerSegment = euler.EulerSegment;
-const LineSoup = soup_module.LineSoup;
-const LineSoupEstimator = soup_estimate.LineSoupEstimator;
+const Soup = soup_module.Soup;
+const SoupEstimator = soup_estimate.SoupEstimator;
 const Scene = scene_module.Scene;
 const LineKernel = kernel_module.LineKernel;
 const KernelConfig = kernel_module.KernelConfig;
@@ -40,7 +40,7 @@ pub const PathFlattener = struct {
         allocator: Allocator,
         config: KernelConfig,
         scene: Scene,
-    ) !LineSoup {
+    ) !Soup {
         return try flattenAlloc(
             allocator,
             config,
@@ -58,8 +58,8 @@ pub const PathFlattener = struct {
         styles: []const Style,
         transforms: []const TransformF32.Matrix,
         shape: Shape,
-    ) !LineSoup {
-        var soup = try LineSoupEstimator.estimateAlloc(
+    ) !Soup {
+        var soup = try SoupEstimator.estimateAlloc(
             allocator,
             config,
             metadatas,
@@ -93,7 +93,7 @@ pub const PathFlattener = struct {
                     soup.fill_jobs.items,
                     chunk,
                     soup.flat_curves.items,
-                    soup.items.items,
+                    soup.lines.items,
                 },
             );
         }
@@ -117,7 +117,7 @@ pub const PathFlattener = struct {
                     soup.stroke_jobs.items,
                     chunk,
                     soup.flat_curves.items,
-                    soup.items.items,
+                    soup.lines.items,
                 },
             );
         }
