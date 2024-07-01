@@ -108,12 +108,12 @@ const LineWriter = struct {
             return;
         }
 
-        if (std.meta.eql(line.end, PointF32{.x = 46.0195313, .y=19.7265606})) {
+        if (std.meta.eql(line.end, PointF32{ .x = 4.601953e1, .y = 1.972656e1 })) {
             std.debug.assert(true);
             std.debug.assert(true);
         }
 
-        if (std.meta.eql(line.start, PointF32{.x = 42.0541534, .y=7.10895442})) {
+        if (std.meta.eql(line.start, PointF32{ .x = 4.601953e1, .y = 1.972656e1 })) {
             std.debug.assert(true);
             std.debug.assert(true);
         }
@@ -381,7 +381,30 @@ pub const Kernel = struct {
             &right_writer,
         );
 
-        std.mem.reverse(Line, right_flat_curve_lines[right_join_index..right_writer.index]);
+        // for (right_writer.lines) |line| {
+        //     if (std.meta.eql(line.start, PointF32{ .x = 4.601953e1, .y = 1.972656e1 })) {
+        //         std.debug.assert(true);
+        //         std.debug.assert(true);
+        //     }
+        // }
+        // for (right_writer.lines) |line| {
+        //     std.debug.print("Line: {}\n", .{line});
+        // }
+        // std.debug.print("==================\n", .{});
+
+        std.mem.reverse(Line, right_writer.lines[right_join_index..right_writer.index]);
+
+        // for (right_writer.lines) |line| {
+        //     std.debug.print("Line: {}\n", .{line});
+        // }
+        // std.debug.print("==================\n", .{});
+
+        // for (right_writer.lines) |line| {
+        //     if (std.meta.eql(line.start, PointF32{ .x = 4.601953e1, .y = 1.972656e1 })) {
+        //         std.debug.assert(true);
+        //         std.debug.assert(true);
+        //     }
+        // }
 
         flat_curves[left_flat_curve_index].line_offsets.end = left_flat_curve.line_offsets.start + @as(u32, @intCast(left_writer.index));
         flat_curves[right_flat_curve_index].line_offsets.end = right_flat_curve.line_offsets.start + @as(u32, @intCast(right_writer.index));
@@ -666,7 +689,7 @@ pub const Kernel = struct {
         switch (stroke.join) {
             .bevel => {
                 left_writer.write(Line.create(front0, front1).transformMatrix(transform));
-                right_writer.write(Line.create(back0, back1).transformMatrix(transform));
+                right_writer.write(Line.create(back1, back0).transformMatrix(transform));
             },
             .miter => {
                 const hypot = std.math.hypot(cr, d);

@@ -83,10 +83,8 @@ pub const Flattener = struct {
         var fill_chunks = fill_range.chunkIterator(config.fill_job_chunk_size);
 
         while (fill_chunks.next()) |chunk| {
-            try thread_pool.spawn(
-                Kernel.flattenFill,
-                .{
-                    config,
+            Kernel.flattenFill(
+                                    config,
                     transforms,
                     shape.curves.items,
                     shape.points.items,
@@ -94,8 +92,20 @@ pub const Flattener = struct {
                     chunk,
                     soup.flat_curves.items,
                     soup.lines.items,
-                },
             );
+            // try thread_pool.spawn(
+            //     Kernel.flattenFill,
+            //     .{
+            //         config,
+            //         transforms,
+            //         shape.curves.items,
+            //         shape.points.items,
+            //         soup.fill_jobs.items,
+            //         chunk,
+            //         soup.flat_curves.items,
+            //         soup.lines.items,
+            //     },
+            // );
         }
 
         const stroke_range = RangeU32{
@@ -105,10 +115,8 @@ pub const Flattener = struct {
         var stroke_chunks = stroke_range.chunkIterator(config.stroke_job_chunk_size);
 
         while (stroke_chunks.next()) |chunk| {
-            try thread_pool.spawn(
-                Kernel.flattenStroke,
-                .{
-                    config,
+            Kernel.flattenStroke(
+                                    config,
                     transforms,
                     styles,
                     shape.subpaths.items,
@@ -118,8 +126,22 @@ pub const Flattener = struct {
                     chunk,
                     soup.flat_curves.items,
                     soup.lines.items,
-                },
             );
+            // try thread_pool.spawn(
+            //     Kernel.flattenStroke,
+            //     .{
+            //         config,
+            //         transforms,
+            //         styles,
+            //         shape.subpaths.items,
+            //         shape.curves.items,
+            //         shape.points.items,
+            //         soup.stroke_jobs.items,
+            //         chunk,
+            //         soup.flat_curves.items,
+            //         soup.lines.items,
+            //     },
+            // );
         }
 
         return soup;
