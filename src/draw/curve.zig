@@ -48,6 +48,19 @@ pub const Arc = struct {
         };
     }
 
+    pub fn abs(self: @This()) @This() {
+        const start = if (self.angle >= 0.0) self.start else self.end;
+        const end = if (self.angle >= 0.0) self.end else self.start;
+        const angle = @abs(self.angle);
+
+        return @This(){
+            .start = start,
+            .end = end,
+            .center = self.center,
+            .angle = angle,
+        };
+    }
+
     pub fn isEmpty(self: @This()) bool {
         return std.meta.eql(self.start, self.end);
     }
@@ -89,15 +102,16 @@ pub const Arc = struct {
     }
 
     pub fn intersectLine(self: @This(), line: Line, result: *[2]Intersection) []Intersection {
+        const arc = self;
         const dxdy = line.end.sub(line.start);
-        const dxdy_arc = line.start.sub(self.center);
-        const point = self.start.sub(self.center);
+        const dxdy_arc = line.start.sub(arc.center);
+        const point = arc.start.sub(arc.center);
         const start_angle = point.atan2();
-        const end_angle = start_angle + self.angle;
+        const end_angle = start_angle - arc.angle;
         const radius = point.length();
-        const a = dxdy.lengthSquared();
-        const b = 2 * dxdy.dot(dxdy_arc);
-        const c = dxdy_arc.lengthSquared() - radius;
+        const a: f32 = dxdy.lengthSquared();
+        const b: f32 = 2.0 * dxdy.dot(dxdy_arc);
+        const c: f32 = dxdy_arc.lengthSquared() - (radius * radius);
         var roots_result: [2]f32 = [_]f32{undefined} ** 2;
         const roots = getQuadraticRoots(a, b, c, &roots_result);
 
@@ -108,8 +122,8 @@ pub const Arc = struct {
             }
 
             const intersection_point = line.applyT(root);
-            const intersection_angle = intersection_point.sub(self.center).atan2();
-            const arc_t = intersection_angle - start_angle / (end_angle - start_angle);
+            const intersection_angle = intersection_point.sub(arc.center).atan2();
+            const arc_t = (intersection_angle - start_angle) / (end_angle - start_angle);
 
             if (arc_t < 0.0 or arc_t > 1.0) {
                 continue;
