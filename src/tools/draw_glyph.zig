@@ -51,6 +51,22 @@ pub fn main() !void {
     style.fill = draw.Style.Fill{
         .color = draw.Color.BLUE,
     };
+
+    {
+        const offset = 100.0;
+        const transform = (core.TransformF32{
+            .translate = core.PointF32{
+                .x = offset,
+                .y = offset,
+            },
+            .scale = core.PointF32{
+                .x = 0.1,
+                .y = 0.1,
+            },
+            .rotate = 0.1,
+        });
+        glyph_paths.transformMatrixInPlace(transform.toMatrix());
+    }
     try scene.shape.copyPath(glyph_paths, 0);
     try scene.close();
 
@@ -107,11 +123,11 @@ pub fn main() !void {
                         std.debug.print("{}: {}\n", .{ line_count, line });
                         line_count += 1;
 
-                        const offset = 16.0;
-                        line.start.x += offset;
-                        line.start.y += offset;
-                        line.end.x += offset;
-                        line.end.y += offset;
+                        // const offset = 16.0;
+                        // line.start.x += offset;
+                        // line.start.y += offset;
+                        // line.end.x += offset;
+                        // line.end.y += offset;
                     }
                 }
             }

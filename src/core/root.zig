@@ -19,6 +19,9 @@ pub const DimensionsF32 = geometry.DimensionsF32;
 pub const DimensionsU16 = geometry.DimensionsU16;
 pub const DimensionsU32 = geometry.DimensionsU32;
 
+pub const Quaternion = geometry.Quaternion;
+pub const QuaternionF32 = geometry.QuaternionF32;
+
 pub const Transform = geometry.Transform;
 pub const TransformF32 = geometry.TransformF32;
 

@@ -84,6 +84,18 @@ pub const Shape = struct {
         self.points.deinit(self.allocator);
     }
 
+    pub fn transformInPlace(self: *@This(), transform: TransformF32) void {
+        for (self.points.items) |*point| {
+            point.* = transform.apply(point.*);
+        }
+    }
+
+    pub fn transformMatrixInPlace(self: *@This(), transform: TransformF32.Matrix) void {
+        for (self.points.items) |*point| {
+            point.* = transform.apply(point.*);
+        }
+    }
+
     pub fn currentPath(self: *@This()) ?*Path {
         if (self.paths.items.len > 0) {
             return self.currentPathUnsafe();
