@@ -385,6 +385,7 @@ pub const Kernel = struct {
             &left_writer,
         );
 
+        var right_join_index: usize = 0;
         if (curve.cap == .end) {
             // draw end cap on left side
             drawCap(
@@ -408,6 +409,7 @@ pub const Kernel = struct {
                 &left_writer,
                 &right_writer,
             );
+            right_join_index = right_writer.flat_segment_index;
         }
 
         flattenEuler(
@@ -419,6 +421,8 @@ pub const Kernel = struct {
             cubic_points.point3.sub(n_prev),
             &right_writer,
         );
+
+        std.mem.reverse(FlatSegment, right_flat_segments[right_join_index..right_writer.flat_segment_index]);
 
         flat_curves[left_flat_curve_index].segment_offsets.end = left_flat_curve.segment_offsets.start + @as(u32, @intCast(left_writer.flat_segment_index));
         flat_curves[right_flat_curve_index].segment_offsets.end = right_flat_curve.segment_offsets.start + @as(u32, @intCast(right_writer.flat_segment_index));
