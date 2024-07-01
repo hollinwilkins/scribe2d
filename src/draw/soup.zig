@@ -436,4 +436,34 @@ pub const Soup = struct {
     pub fn addSpans(self: *@This(), n: usize) ![]Span {
         return try self.spans.addManyAsSlice(self.allocator, n);
     }
+
+    pub fn assertFlatSubpaths(self: @This()) bool {
+        for (self.flat_subpaths.items) |flat_subpath| {
+            const flat_curves = self.flat_curves.items[flat_subpath.flat_curve_offsets.start..flat_subpath.flat_curve_offsets.end];
+            for (flat_curves, 0..) |flat_curve, flat_curve_index| {
+                const lines = self.lines.items[flat_curve.line_offsets.start..flat_curve.line_offsets.end];
+                for (lines, 0..) |line, line_index| {
+                    const next_line_index = line_index + 1;
+                    var next_line: Line = undefined;
+
+                    if (next_line_index >= lines.len) {
+                        // next line is in the next flat curve
+                        const next_flat_curve = flat_curves[(flat_curve_index + 1) % flat_curves.len];
+                        next_line = self.lines.items[next_flat_curve.line_offsets.start];
+                    } else {
+                        next_line = lines[next_line_index];
+                    }
+
+                    const end_point = line.end;
+                    const start_point = next_line.start;
+                    if (!std.meta.eql(start_point, end_point)) {
+                        std.debug.assert(false);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
 };

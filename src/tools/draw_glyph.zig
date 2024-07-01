@@ -107,17 +107,19 @@ pub fn main() !void {
                         std.debug.print("{}: {}\n", .{ line_count, line });
                         line_count += 1;
 
-                        const offset = 16.0;
-                        line.start.x += offset;
-                        line.start.y += offset;
-                        line.end.x += offset;
-                        line.end.y += offset;
+                        // const offset = 16.0;
+                        // line.start.x += offset;
+                        // line.start.y += offset;
+                        // line.end.x += offset;
+                        // line.end.y += offset;
                     }
                 }
             }
         }
         std.debug.print("-----------------------------\n", .{});
     }
+
+    std.debug.assert(soup.assertFlatSubpaths());
     const rasterizer = draw.Rasterizer.create(&half_planes);
 
     zstbi.init(allocator);

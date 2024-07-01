@@ -108,6 +108,16 @@ const LineWriter = struct {
             return;
         }
 
+        if (std.meta.eql(line.end, PointF32{.x = 46.0195313, .y=19.7265606})) {
+            std.debug.assert(true);
+            std.debug.assert(true);
+        }
+
+        if (std.meta.eql(line.start, PointF32{.x = 42.0541534, .y=7.10895442})) {
+            std.debug.assert(true);
+            std.debug.assert(true);
+        }
+
         self.lines[self.index] = line;
         self.index += 1;
     }
