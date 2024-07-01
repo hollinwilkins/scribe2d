@@ -45,6 +45,7 @@ pub const Curve = struct {
     pub const Kind = enum(u8) {
         line = 0,
         quadratic_bezier = 1,
+        cubic_bezier = 2,
     };
 
     kind: Kind,
@@ -158,7 +159,7 @@ pub const Shape = struct {
         std.mem.copyForwards(PointF32, points, paths.points.items[start_point_index..end_point_index]);
 
         const self_start_curve_index: u32 = @intCast(self.curves.items.len);
-        const curves = try self.addCurveRecords(end_curve_index - start_curve_index);
+        const curves = try self.addCurves(end_curve_index - start_curve_index);
         for (curves, paths.curves.items[start_curve_index..end_curve_index]) |*self_curve, curve| {
             self_curve.* = curve;
             self_curve.point_offsets = RangeU32{
@@ -167,7 +168,7 @@ pub const Shape = struct {
             };
         }
 
-        const subpaths = try self.addSubpathRecords(path.subpath_offsets.size());
+        const subpaths = try self.addSubpath(path.subpath_offsets.size());
         for (subpaths, paths.subpaths.items[path.subpath_offsets.start..path.subpath_offsets.end]) |*self_subpath, subpath| {
             self_subpath.* = subpath;
             self_subpath.curve_offsets = RangeU32{
@@ -179,15 +180,15 @@ pub const Shape = struct {
         try self.closePath();
     }
 
-    pub fn currentSubpathRecord(self: *@This()) ?*Subpath {
+    pub fn currentSubpath(self: *@This()) ?*Subpath {
         if (self.subpaths.items.len > 0) {
-            return self.currentSubpathRecordUnsafe();
+            return self.currentSubpathUnsafe();
         }
 
         return null;
     }
 
-    pub fn currentSubpathRecordUnsafe(self: *@This()) *Subpath {
+    pub fn currentSubpathUnsafe(self: *@This()) *Subpath {
         return &self.subpaths.items[self.subpaths.items.len - 1];
     }
 
@@ -203,7 +204,7 @@ pub const Shape = struct {
     }
 
     pub fn closeSubpath(self: *@This()) !void {
-        if (self.currentSubpathRecord()) |subpath| {
+        if (self.currentSubpath()) |subpath| {
             subpath.curve_offsets.end = @intCast(self.curves.items.len);
             if (subpath.is_closed) {
                 return;
@@ -233,7 +234,7 @@ pub const Shape = struct {
         }
     }
 
-    fn addSubpathRecords(self: *@This(), n: usize) ![]Subpath {
+    fn addSubpath(self: *@This(), n: usize) ![]Subpath {
         return try self.subpaths.addManyAsSlice(self.allocator, n);
     }
 
@@ -265,7 +266,7 @@ pub const Shape = struct {
         return cubic_points;
     }
 
-    fn addCurveRecord(self: *@This(), kind: Curve.Kind) !*Curve {
+    fn addCurve(self: *@This(), kind: Curve.Kind) !*Curve {
         const curve = try self.curves.addOne(self.allocator);
         curve.* = Curve{
             .kind = kind,
@@ -277,7 +278,7 @@ pub const Shape = struct {
         return curve;
     }
 
-    fn addCurveRecords(self: *@This(), n: usize) ![]Curve {
+    fn addCurves(self: *@This(), n: usize) ![]Curve {
         return try self.curves.addManyAsSlice(self.allocator, n);
     }
 
@@ -308,7 +309,7 @@ pub const Shape = struct {
         };
 
         (try self.addPoint()).* = point;
-        const curve = try self.addCurveRecord(.line);
+        const curve = try self.addCurve(.line);
         curve.point_offsets = point_offsets;
     }
 
@@ -321,7 +322,21 @@ pub const Shape = struct {
         const points = try self.addPoints(2);
         points[0] = control;
         points[1] = point;
-        const curve = try self.addCurveRecord(.quadratic_bezier);
+        const curve = try self.addCurve(.quadratic_bezier);
+        curve.point_offsets = point_offsets;
+    }
+
+    pub fn cubicTo(self: *@This(), control1: PointF32, control2: PointF32, point: PointF32) !void {
+        const point_offsets = RangeU32{
+            .start = @intCast(self.points.items.len - 1),
+            .end = @intCast(self.points.items.len + 3),
+        };
+
+        const points = try self.addPoints(3);
+        points[0] = control1;
+        points[1] = control2;
+        points[2] = point;
+        const curve = try self.addCurve(.cubic_bezier);
         curve.point_offsets = point_offsets;
     }
 };

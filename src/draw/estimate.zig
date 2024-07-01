@@ -325,6 +325,7 @@ pub const Estimator = struct {
                     transform,
                 )));
             },
+            else => unreachable,
         }
 
         return estimate;
