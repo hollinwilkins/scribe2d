@@ -187,6 +187,13 @@ pub const Line = struct {
         };
     }
 
+    pub fn transformMatrix(self: Line, t: TransformF32.Matrix) Line {
+        return Line{
+            .start = t.apply(self.start),
+            .end = t.apply(self.end),
+        };
+    }
+
     pub fn getBounds(self: Line) RectF32 {
         return RectF32.create(self.start, self.end);
     }

@@ -115,7 +115,7 @@ pub const Estimator = struct {
                             const soup_curve = try soup.addFlatCurve();
                             soup.openFlatCurveItems(soup_curve);
 
-                            _ = try soup.addItems(fill_curve_estimate.*);
+                            _ = try soup.addLines(fill_curve_estimate.*);
                             const curve_index = subpath.curve_offsets.start + @as(u32, @intCast(curve_offset));
                             const flat_curve_index = soup_subpath.flat_curve_offsets.start + @as(u32, @intCast(curve_offset));
 
@@ -168,7 +168,7 @@ pub const Estimator = struct {
 
                                 curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
                                     estimateStrokeJoin(config, stroke.join, scaled_width, stroke.miter_limit);
-                                _ = try soup.addItems(curve_estimate.*);
+                                _ = try soup.addLines(curve_estimate.*);
 
                                 soup.closeFlatCurveItems(soup_curve);
                             }
@@ -186,7 +186,7 @@ pub const Estimator = struct {
                                 const soup_curve = try soup.addFlatCurve();
                                 soup.openFlatCurveItems(soup_curve);
 
-                                _ = try soup.addItems(curve_estimate.*);
+                                _ = try soup.addLines(curve_estimate.*);
 
                                 soup.closeFlatCurveItems(soup_curve);
                             }
@@ -222,7 +222,7 @@ pub const Estimator = struct {
 
                                 curve_estimate.* = @as(u32, @intFromFloat((@as(f32, @floatFromInt(base_estimate)) * offset_fudge))) +
                                     estimateStrokeJoin(config, stroke.join, scaled_width, stroke.miter_limit);
-                                _ = try soup.addItems(curve_estimate.*);
+                                _ = try soup.addLines(curve_estimate.*);
 
                                 soup.closeFlatCurveItems(soup_curve);
                             }
@@ -237,7 +237,7 @@ pub const Estimator = struct {
                                 const soup_curve = try soup.addFlatCurve();
                                 soup.openFlatCurveItems(soup_curve);
 
-                                _ = try soup.addItems(curve_estimate.*);
+                                _ = try soup.addLines(curve_estimate.*);
 
                                 soup.closeFlatCurveItems(soup_curve);
                             }

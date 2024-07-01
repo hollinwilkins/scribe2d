@@ -381,11 +381,11 @@ pub const Soup = struct {
         return try self.base_estimates.addManyAsSlice(self.allocator, n);
     }
 
-    pub fn addItem(self: *@This()) !*Line {
+    pub fn addLine(self: *@This()) !*Line {
         return try self.lines.addOne(self.allocator);
     }
 
-    pub fn addItems(self: *@This(), n: usize) ![]Line {
+    pub fn addLines(self: *@This(), n: usize) ![]Line {
         return try self.lines.addManyAsSlice(self.allocator, n);
     }
 
