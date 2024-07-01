@@ -32,7 +32,7 @@ pub const KernelConfig = struct {
     fill_job_chunk_size: u8 = 8,
     stroke_job_chunk_size: u8 = 2,
     evolutes_enabled: bool = false,
-    ablate_arcs: bool = true,
+    ablate_arcs: bool = false,
 
     newton_iter: u32 = 1,
     halley_iter: u32 = 1,
@@ -582,6 +582,8 @@ pub const Kernel = struct {
                     .x = -v.y,
                     .y = v.x,
                 });
+
+                const start_index = writer.index;
                 flattenArc(
                     config,
                     Arc.create(
@@ -593,6 +595,10 @@ pub const Kernel = struct {
                     lowering.transform,
                     writer,
                 );
+
+                if (!forward) {
+                    std.mem.reverse(Line, writer.lines[start_index..writer.index]);
+                }
             }
             lp0 = ap1;
         }
