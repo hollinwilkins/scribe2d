@@ -46,7 +46,7 @@ pub fn main() !void {
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
         .width = 2.0,
-        .join = .round,
+        .join = .bevel,
     };
     style.fill = draw.Style.Fill{
         .color = draw.Color.BLUE,
