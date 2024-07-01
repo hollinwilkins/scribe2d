@@ -32,6 +32,7 @@ pub const KernelConfig = struct {
     fill_job_chunk_size: u8 = 8,
     stroke_job_chunk_size: u8 = 2,
     evolutes_enabled: bool = false,
+    ablate_arcs: bool = true,
 
     newton_iter: u32 = 1,
     halley_iter: u32 = 1,
@@ -67,6 +68,7 @@ pub const KernelConfig = struct {
             .fill_job_chunk_size = config.fill_job_chunk_size,
             .stroke_job_chunk_size = config.stroke_job_chunk_size,
             .evolutes_enabled = config.evolutes_enabled,
+            .ablate_arcs = config.ablate_arcs,
 
             .newton_iter = config.newton_iter,
             .halley_iter = config.halley_iter,
@@ -599,6 +601,11 @@ pub const Kernel = struct {
     }
 
     fn flattenArc(config: KernelConfig, arc: Arc, transform: TransformF32.Matrix, writer: *LineWriter) void {
+        if (config.ablate_arcs) {
+            writer.write(Line.create(arc.start, arc.end).transformMatrix(transform));
+            return;
+        }
+
         var p0 = transform.apply(arc.start);
         var r = arc.start.sub(arc.center);
         const radius = @max(config.error_tolerance, p0.sub(transform.apply(r)).length());
