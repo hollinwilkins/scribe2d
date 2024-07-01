@@ -276,7 +276,7 @@ pub const Estimator = struct {
                 const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
                 for (curves) |*curve| {
                     var curve_intersections: u32 = 0;
-                    const lines = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
+                    const lines = soup.lines.items[curve.line_offsets.start..curve.line_offsets.end];
                     for (lines) |line| {
                         curve_intersections += LineEstimatorImpl.estimateIntersections(line);
                     }

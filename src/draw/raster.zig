@@ -113,7 +113,7 @@ pub const Rasterizer = struct {
             const intersections = soup.grid_intersections.items[curve.intersection_offsets.start..curve.intersection_offsets.end];
             var intersection_writer = IntersectionWriter.create(intersections);
 
-            const lines = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
+            const lines = soup.lines.items[curve.line_offsets.start..curve.line_offsets.end];
             for (lines) |line| {
                 const start_intersection_index = intersection_writer.index;
                 const start_point: PointF32 = line.applyT(0.0);

@@ -41,7 +41,7 @@ pub const FlatSubpath = struct {
 };
 
 pub const FlatCurve = struct {
-    item_offsets: RangeU32 = RangeU32{},
+    line_offsets: RangeU32 = RangeU32{},
     intersection_offsets: RangeU32 = RangeU32{},
 };
 
@@ -350,7 +350,7 @@ pub const Soup = struct {
     }
 
     pub fn openFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
-        curve.item_offsets.start = @intCast(self.lines.items.len);
+        curve.line_offsets.start = @intCast(self.lines.items.len);
     }
 
     pub fn openFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {
@@ -358,7 +358,7 @@ pub const Soup = struct {
     }
 
     pub fn closeFlatCurveItems(self: *@This(), curve: *FlatCurve) void {
-        curve.item_offsets.end = @intCast(self.lines.items.len);
+        curve.line_offsets.end = @intCast(self.lines.items.len);
     }
 
     pub fn closeFlatCurveIntersections(self: *@This(), curve: *FlatCurve) void {

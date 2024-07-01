@@ -197,7 +197,7 @@ pub const Kernel = struct {
         const transform = transforms[transform_index];
         const curve = curves[curve_index];
         const flat_curve = flat_curves[flat_curve_index];
-        const flat_curve_lines = lines[flat_curve.item_offsets.start..flat_curve.item_offsets.end];
+        const flat_curve_lines = lines[flat_curve.line_offsets.start..flat_curve.line_offsets.end];
         var writer = LineWriter{
             .lines = flat_curve_lines,
         };
@@ -217,7 +217,7 @@ pub const Kernel = struct {
             &writer,
         );
 
-        flat_curves[flat_curve_index].item_offsets.end = flat_curve.item_offsets.start + @as(u32, @intCast(writer.index));
+        flat_curves[flat_curve_index].line_offsets.end = flat_curve.line_offsets.start + @as(u32, @intCast(writer.index));
     }
 
     pub fn flattenStrokeJob(
@@ -244,8 +244,8 @@ pub const Kernel = struct {
         const curve = curves[curve_index];
         const left_flat_curve = flat_curves[left_flat_curve_index];
         const right_flat_curve = flat_curves[right_flat_curve_index];
-        const left_flat_curve_lines = lines[left_flat_curve.item_offsets.start..left_flat_curve.item_offsets.end];
-        const right_flat_curve_lines = lines[right_flat_curve.item_offsets.start..right_flat_curve.item_offsets.end];
+        const left_flat_curve_lines = lines[left_flat_curve.line_offsets.start..left_flat_curve.line_offsets.end];
+        const right_flat_curve_lines = lines[right_flat_curve.line_offsets.start..right_flat_curve.line_offsets.end];
         var left_writer = LineWriter{
             .lines = left_flat_curve_lines,
         };
@@ -373,8 +373,8 @@ pub const Kernel = struct {
 
         std.mem.reverse(Line, right_flat_curve_lines[right_join_index..right_writer.index]);
 
-        flat_curves[left_flat_curve_index].item_offsets.end = left_flat_curve.item_offsets.start + @as(u32, @intCast(left_writer.index));
-        flat_curves[right_flat_curve_index].item_offsets.end = right_flat_curve.item_offsets.start + @as(u32, @intCast(right_writer.index));
+        flat_curves[left_flat_curve_index].line_offsets.end = left_flat_curve.line_offsets.start + @as(u32, @intCast(left_writer.index));
+        flat_curves[right_flat_curve_index].line_offsets.end = right_flat_curve.line_offsets.start + @as(u32, @intCast(right_writer.index));
     }
 
     fn flattenEuler(

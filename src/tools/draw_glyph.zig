@@ -102,7 +102,7 @@ pub fn main() !void {
                 std.debug.print("-- Subpath({}) --\n", .{subpath_index});
                 const curves = soup.flat_curves.items[subpath.flat_curve_offsets.start..subpath.flat_curve_offsets.end];
                 for (curves) |curve| {
-                    const lines = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
+                    const lines = soup.lines.items[curve.line_offsets.start..curve.line_offsets.end];
                     for (lines) |*line| {
                         std.debug.print("{}: {}\n", .{ line_count, line });
                         line_count += 1;
