@@ -29,12 +29,8 @@ pub fn open(self: @This()) void {
     self.vtable.open(self.ptr);
 }
 
-pub fn close(self: @This()) void {
-    self.vtable.close(self.ptr);
-}
-
-pub fn transform(self: @This(), t: TransformF32) void {
-    self.vtable.transform(self.ptr, t);
+pub fn close(self: @This(), bounds: RectF32, ppem: f32) void {
+    self.vtable.close(self.ptr, bounds, ppem);
 }
 
 pub const VTable = struct {
@@ -43,8 +39,7 @@ pub const VTable = struct {
     quadTo: *const fn (ctx: *anyopaque, end: PointF32, control: PointF32) void,
     curveTo: *const fn (ctx: *anyopaque, end: PointF32, control1: PointF32, control2: PointF32) void,
     open: *const fn (ctx: *anyopaque) void,
-    close: *const fn (ctx: *anyopaque) void,
-    transform: *const fn (ctx: *anyopaque, t: TransformF32) void,
+    close: *const fn (ctx: *anyopaque, bounds: RectF32, ppem: f32) void,
 };
 
 pub const Debug = struct {
@@ -55,7 +50,6 @@ pub const Debug = struct {
         .curveTo = Debug.curveTo,
         .open = Debug.open,
         .close = Debug.close,
-        .transform = Debug.transform,
     };
 
     pub const Instance = GlyphPen{
@@ -64,11 +58,11 @@ pub const Debug = struct {
     };
 
     pub fn moveTo(_: *anyopaque, point: PointF32) void {
-        std.debug.print("Outliner.Debug.moveTo({})\n", .{ point });
+        std.debug.print("Outliner.Debug.moveTo({})\n", .{point});
     }
 
     pub fn lineTo(_: *anyopaque, end: PointF32) void {
-        std.debug.print("Outliner.Debug.lineTo({})\n", .{ end });
+        std.debug.print("Outliner.Debug.lineTo({})\n", .{end});
     }
 
     pub fn quadTo(_: *anyopaque, end: PointF32, control: PointF32) void {
@@ -83,11 +77,7 @@ pub const Debug = struct {
         std.debug.print("Outliner.Debug.open()\n", .{});
     }
 
-    pub fn close(_: *anyopaque) void {
-        std.debug.print("Outliner.Debug.close()\n", .{});
-    }
-
-    pub fn transform(_: *anyopaque, t: TransformF32) void {
-        std.debug.print("Outliner.Debug.transform({})\n", .{t});
+    pub fn close(_: *anyopaque, bounds: RectF32, ppem: f32) void {
+        std.debug.print("Outliner.Debug.close({},{})\n", .{ bounds, ppem });
     }
 };

@@ -82,40 +82,7 @@ pub const Face = struct {
             builder.pen.open();
             try glyf.outline(glyph_id, points, &builder);
             const bounds = builder.getBounds();
-            const transform = TransformF32{
-                .scale = PointF32{
-                    .x = points / units_per_em,
-                    .y = points / units_per_em,
-                },
-                .translate = PointF32{
-                    .x = -bounds.min.x,
-                    .y = -bounds.min.y,
-                },
-            };
-            const bounds2 = bounds.transform(transform);
-
-            builder.pen.transform(transform);
-            builder.pen.transform(TransformF32{
-                .scale = PointF32{
-                    .x = 1.0,
-                    .y = -1.0,
-                },
-                .translate = PointF32{
-                    .x = 0.0,
-                    .y = -(bounds2.getHeight() / 2.0),
-                }
-            });
-            builder.pen.transform(TransformF32{
-                .scale = PointF32{
-                    .x = 1.0,
-                    .y = 1.0,
-                },
-                .translate = PointF32{
-                    .x = 0.0,
-                    .y = bounds2.getHeight() / 2.0,
-                }
-            });
-            builder.pen.close();
+            builder.pen.close(bounds, points / units_per_em);
         } else {
             return error.InvalidFace;
         }

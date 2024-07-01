@@ -338,7 +338,6 @@ pub const ShapeBuilder = struct {
         .curveTo = GlyphPenFunctions.curveTo,
         .open = GlyphPenFunctions.open,
         .close = GlyphPenFunctions.close,
-        .transform = GlyphPenFunctions.transform,
     };
 
     shape: *Shape,
@@ -428,16 +427,46 @@ pub const ShapeBuilder = struct {
             };
         }
 
-        fn close(ctx: *anyopaque) void {
+        fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
             var b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
+
+            const transform = TransformF32{
+                .scale = PointF32{
+                    .x = ppem,
+                    .y = ppem,
+                },
+                .translate = PointF32{
+                    .x = -bounds.min.x,
+                    .y = -bounds.min.y,
+                },
+            };
+            const bounds2 = bounds.transform(transform);
+
+            b.shape.transformCurrentPath(transform);
+            b.shape.transformCurrentPath(TransformF32{
+                .scale = PointF32{
+                    .x = 1.0,
+                    .y = -1.0,
+                },
+                .translate = PointF32{
+                    .x = 0.0,
+                    .y = -(bounds2.getHeight() / 2.0),
+                },
+            });
+            b.shape.transformCurrentPath(TransformF32{
+                .scale = PointF32{
+                    .x = 1.0,
+                    .y = 1.0,
+                },
+                .translate = PointF32{
+                    .x = 0.0,
+                    .y = bounds2.getHeight() / 2.0,
+                },
+            });
+
             b.close() catch {
                 b.is_error = true;
             };
-        }
-
-        fn transform(ctx: *anyopaque, t: TransformF32) void {
-            const b = @as(*ShapeBuilder, @alignCast(@ptrCast(ctx)));
-            b.shape.transformCurrentPath(t);
         }
     };
 };
