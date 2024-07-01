@@ -689,7 +689,7 @@ pub const Kernel = struct {
         switch (stroke.join) {
             .bevel => {
                 left_writer.write(Line.create(front0, front1).transformMatrix(transform));
-                right_writer.write(Line.create(back1, back0).transformMatrix(transform));
+                right_writer.write(Line.create(back0, back1).transformMatrix(transform));
             },
             .miter => {
                 const hypot = std.math.hypot(cr, d);
