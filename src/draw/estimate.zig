@@ -325,7 +325,17 @@ pub const Estimator = struct {
                     transform,
                 )));
             },
-            else => unreachable,
+            .cubic_bezier => {
+                const points = shape.points.items[curve.point_offsets.start..curve.point_offsets.end];
+                estimate += @as(u32, @intFromFloat(Wang.cubic(
+                    @floatCast(RSQRT_OF_TOL),
+                    points[0],
+                    points[1],
+                    points[2],
+                    points[3],
+                    transform,
+                )));
+        },
         }
 
         return estimate;

@@ -819,7 +819,10 @@ pub fn getCubicPoints(curve: Curve, points: []const PointF32) CubicPoints {
             cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
             cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
         },
-        else => unreachable,
+        .cubic_bezier => {
+            cubic_points.point2 = points[2];
+            cubic_points.point3 = points[3];
+        }
     }
 
     return cubic_points;

@@ -243,29 +243,6 @@ pub const Shape = struct {
         return first_curve.isCapped();
     }
 
-    pub fn getCubicPoints(self: @This(), curve: Curve) CubicPoints {
-        var cubic_points = CubicPoints{};
-
-        cubic_points.point0 = self.points.items[curve.point_offsets.start];
-        cubic_points.point1 = self.points.items[curve.point_offsets.start + 1];
-
-        switch (curve.kind) {
-            .line => {
-                cubic_points.point3 = cubic_points.point1;
-                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
-            },
-            .quadratic_bezier => {
-                cubic_points.point2 = self.points.items[curve.point_offsets.start + 2];
-                cubic_points.point3 = cubic_points.point2;
-                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
-            },
-        }
-
-        return cubic_points;
-    }
-
     fn addCurve(self: *@This(), kind: Curve.Kind) !*Curve {
         const curve = try self.curves.addOne(self.allocator);
         curve.* = Curve{
