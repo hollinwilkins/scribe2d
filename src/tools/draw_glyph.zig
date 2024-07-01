@@ -11,11 +11,10 @@ pub fn main() !void {
     _ = args.skip();
     const font_file = args.next() orelse @panic("need to provide a font file");
     const codepoint_str = args.next() orelse @panic("need to provide a codepoint string");
-    // const codepoint: u32 = @intCast(codepoint_str[0]);
     const glyph_id: u16 = try std.fmt.parseInt(u16, codepoint_str, 10);
     const size_str = args.next() orelse "16";
     const size = try std.fmt.parseInt(u32, size_str, 10);
-    // const output_file = args.next() orelse @panic("need to provide output file");
+    const output_file = args.next() orelse @panic("need to provide output file");
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -59,11 +58,6 @@ pub fn main() !void {
 
     // soup.path.items = soup.path.items[2..3];
     // soup.path.items[0].subpath_offsets.start += 1;
-
-    // const dimensions = core.DimensionsU32{
-    //     .width = size,
-    //     .height = size,
-    // };
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
@@ -127,36 +121,42 @@ pub fn main() !void {
     }
 
     std.debug.assert(soup.assertFlatSubpaths());
-    // const rasterizer = draw.Rasterizer.create(&half_planes);
 
-    // zstbi.init(allocator);
-    // defer zstbi.deinit();
+    const rasterizer = draw.Rasterizer.create(&half_planes);
 
-    // var image = try zstbi.Image.createEmpty(
-    //     dimensions.width,
-    //     dimensions.height,
-    //     3,
-    //     .{},
-    // );
-    // defer image.deinit();
+    zstbi.init(allocator);
+    defer zstbi.deinit();
 
-    // var texture = draw.TextureUnmanaged{
-    //     .dimensions = dimensions,
-    //     .format = draw.TextureFormat.SrgbU8,
-    //     .bytes = image.data,
-    // };
-    // texture.clear(draw.Color{
-    //     .r = 1.0,
-    //     .g = 1.0,
-    //     .b = 1.0,
-    //     .a = 1.0,
-    // });
+    const dimensions = core.DimensionsU32{
+        .width = size,
+        .height = size,
+    };
 
-    // var pen = draw.SoupPen.init(allocator, &rasterizer);
-    // try pen.draw(
-    //     &soup,
-    //     &texture,
-    // );
+    var image = try zstbi.Image.createEmpty(
+        dimensions.width,
+        dimensions.height,
+        3,
+        .{},
+    );
+    defer image.deinit();
+
+    var texture = draw.TextureUnmanaged{
+        .dimensions = dimensions,
+        .format = draw.TextureFormat.SrgbU8,
+        .bytes = image.data,
+    };
+    texture.clear(draw.Color{
+        .r = 1.0,
+        .g = 1.0,
+        .b = 1.0,
+        .a = 1.0,
+    });
+
+    var pen = draw.SoupPen.init(allocator, &rasterizer);
+    try pen.draw(
+        &soup,
+        &texture,
+    );
 
     // {
     //     std.debug.print("\n", .{});
@@ -198,60 +198,60 @@ pub fn main() !void {
     //     std.debug.print("-----------------------------\n", .{});
     // }
 
-    // {
-    //     std.debug.print("\n", .{});
-    //     std.debug.print("Grid Intersections:\n", .{});
-    //     std.debug.print("-----------------------------\n", .{});
-    //     for (soup.grid_intersections.items) |grid_intersection| {
-    //         std.debug.print("({},{}): T({}), ({},{})\n", .{
-    //             grid_intersection.pixel.x,
-    //             grid_intersection.pixel.y,
-    //             grid_intersection.intersection.t,
-    //             grid_intersection.intersection.point.x,
-    //             grid_intersection.intersection.point.y,
-    //         });
-    //     }
-    //     std.debug.print("-----------------------------\n", .{});
-    // }
+    {
+        std.debug.print("\n", .{});
+        std.debug.print("Grid Intersections:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        for (soup.grid_intersections.items) |grid_intersection| {
+            std.debug.print("({},{}): T({}), ({},{})\n", .{
+                grid_intersection.pixel.x,
+                grid_intersection.pixel.y,
+                grid_intersection.intersection.t,
+                grid_intersection.intersection.point.x,
+                grid_intersection.intersection.point.y,
+            });
+        }
+        std.debug.print("-----------------------------\n", .{});
+    }
 
-    // {
-    //     std.debug.print("\n", .{});
-    //     std.debug.print("Boundary Fragments:\n", .{});
-    //     std.debug.print("-----------------------------\n", .{});
-    //     for (soup.boundary_fragments.items) |boundary_fragment| {
-    //         std.debug.print("({},{}): ({},{}), ({},{})\n", .{
-    //             boundary_fragment.pixel.x,
-    //             boundary_fragment.pixel.y,
-    //             boundary_fragment.intersections[0].point.x,
-    //             boundary_fragment.intersections[0].point.y,
-    //             boundary_fragment.intersections[1].point.x,
-    //             boundary_fragment.intersections[1].point.y,
-    //         });
-    //     }
-    //     std.debug.print("-----------------------------\n", .{});
-    // }
+    {
+        std.debug.print("\n", .{});
+        std.debug.print("Boundary Fragments:\n", .{});
+        std.debug.print("-----------------------------\n", .{});
+        for (soup.boundary_fragments.items) |boundary_fragment| {
+            std.debug.print("({},{}): ({},{}), ({},{})\n", .{
+                boundary_fragment.pixel.x,
+                boundary_fragment.pixel.y,
+                boundary_fragment.intersections[0].point.x,
+                boundary_fragment.intersections[0].point.y,
+                boundary_fragment.intersections[1].point.x,
+                boundary_fragment.intersections[1].point.y,
+            });
+        }
+        std.debug.print("-----------------------------\n", .{});
+    }
 
-    // {
-    //     std.debug.print("\n============== Boundary Texture\n\n", .{});
-    //     for (0..texture.dimensions.height) |y| {
-    //         std.debug.print("{:0>4}: ", .{y});
-    //         for (0..texture.dimensions.height) |x| {
-    //             const pixel = texture.getPixelUnsafe(core.PointU32{
-    //                 .x = @intCast(x),
-    //                 .y = @intCast(y),
-    //             });
+    {
+        std.debug.print("\n============== Boundary Texture\n\n", .{});
+        for (0..texture.dimensions.height) |y| {
+            std.debug.print("{:0>4}: ", .{y});
+            for (0..texture.dimensions.height) |x| {
+                const pixel = texture.getPixelUnsafe(core.PointU32{
+                    .x = @intCast(x),
+                    .y = @intCast(y),
+                });
 
-    //             if (pixel.r < 1.0) {
-    //                 std.debug.print("#", .{});
-    //             } else {
-    //                 std.debug.print(";", .{});
-    //             }
-    //         }
+                if (pixel.r < 1.0) {
+                    std.debug.print("#", .{});
+                } else {
+                    std.debug.print(";", .{});
+                }
+            }
 
-    //         std.debug.print("\n", .{});
-    //     }
+            std.debug.print("\n", .{});
+        }
 
-    //     std.debug.print("==============\n", .{});
-    // }
-    // try image.writeToFile(output_file, .png);
+        std.debug.print("==============\n", .{});
+    }
+    try image.writeToFile(output_file, .png);
 }

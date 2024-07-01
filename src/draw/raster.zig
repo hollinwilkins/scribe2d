@@ -21,6 +21,7 @@ const RangeU32 = core.RangeU32;
 const RangeI32 = core.RangeI32;
 const RangeUsize = core.RangeUsize;
 const Line = curve_module.Line;
+const Arc = curve_module.Arc;
 const Intersection = curve_module.Intersection;
 const HalfPlanesU16 = msaa.HalfPlanesU16;
 const Soup = soup_module.Soup;
@@ -113,46 +114,21 @@ pub const Rasterizer = struct {
             const intersections = soup.grid_intersections.items[curve.intersection_offsets.start..curve.intersection_offsets.end];
             var intersection_writer = IntersectionWriter.create(intersections);
 
-            const lines = soup.lines.items[curve.item_offsets.start..curve.item_offsets.end];
-            for (lines) |line| {
+            const flat_segments = soup.flat_segments.items[curve.segment_offsets.start..curve.segment_offsets.end];
+            for (flat_segments) |flat_segment| {
                 const start_intersection_index = intersection_writer.index;
-                const start_point: PointF32 = line.applyT(0.0);
-                const end_point: PointF32 = line.applyT(1.0);
-                const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
-                const bounds: RectI32 = RectI32.create(PointI32{
-                    .x = @intFromFloat(@ceil(bounds_f32.min.x)),
-                    .y = @intFromFloat(@ceil(bounds_f32.min.y)),
-                }, PointI32{
-                    .x = @intFromFloat(@floor(bounds_f32.max.x)),
-                    .y = @intFromFloat(@floor(bounds_f32.max.y)),
-                });
-                const scan_bounds = RectF32.create(PointF32{
-                    .x = @floatFromInt(bounds.min.x - 1),
-                    .y = @floatFromInt(bounds.min.y - 1),
-                }, PointF32{
-                    .x = @floatFromInt(bounds.max.x + 1),
-                    .y = @floatFromInt(bounds.max.y + 1),
-                });
 
-                intersection_writer.addOne().* = GridIntersection.create((Intersection{
-                    .t = 0.0,
-                    .point = start_point,
-                }).fitToGrid());
-
-                for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
-                    const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
-                    try scanX(grid_x, line, scan_bounds, &intersection_writer);
+                switch (flat_segment.kind) {
+                    .line => {
+                        const line = flat_segment.getBufferLine(soup.buffer.items);
+                        try scanSegmentLine(line, &intersection_writer);
+                    },
+                    .arc => {
+                        const arc = flat_segment.getBufferArc(soup.buffer.items);
+                        try scanSegmentArc(arc, &intersection_writer);
+                    },
+                    else => unreachable,
                 }
-
-                for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
-                    const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
-                    try scanY(grid_y, line, scan_bounds, &intersection_writer);
-                }
-
-                intersection_writer.addOne().* = GridIntersection.create((Intersection{
-                    .t = 1.0,
-                    .point = end_point,
-                }).fitToGrid());
 
                 const end_intersection_index = intersection_writer.index;
                 const grid_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
@@ -340,7 +316,144 @@ pub const Rasterizer = struct {
         path.span_offsets.end = path.span_offsets.start + @as(u32, @intCast(span_writer.index));
     }
 
-    fn scanX(
+    fn scanSegmentArc(
+        arc: Arc,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const start_point: PointF32 = arc.applyT(0.0);
+        const end_point: PointF32 = arc.applyT(1.0);
+        const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+        const bounds: RectI32 = RectI32.create(PointI32{
+            .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+            .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+        }, PointI32{
+            .x = @intFromFloat(@floor(bounds_f32.max.x)),
+            .y = @intFromFloat(@floor(bounds_f32.max.y)),
+        });
+        const scan_bounds = RectF32.create(PointF32{
+            .x = @floatFromInt(bounds.min.x - 1),
+            .y = @floatFromInt(bounds.min.y - 1),
+        }, PointF32{
+            .x = @floatFromInt(bounds.max.x + 1),
+            .y = @floatFromInt(bounds.max.y + 1),
+        });
+
+        intersection_writer.addOne().* = GridIntersection.create((Intersection{
+            .t = 0.0,
+            .point = start_point,
+        }).fitToGrid());
+
+        for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
+            const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
+            try scanArcX(grid_x, arc, scan_bounds, intersection_writer);
+        }
+
+        for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
+            const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
+            try scanArcY(grid_y, arc, scan_bounds, intersection_writer);
+        }
+
+        intersection_writer.addOne().* = GridIntersection.create((Intersection{
+            .t = 1.0,
+            .point = end_point,
+        }).fitToGrid());
+    }
+
+    fn scanArc(
+        arc: Arc,
+        scan_line: Line,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        var intersection_result: [2]Intersection = [_]Intersection{undefined} ** 2;
+        for (arc.intersectLine(scan_line, &intersection_result)) |intersection| {
+            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+        }
+    }
+
+    fn scanArcX(
+        grid_x: f32,
+        arc: Arc,
+        scan_bounds: RectF32,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const scan_line = Line.create(
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.min.y,
+            },
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.max.y,
+            },
+        );
+
+        try scanArc(arc, scan_line, intersection_writer);
+    }
+
+    fn scanArcY(
+        grid_y: f32,
+        arc: Arc,
+        scan_bounds: RectF32,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const scan_line = Line.create(
+            PointF32{
+                .x = scan_bounds.min.x,
+                .y = grid_y,
+            },
+            PointF32{
+                .x = scan_bounds.max.x,
+                .y = grid_y,
+            },
+        );
+
+        try scanArc(arc, scan_line, intersection_writer);
+    }
+
+    fn scanSegmentLine(
+        line: Line,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const start_point: PointF32 = line.applyT(0.0);
+        const end_point: PointF32 = line.applyT(1.0);
+        const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+        const bounds: RectI32 = RectI32.create(PointI32{
+            .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+            .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+        }, PointI32{
+            .x = @intFromFloat(@floor(bounds_f32.max.x)),
+            .y = @intFromFloat(@floor(bounds_f32.max.y)),
+        });
+        const scan_bounds = RectF32.create(PointF32{
+            .x = @floatFromInt(bounds.min.x - 1),
+            .y = @floatFromInt(bounds.min.y - 1),
+        }, PointF32{
+            .x = @floatFromInt(bounds.max.x + 1),
+            .y = @floatFromInt(bounds.max.y + 1),
+        });
+
+        intersection_writer.addOne().* = GridIntersection.create((Intersection{
+            .t = 0.0,
+            .point = start_point,
+        }).fitToGrid());
+
+        for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
+            const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
+            try scanLineX(grid_x, line, scan_bounds, intersection_writer);
+        }
+
+        for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
+            const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
+            try scanLineY(grid_y, line, scan_bounds, intersection_writer);
+        }
+
+        intersection_writer.addOne().* = GridIntersection.create((Intersection{
+            .t = 1.0,
+            .point = end_point,
+        }).fitToGrid());
+    }
+
+    fn scanLineX(
         grid_x: f32,
         line: Line,
         scan_bounds: RectF32,
@@ -362,7 +475,7 @@ pub const Rasterizer = struct {
         }
     }
 
-    fn scanY(
+    fn scanLineY(
         grid_y: f32,
         line: Line,
         scan_bounds: RectF32,

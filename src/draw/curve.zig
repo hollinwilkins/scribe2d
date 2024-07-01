@@ -52,7 +52,7 @@ pub const Arc = struct {
         return std.meta.eql(self.start, self.end);
     }
 
-    pub fn applyT(self: @This(), t: f32) @This() {
+    pub fn applyT(self: @This(), t: f32) PointF32 {
         if (t == 0.0) {
             // special check to avoid floating point errors
             return self.start;
