@@ -112,7 +112,6 @@ const SegmentWriter = struct {
             return;
         }
 
-        std.debug.print("WriteLine({})\n", .{line});
         const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
         self.flat_segments[self.flat_segment_index] = FlatSegment{
             .kind = .line,
@@ -131,7 +130,6 @@ const SegmentWriter = struct {
             return;
         }
 
-        std.debug.print("WriteArc({})\n", .{arc});
         const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
         self.flat_segments[self.flat_segment_index] = FlatSegment{
             .kind = .arc,
@@ -143,24 +141,6 @@ const SegmentWriter = struct {
         std.mem.copyForwards(u8, self.buffer[self.buffer_index..], @alignCast(std.mem.asBytes(&arc)));
         self.flat_segment_index += 1;
         self.buffer_index += @sizeOf(Arc);
-    }
-
-    pub fn debugPrint(self: @This(), buffer: []const u8) void {
-        std.debug.print("=============== DEBUG FLAT SEGMENT =============\n", .{});
-        for (self.flat_segments[0..self.flat_segment_index]) |flat_segment| {
-            switch (flat_segment.kind) {
-                .line => {
-                    const line = flat_segment.getBufferLine(buffer);
-                    std.debug.print("{}\n", .{line});
-                },
-                .arc => {
-                    const arc = flat_segment.getBufferArc(buffer);
-                    std.debug.print("{}\n", .{arc});
-                },
-                else => unreachable,
-            }
-        }
-        std.debug.print("=============== DEBUG FLAT SEGMENT =============\n", .{});
     }
 };
 

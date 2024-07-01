@@ -67,6 +67,34 @@ pub const FlatSegment = struct {
         const bytes = buffer[self.buffer_offsets.start..self.buffer_offsets.end];
         return std.mem.bytesToValue(Arc, bytes);
     }
+
+    pub fn getBufferStartPoint(self: @This(), buffer: []const u8) PointF32 {
+        switch (self.kind) {
+            .line => {
+                const line = self.getBufferLine(buffer);
+                return line.start;
+            },
+            .arc => {
+                const arc = self.getBufferArc(buffer);
+                return arc.start;
+            },
+            else => unreachable,
+        }
+    }
+
+    pub fn getBufferEndPoint(self: @This(), buffer: []const u8) PointF32 {
+        switch (self.kind) {
+            .line => {
+                const line = self.getBufferLine(buffer);
+                return line.end;
+            },
+            .arc => {
+                const arc = self.getBufferArc(buffer);
+                return arc.end;
+            },
+            else => unreachable,
+        }
+    }
 };
 
 pub const FlatCurveEstimate = struct {
@@ -513,5 +541,36 @@ pub const Soup = struct {
 
     pub fn addSpans(self: *@This(), n: usize) ![]Span {
         return try self.spans.addManyAsSlice(self.allocator, n);
+    }
+
+    pub fn debugFlatSubpaths(self: @This()) bool {
+        for (self.flat_subpaths.items) |flat_subpath| {
+            const flat_curves = self.flat_curves.items[flat_subpath.flat_curve_offsets.start..flat_subpath.flat_curve_offsets.end];
+            for (flat_curves, 0..) |flat_curve, flat_curve_index| {
+                const flat_segments = self.flat_segments.items[flat_curve.segment_offsets.start..flat_curve.segment_offsets.end];
+                for (flat_segments, 0..) |flat_segment, flat_segment_index| {
+                    const next_flat_segment_index = flat_segment_index + 1;
+                    var next_flat_segment: FlatSegment = undefined;
+
+                    if (next_flat_segment_index >= flat_segments.len) {
+                        // next flat segment is in the next flat_curve
+                        const next_flat_curve = flat_curves[(flat_curve_index + 1) % flat_curves.len];
+                        next_flat_segment = self.flat_segments.items[next_flat_curve.segment_offsets.start];
+                    } else {
+                        // next flat segment is in the current flat_curve
+                        next_flat_segment = flat_segments[next_flat_segment_index];
+                    }
+
+                    const end_point = flat_segment.getBufferEndPoint(self.buffer.items);
+                    const start_point = next_flat_segment.getBufferStartPoint(self.buffer.items);
+                    if (!std.meta.eql(start_point, end_point)) {
+                        std.debug.assert(true);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 };
