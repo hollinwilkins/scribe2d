@@ -115,7 +115,9 @@ pub fn main() !void {
                             },
                             else => unreachable,
                         }
+                        std.debug.print("----------------------------------\n", .{});
                     }
+                    std.debug.print("==================================\n", .{});
 
                     line_count += 1;
                 }
@@ -123,6 +125,8 @@ pub fn main() !void {
         }
         std.debug.print("-----------------------------\n", .{});
     }
+
+    std.debug.assert(soup.assertFlatSubpaths());
     // const rasterizer = draw.Rasterizer.create(&half_planes);
 
     // zstbi.init(allocator);

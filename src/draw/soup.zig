@@ -543,7 +543,7 @@ pub const Soup = struct {
         return try self.spans.addManyAsSlice(self.allocator, n);
     }
 
-    pub fn debugFlatSubpaths(self: @This()) bool {
+    pub fn assertFlatSubpaths(self: @This()) bool {
         for (self.flat_subpaths.items) |flat_subpath| {
             const flat_curves = self.flat_curves.items[flat_subpath.flat_curve_offsets.start..flat_subpath.flat_curve_offsets.end];
             for (flat_curves, 0..) |flat_curve, flat_curve_index| {
@@ -564,7 +564,7 @@ pub const Soup = struct {
                     const end_point = flat_segment.getBufferEndPoint(self.buffer.items);
                     const start_point = next_flat_segment.getBufferStartPoint(self.buffer.items);
                     if (!std.meta.eql(start_point, end_point)) {
-                        std.debug.assert(true);
+                        std.debug.assert(false);
                         return false;
                     }
                 }

@@ -112,6 +112,14 @@ const SegmentWriter = struct {
             return;
         }
 
+        if (std.meta.eql(line.end, PointF32{
+            .x = 1.9589518e1,
+            .y = 4.0952305e1,
+        }) or std.meta.eql(line.end, PointF32{ .x = 4.0976234e1, .y = 7.16652e1 })) {
+            std.debug.assert(true);
+            std.debug.assert(true);
+        }
+
         const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
         self.flat_segments[self.flat_segment_index] = FlatSegment{
             .kind = .line,
@@ -377,7 +385,6 @@ pub const Kernel = struct {
             &left_writer,
         );
 
-        var right_join_index: usize = 0;
         if (curve.cap == .end) {
             // draw end cap on left side
             drawCap(
@@ -401,7 +408,6 @@ pub const Kernel = struct {
                 &left_writer,
                 &right_writer,
             );
-            right_join_index = right_writer.buffer_index;
         }
 
         flattenEuler(
@@ -468,7 +474,10 @@ pub const Kernel = struct {
         while (true) {
             const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
             if (t0 == 1.0) {
-                writer.writeLine(Line.create(contour, t_end).transformMatrix(transform));
+                const forward = offset >= 0;
+                const l0 = if (forward) contour else t_end;
+                const l1 = if (forward) t_end else contour;
+                writer.writeLine(Line.create(l0, l1).transformMatrix(transform));
                 break;
             }
 
