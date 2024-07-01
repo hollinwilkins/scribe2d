@@ -571,8 +571,7 @@ pub const Kernel = struct {
             const arc_t0 = @as(f32, @floatFromInt(i)) * arc_dt;
             const arc_t1 = arc_t0 + arc_dt;
             if (i + 1 == n) {
-                ap1 = euler_segment.p1; // should be this probably
-                // ap1 = euler_segment.applyOffset(t_range.end, normalized_offset);
+                ap1 = euler_segment.applyOffset(t_range.end, normalized_offset);
             } else {
                 ap1 = euler_segment.applyOffset(t_range.start + range_size * arc_t1, normalized_offset);
             }
