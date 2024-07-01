@@ -63,6 +63,7 @@ const SpanWriter = Writer(Span);
 
 pub const Rasterizer = struct {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
+    const T_TOLERANCE: f32 = 1e-8;
     half_planes: *const HalfPlanesU16,
 
     pub fn create(half_planes: *const HalfPlanesU16) @This() {
@@ -366,7 +367,19 @@ pub const Rasterizer = struct {
     ) !void {
         var intersection_result: [2]Intersection = [_]Intersection{undefined} ** 2;
         for (arc.intersectLine(scan_line, &intersection_result)) |intersection| {
-            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            if (std.math.approxEqAbs(f32, intersection.t, 0.0, T_TOLERANCE)) {
+                intersection_writer.addOne().* = GridIntersection.create((Intersection{
+                    .t = 0.0,
+                    .point = arc.applyT(0.0),
+                }).fitToGrid());
+            } else if (std.math.approxEqAbs(f32, intersection.t, 1.0, T_TOLERANCE)) {
+                intersection_writer.addOne().* = GridIntersection.create((Intersection{
+                    .t = 1.0,
+                    .point = arc.applyT(1.0),
+                }).fitToGrid());
+            } else {
+                intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            }
         }
     }
 
@@ -471,7 +484,19 @@ pub const Rasterizer = struct {
         );
 
         if (line.intersectVerticalLine(scan_line)) |intersection| {
-            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            if (std.math.approxEqAbs(f32, intersection.t, 0.0, T_TOLERANCE)) {
+                intersection_writer.addOne().* = GridIntersection.create((Intersection{
+                    .t = 0.0,
+                    .point = line.applyT(0.0),
+                }).fitToGrid());
+            } else if (std.math.approxEqAbs(f32, intersection.t, 1.0, T_TOLERANCE)) {
+                intersection_writer.addOne().* = GridIntersection.create((Intersection{
+                    .t = 1.0,
+                    .point = line.applyT(1.0),
+                }).fitToGrid());
+            } else {
+                intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            }
         }
     }
 
@@ -493,7 +518,19 @@ pub const Rasterizer = struct {
         );
 
         if (line.intersectHorizontalLine(scan_line)) |intersection| {
-            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            if (std.math.approxEqAbs(f32, intersection.t, 0.0, T_TOLERANCE)) {
+                intersection_writer.addOne().* = GridIntersection.create((Intersection{
+                    .t = 0.0,
+                    .point = line.applyT(0.0),
+                }).fitToGrid());
+            } else if (std.math.approxEqAbs(f32, intersection.t, 1.0, T_TOLERANCE)) {
+                intersection_writer.addOne().* = GridIntersection.create((Intersection{
+                    .t = 1.0,
+                    .point = line.applyT(1.0),
+                }).fitToGrid());
+            } else {
+                intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            }
         }
     }
 };

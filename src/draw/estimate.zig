@@ -401,10 +401,10 @@ pub const Estimator = struct {
 
         switch (join) {
             .bevel => {
-                estimate.lines += 1;
+                estimate.lines += 2;
             },
             .miter => {
-                estimate.lines += 2;
+                estimate.lines += 4;
             },
             .round => {
                 estimate.arcs += 1;

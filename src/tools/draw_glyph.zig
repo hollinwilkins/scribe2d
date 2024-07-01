@@ -51,7 +51,7 @@ pub fn main() !void {
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
-        .width = 4.0,
+        .width = 1.0,
         .join = .bevel,
     };
     style.fill = draw.Style.Fill{
@@ -64,7 +64,7 @@ pub fn main() !void {
     defer soup.deinit();
 
     // soup.flat_paths.items[0].flat_subpath_offsets.end -= 1;
-    // soup.path.items = soup.path.items[2..3];
+    soup.flat_paths.items = soup.flat_paths.items[1..2];
     // soup.path.items[0].subpath_offsets.start += 1;
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);

@@ -90,7 +90,7 @@ pub const Arc = struct {
 
     pub fn intersectLine(self: @This(), line: Line, result: *[2]Intersection) []Intersection {
         const dxdy = line.end.sub(line.start);
-        const dxdy_arc = line.end.sub(self.center);
+        const dxdy_arc = line.start.sub(self.center);
         const point = self.start.sub(self.center);
         const start_angle = point.atan2();
         const end_angle = start_angle + self.angle;

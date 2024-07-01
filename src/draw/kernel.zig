@@ -49,7 +49,7 @@ pub const KernelConfig = struct {
     quad_a2: f32 = 0.5,
     quad_b2: f32 = -0.156,
     quad_c2: f32 = 0.16145779359520596,
-    robust_eps: f32 = 2e-7,
+    robust_eps: f32 = 1e-12,
 
     derivative_threshold: f32 = 1e-6,
     derivative_threshold_pow2: f32 = 0.0,
@@ -110,14 +110,6 @@ const SegmentWriter = struct {
     pub fn writeLine(self: *@This(), line: Line) void {
         if (line.isEmpty()) {
             return;
-        }
-
-        if (std.meta.eql(line.end, PointF32{
-            .x = 1.9589518e1,
-            .y = 4.0952305e1,
-        }) or std.meta.eql(line.end, PointF32{ .x = 4.0976234e1, .y = 7.16652e1 })) {
-            std.debug.assert(true);
-            std.debug.assert(true);
         }
 
         const segment_buffer_start: u32 = @intCast(self.buffer_start + self.buffer_index);
@@ -326,31 +318,32 @@ pub const Kernel = struct {
         var tan_next = neighbor.tangent;
         var tan_start = cubicStartTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
 
-        if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
+        if (tan_start.lengthSquared() < config.tangent_threshold_pow2) {
             tan_start = PointF32{
                 .x = config.tangent_threshold,
                 .y = 0.0,
             };
         }
 
-        if (tan_prev.dot(tan_prev) < config.tangent_threshold_pow2) {
+        if (tan_prev.lengthSquared() < config.tangent_threshold_pow2) {
             tan_prev = PointF32{
                 .x = config.tangent_threshold,
                 .y = 0.0,
             };
         }
 
-        if (tan_next.dot(tan_next) < config.tangent_threshold_pow2) {
+        if (tan_next.lengthSquared() < config.tangent_threshold_pow2) {
             tan_next = PointF32{
                 .x = config.tangent_threshold,
                 .y = 0.0,
             };
         }
 
-        const n_start = offset_point.mul((PointF32{
-            .x = -tan_start.y,
-            .y = tan_start.x,
-        }).normalizeUnsafe());
+        const tan_start_norm = tan_start.normalizeUnsafe();
+        const n_start = offset_point.mul(PointF32{
+            .x = -tan_start_norm.y,
+            .y = tan_start_norm.x,
+        });
         const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
         const n_prev = PointF32{
             .x = -offset_tangent.y,
@@ -669,10 +662,8 @@ pub const Kernel = struct {
 
         switch (stroke.join) {
             .bevel => {
-                if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
-                    left_writer.writeLine(Line.create(front0, front1).transformMatrix(transform));
-                    right_writer.writeLine(Line.create(back0, back1).transformMatrix(transform));
-                }
+                left_writer.writeLine(Line.create(front0, front1).transformMatrix(transform));
+                right_writer.writeLine(Line.create(back0, back1).transformMatrix(transform));
             },
             .miter => {
                 const hypot = std.math.hypot(cr, d);
@@ -861,6 +852,7 @@ pub fn getCubicPoints(curve: Curve, points: []const PointF32) CubicPoints {
 }
 
 pub const NeighborSegment = struct {
+    cubic_points: CubicPoints,
     tangent: PointF32,
 };
 
@@ -919,6 +911,7 @@ fn readNeighborSegment(
     );
 
     return NeighborSegment{
+        .cubic_points = cubic_points,
         .tangent = tangent,
     };
 }
