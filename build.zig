@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const fixtures_path = "fixtures";
-    const install_fixtures_step = b.addInstallDirectory(.{
+    b.installDirectory(.{
         .source_dir = b.path(fixtures_path),
         .install_dir = .{ .custom = "" },
         .install_subdir = b.pathJoin(&.{"bin/fixtures"}),
@@ -51,7 +51,22 @@ pub fn build(b: *std.Build) void {
     }
     const run_draw_glyph_step = b.step("draw_glyph", "Run the draw_glyph tool");
     run_draw_glyph_step.dependOn(&run_draw_glyph.step);
-    run_draw_glyph_step.dependOn(&install_fixtures_step.step);
+
+    const svg_exe = b.addExecutable(.{
+        .name = "svg",
+        .root_source_file = b.path("src/tools/svg.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    svg_exe.root_module.addImport("scribe", &lib.root_module);
+    b.installArtifact(svg_exe);
+    const run_svg = b.addRunArtifact(svg_exe);
+    run_svg.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_svg.addArgs(args);
+    }
+    const run_svg_step = b.step("svg", "Run the svg tool");
+    run_svg_step.dependOn(&run_svg.step);
 
     // TODO: This doesn't work yet
     //   Tracking Issue: https://github.com/ziglang/zig/issues/20454
@@ -85,6 +100,8 @@ pub fn build(b: *std.Build) void {
     })) |dep| {
         draw_glyph_exe.root_module.addImport("zstbi", dep.module("root"));
         draw_glyph_exe.linkLibrary(dep.artifact("zstbi"));
+        svg_exe.root_module.addImport("zstbi", dep.module("root"));
+        svg_exe.linkLibrary(dep.artifact("zstbi"));
         exe_unit_tests.root_module.addImport("zstbi", dep.module("root"));
         exe_unit_tests.linkLibrary(dep.artifact("zstbi"));
     }
@@ -98,7 +115,6 @@ pub fn build(b: *std.Build) void {
 
     const test_install_step = b.step("test-install", "Run unit tests");
     const lib_unit_tests_install = b.addInstallArtifact(lib_unit_tests, .{});
-    test_install_step.dependOn(&install_fixtures_step.step);
     test_install_step.dependOn(&lib_unit_tests_install.step);
 }
 
