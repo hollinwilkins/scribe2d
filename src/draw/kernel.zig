@@ -695,7 +695,7 @@ pub const Kernel = struct {
         const s = std.math.sin(theta);
         const c = std.math.cos(theta);
         const rot = TransformF32.Matrix{
-            .coefficients = [_]f32{ c, -s, s, c, 0.0, 0.0 },
+            .coefficients = [_]f32{ c, -s, 0.0, s, c, 0.0 },
         };
 
         for (0..n_lines - 1) |n| {

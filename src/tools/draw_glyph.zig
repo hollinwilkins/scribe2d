@@ -56,12 +56,12 @@ pub fn main() !void {
         const offset = 100.0;
         const transform = (core.TransformF32{
             .translate = core.PointF32{
-                .x = offset,
+                .x = offset / 4.0,
                 .y = offset,
             },
             .scale = core.PointF32{
                 .x = 0.1,
-                .y = 0.1,
+                .y = 0.5,
             },
             .rotate = std.math.pi,
         });

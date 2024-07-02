@@ -277,8 +277,8 @@ pub fn Transform(comptime T: type) type {
 
             pub fn apply(self: @This(), point: P) P {
                 const z = self.coefficients;
-                const x = z[0] * point.x + z[2] * point.y + z[4];
-                const y = z[1] * point.x + z[3] * point.y + z[5];
+                const x = z[0] * point.x + z[3] * point.y + z[2];
+                const y = z[1] * point.x + z[4] * point.y + z[5];
 
                 return P{
                     .x = x,
@@ -296,10 +296,10 @@ pub fn Transform(comptime T: type) type {
             pub fn getScale(self: @This()) T {
                 // TODO: does this actually make sense?
                 const c = self.coefficients;
-                const v1x = c[0] + c[3];
-                const v2x = c[0] - c[3];
-                const v1y = c[1] - c[2];
-                const v2y = c[1] + c[2];
+                const v1x = c[0] + c[4];
+                const v2x = c[0] - c[4];
+                const v1y = c[1] - c[4];
+                const v2y = c[1] + c[4];
 
                 return (PointF32{
                     .x = v1x,
@@ -335,9 +335,8 @@ pub fn Transform(comptime T: type) type {
 
             return Matrix{
                 .coefficients = [_]T{
-                    c * self.scale.x, -(s * self.scale.y),
-                    s * self.scale.x, c * self.scale.y,
-                    self.translate.x, self.translate.y,
+                    c * self.scale.x, -(s * self.scale.y), self.translate.x,
+                    s * self.scale.x, c * self.scale.y,    self.translate.y,
                 },
             };
         }
