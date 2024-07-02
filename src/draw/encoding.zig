@@ -3,6 +3,10 @@ const core = @import("../core/root.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
+const Line = core.Line;
+const Arc = core.Arc;
+const QuadraticBezier = core.QuadraticBezier;
+const CubicBezier = core.CubicBezier;
 
 pub const SegmentTag = packed struct {
     pub const Bits = enum(u1) {
@@ -35,15 +39,28 @@ pub const SegmentTag = packed struct {
 
 pub const Style = packed struct {};
 
+pub const Encoding = struct {
+    segment_tags: []const SegmentTag,
+    transforms: []const TransformF32.Affine,
+    styles: []const Style,
+    segments: []const u8,
+
+    pub fn createFromBytes(bytes: []const u8) Encoding {
+        _ = bytes;
+        @panic("TODO: implement this for GPU kernels");
+    }
+};
+
+// This encoding can get sent to kernels
 pub const Encoder = struct {
     const SegmentTagList = std.ArrayListUnmanaged(SegmentTag);
-    const TransformList = std.ArrayListUnmanaged(TransformF32.Matrix);
+    const AffineList = std.ArrayListUnmanaged(TransformF32.Affine);
     const StyleList = std.ArrayListUnmanaged(Style);
     const Buffer = std.ArrayListUnmanaged(u8);
 
     allocator: Allocator,
     segment_tags: SegmentTagList = SegmentTagList{},
-    transforms: TransformList = TransformList{},
+    transforms: AffineList = AffineList{},
     styles: StyleList = StyleList{},
     segments: Buffer = Buffer{},
 
@@ -58,5 +75,56 @@ pub const Encoder = struct {
         self.transforms.deinit(self.allocator);
         self.styles.deinit(self.allocator);
         self.segments.deinit(self.allocator);
+    }
+
+    pub fn encode(self: @This()) Encoding {
+        return Encoding{
+            .segment_tags = self.segment_tags.items,
+            .transforms = self.transforms.items,
+            .styles = self.styles.items,
+            .segments = self.segments.items,
+        };
+    }
+
+    pub fn currentAffine(self: @This()) ?TransformF32.Affine {
+        if (self.transforms.items.len > 0) {
+            return self.transforms.items[self.transforms.items.len - 1];
+        }
+
+        return null;
+    }
+
+    pub fn encodeAffine(self: *@This(), affine: TransformF32.Affine) !bool {
+        if (self.currentAffine()) |current| {
+            if (std.meta.eql(current, affine)) {
+                return false;
+            }
+        }
+
+        (try self.transforms.addOne()).* = affine;
+        return true;
+    }
+
+    pub fn currentStyle(self: @This()) ?Style {
+        if (self.styles.items.len > 0) {
+            return self.styles.items[self.styles.items.len - 1];
+        }
+
+        return null;
+    }
+
+    pub fn encodeStyle(self: *@This(), style: Style) !bool {
+        if (self.currentStyle()) |current| {
+            if (std.meta.eql(current, style)) {
+                return false;
+            }
+        }
+
+        (try self.styles.addOne()).* = style;
+        return true;
+    }
+
+    pub fn extendSegment(self: *@This(), n: usize) ![]u8 {
+        return try self.segments.addManyAsSlice(self.allocator, n);
     }
 };

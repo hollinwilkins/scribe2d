@@ -349,6 +349,7 @@ pub fn Transform(comptime T: type) type {
                 }).length();
             }
         };
+        pub const Affine = Matrix;
 
         const P = Point(T);
         const Scale = Point(T);

@@ -34,3 +34,15 @@ pub const RangeF32 = range.RangeF32;
 
 pub const Sequence = sequence.Sequence;
 pub const SequenceU32 = Sequence(u32);
+
+pub const Line = curve.Line;
+pub const LineF32 = curve.LineF32;
+pub const LineI16 = curve.LineI16;
+
+pub const Arc = curve.Arc;
+pub const ArcF32 = curve.ArcF32;
+pub const ArcI16 = curve.ArcI16;
+
+pub const QuadraticBezier = curve.QuadraticBezier;
+pub const QuadraticBezierF32 = curve.QuadraticBezierF32;
+pub const QuadraticBezierI16 = curve.QuadraticBezierI16;
