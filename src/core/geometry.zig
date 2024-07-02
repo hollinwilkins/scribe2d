@@ -330,20 +330,13 @@ pub fn Transform(comptime T: type) type {
         }
 
         pub fn toMatrix(self: @This()) Matrix {
-            const x_axis = PointF32{
-                .x = std.math.cos(self.rotate) * self.scale.x,
-                .y = -std.math.sin(self.rotate),
-            };
-
-            const y_axis = PointF32{
-                .x = std.math.sin(self.rotate),
-                .y = std.math.cos(self.rotate) * self.scale.y,
-            };
+            const c = std.math.cos(self.rotate);
+            const s = std.math.sin(self.rotate);
 
             return Matrix{
                 .coefficients = [_]T{
-                    x_axis.x,         x_axis.y,
-                    y_axis.x,         y_axis.y,
+                    c * self.scale.x, -(s * self.scale.y),
+                    s * self.scale.x, c * self.scale.y,
                     self.translate.x, self.translate.y,
                 },
             };

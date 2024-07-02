@@ -63,7 +63,7 @@ pub fn main() !void {
                 .x = 0.1,
                 .y = 0.1,
             },
-            .rotate = 0.1,
+            .rotate = std.math.pi,
         });
         glyph_paths.transformMatrixInPlace(transform.toMatrix());
     }
