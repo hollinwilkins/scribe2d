@@ -36,50 +36,57 @@ pub fn main() !void {
 
     // const glyph_id = face.unmanaged.tables.cmap.?.subtables.getGlyphIndex(codepoint).?;
     // _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
-    const bounds = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
-    _ = bounds;
+    _ = try face.outline(glyph_id, @floatFromInt(size), builder.glyphPen());
 
+    const outline_width: f32 = 2.0;
     var scene = try draw.Scene.init(allocator);
     defer scene.deinit();
-
     const style = try scene.pushStyle();
     style.stroke = draw.Style.Stroke{
         .color = draw.Color.BLACK,
-        .width = 2.0,
+        .width = outline_width,
         .join = .round,
     };
     style.fill = draw.Style.Fill{
         .color = draw.Color.BLUE,
     };
 
-    {
-        const offset = 100.0;
-        const transform = (core.TransformF32{
-            .translate = core.PointF32{
-                .x = offset / 4.0,
-                .y = offset,
-            },
-            .scale = core.PointF32{
-                .x = 0.1,
-                .y = 0.5,
-            },
-            .rotate = std.math.pi,
-        });
-        glyph_paths.transformMatrixInPlace(transform.toMatrix());
-    }
     try scene.shape.copyPath(glyph_paths, 0);
     try scene.close();
+
+    // rotate and scale the glyph
+    {
+        const transform = (core.TransformF32{
+            .scale = core.PointF32{
+                .x = 1.0,
+                .y = 1.0,
+            },
+            .rotate = 0.0,
+        });
+        scene.shape.transformMatrixInPlace(transform.toMatrix());
+    }
+
+    const dimensions = core.DimensionsU32{
+        .width = @intFromFloat(@ceil(scene.shape.bounds.getWidth() + outline_width / 2.0 + 16.0)),
+        .height = @intFromFloat(@ceil(scene.shape.bounds.getHeight() + outline_width / 2.0 + 16.0)),
+    };
+
+    // translate the glyph
+    {
+        const transform = (core.TransformF32{
+            .translate = core.PointF32{
+                .x = @floatFromInt(dimensions.width / 2),
+                .y = @floatFromInt(dimensions.height / 2),
+            },
+        });
+        scene.shape.transformMatrixInPlace(transform.toMatrix());
+    }
 
     var soup = try draw.PathFlattener.flattenSceneAlloc(allocator, draw.KernelConfig.DEFAULT, scene);
     defer soup.deinit();
 
     // soup.path.items = soup.path.items[2..3];
     // soup.path.items[0].subpath_offsets.start += 1;
-
-    const dimensions = core.DimensionsU32{
-        .width = size,
-        .height = size,
-    };
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
@@ -242,7 +249,7 @@ pub fn main() !void {
         std.debug.print("\n============== Boundary Texture\n\n", .{});
         for (0..texture.dimensions.height) |y| {
             std.debug.print("{:0>4}: ", .{y});
-            for (0..texture.dimensions.height) |x| {
+            for (0..texture.dimensions.width) |x| {
                 const pixel = texture.getPixelUnsafe(core.PointU32{
                     .x = @intCast(x),
                     .y = @intCast(y),

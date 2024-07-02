@@ -26,7 +26,7 @@ pub const PathMetadata = struct {
 
 pub const Path = struct {
     subpath_offsets: RangeU32,
-    bounds: RectF32 = RectF32{},
+    bounds: RectF32 = RectF32.NONE,
     is_closed: bool = false,
 };
 
@@ -70,6 +70,7 @@ pub const Shape = struct {
     subpaths: SubpathList = SubpathList{},
     curves: CurveList = CurveList{},
     points: PointList = PointList{},
+    bounds: RectF32 = RectF32.NONE,
 
     pub fn init(allocator: Allocator) @This() {
         return @This(){
@@ -94,6 +95,10 @@ pub const Shape = struct {
         for (self.points.items) |*point| {
             point.* = transform.apply(point.*);
         }
+        for (self.paths.items) |*path| {
+            path.bounds.transformMatrixInPlace(transform);
+        }
+        self.bounds.transformMatrixInPlace(transform);
     }
 
     pub fn currentPath(self: *@This()) ?*Path {
@@ -132,27 +137,17 @@ pub const Shape = struct {
                 return;
             }
 
-            var bounds = RectF32{
-                .min = PointF32{
-                    .x = std.math.floatMax(f32),
-                    .y = std.math.floatMax(f32),
-                },
-                .max = PointF32{
-                    .x = std.math.floatMin(f32),
-                    .y = std.math.floatMin(f32),
-                },
-            };
-
             for (self.subpaths.items[path.subpath_offsets.start..path.subpath_offsets.end]) |subpath| {
                 const start_point_index = self.curves.items[subpath.curve_offsets.start].point_offsets.start;
                 const end_point_index = self.curves.items[subpath.curve_offsets.end - 1].point_offsets.end;
 
                 for (self.points.items[start_point_index..end_point_index]) |point| {
-                    bounds = bounds.extendBy(point);
+                    path.bounds.extendByInPlace(point);
                 }
             }
 
-            path.bounds = bounds;
+            self.bounds.extendByInPlace(path.bounds.min);
+            self.bounds.extendByInPlace(path.bounds.max);
             path.is_closed = true;
         }
     }
@@ -167,8 +162,7 @@ pub const Shape = struct {
         const end_point_index = paths.curves.items[end_curve_index - 1].point_offsets.end;
 
         const self_start_point_index: u32 = @intCast(self.points.items.len);
-        const points = try self.addPoints(end_point_index - start_point_index);
-        std.mem.copyForwards(PointF32, points, paths.points.items[start_point_index..end_point_index]);
+        try self.addPoints(paths.points.items[start_point_index..end_point_index]);
 
         const self_start_curve_index: u32 = @intCast(self.curves.items.len);
         const curves = try self.addCurves(end_curve_index - start_curve_index);
@@ -271,12 +265,13 @@ pub const Shape = struct {
         return try self.curves.addManyAsSlice(self.allocator, n);
     }
 
-    fn addPoint(self: *@This()) !*PointF32 {
-        return try self.points.addOne(self.allocator);
+    fn addPoint(self: *@This(), point: PointF32) !void {
+        (try self.points.addOne(self.allocator)).* = point;
     }
 
-    fn addPoints(self: *@This(), n: usize) ![]PointF32 {
-        return try self.points.addManyAsSlice(self.allocator, n);
+    fn addPoints(self: *@This(), points: []const PointF32) !void {
+        const new_points = try self.points.addManyAsSlice(self.allocator, points.len);
+        std.mem.copyForwards(PointF32, new_points, points);
     }
 
     pub fn transformCurrentPath(self: *@This(), t: TransformF32) void {
@@ -297,7 +292,7 @@ pub const Shape = struct {
             .end = @intCast(self.points.items.len + 1),
         };
 
-        (try self.addPoint()).* = point;
+        try self.addPoint(point);
         const curve = try self.addCurve(.line);
         curve.point_offsets = point_offsets;
     }
@@ -308,9 +303,10 @@ pub const Shape = struct {
             .end = @intCast(self.points.items.len + 2),
         };
 
-        const points = try self.addPoints(2);
-        points[0] = control;
-        points[1] = point;
+        try self.addPoints(&[_]PointF32{
+            control,
+            point,
+        });
         const curve = try self.addCurve(.quadratic_bezier);
         curve.point_offsets = point_offsets;
     }
@@ -321,12 +317,17 @@ pub const Shape = struct {
             .end = @intCast(self.points.items.len + 3),
         };
 
-        const points = try self.addPoints(3);
-        points[0] = control1;
-        points[1] = control2;
-        points[2] = point;
+        try self.addPoints(&[_]PointF32{
+            control1,
+            control2,
+            point,
+        });
         const curve = try self.addCurve(.cubic_bezier);
         curve.point_offsets = point_offsets;
+    }
+
+    fn extendCurrentPathBounds(self: *@This(), point: PointF32) void {
+        self.currentPathUnsafe().bounds.extendByInPlace(point);
     }
 };
 
@@ -367,7 +368,7 @@ pub const ShapeBuilder = struct {
     pub fn lineTo(self: *@This(), point: PointF32) !void {
         if (!self.is_subpath_initialized) {
             try self.shape.openSubpath();
-            (try self.shape.addPoint()).* = self.location;
+            try self.shape.addPoint(self.location);
             self.is_subpath_initialized = true;
         }
 
@@ -378,7 +379,7 @@ pub const ShapeBuilder = struct {
     pub fn quadTo(self: *@This(), control: PointF32, point: PointF32) !void {
         if (!self.is_subpath_initialized) {
             try self.shape.openSubpath();
-            (try self.shape.addPoint()).* = self.location;
+            try self.shape.addPoint(self.location);
             self.is_subpath_initialized = true;
         }
 
@@ -449,7 +450,7 @@ pub const ShapeBuilder = struct {
                     .y = -1.0,
                 },
                 .translate = PointF32{
-                    .x = -(bounds2.getHeight() / 2.0),
+                    .x = -(bounds2.getWidth() / 2.0),
                     .y = -(bounds2.getHeight() / 2.0),
                 },
             });

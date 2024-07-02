@@ -2,6 +2,27 @@ const std = @import("std");
 
 pub fn Point(comptime T: type) type {
     return struct {
+        pub const T_MIN: T = switch (@typeInfo(T)) {
+            .Int => |_| std.math.minInt(T),
+            .Float => |_| std.math.floatMin(T),
+            else => @panic("Point(T): T must be a Float or Int"),
+        };
+
+        pub const T_MAX: T = switch (@typeInfo(T)) {
+            .Int => |_| std.math.maxInt(T),
+            .Float => |_| std.math.floatMax(T),
+            else => @panic("Point(T): T must be a Float or Int"),
+        };
+
+        pub const MIN: @This() = @This(){
+            .x = T_MIN,
+            .y = T_MIN,
+        };
+        pub const MAX: @This() = @This(){
+            .x = T_MAX,
+            .y = T_MAX,
+        };
+
         x: T = 0,
         y: T = 0,
 
@@ -196,6 +217,11 @@ pub const DimensionsU16 = Dimensions(u16);
 
 pub fn Rect(comptime T: type) type {
     return struct {
+        pub const NONE: @This() = @This(){
+            .min = P.MAX,
+            .max = P.MIN,
+        };
+
         const P = Point(T);
 
         min: P = P{},
@@ -244,6 +270,14 @@ pub fn Rect(comptime T: type) type {
             };
         }
 
+        pub fn transformMatrixInPlace(self: *@This(), t: Transform(T).Matrix) void {
+            const p0 = t.apply(self.min);
+            const p1 = t.apply(self.max);
+
+            self.min = p0.min(p1);
+            self.max = p0.max(p1);
+        }
+
         pub fn fitsInside(self: @This(), other: @This()) bool {
             return self.getDimensions().fitsInside(other.getDimensions());
         }
@@ -257,6 +291,11 @@ pub fn Rect(comptime T: type) type {
                 .min = self.min.min(point),
                 .max = self.max.max(point),
             };
+        }
+
+        pub fn extendByInPlace(self: *@This(), point: Point(T)) void {
+            self.min = self.min.min(point);
+            self.max = self.max.max(point);
         }
     };
 }
