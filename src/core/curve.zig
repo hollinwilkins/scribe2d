@@ -28,19 +28,17 @@ pub fn Arc(comptime T: type) type {
     const P = Point(T);
 
     return extern struct {
-        p0: P,
-        p1: P,
-        center: P,
-        angle: T,
+        p0: P, // start
+        p1: P, // zenith of arc
+        p2: P, // end
 
         pub usingnamespace muck_module.ByteData(@This());
 
-        pub fn create(p0: P, p1: P, center: P, angle: T) @This() {
+        pub fn create(p0: P, p1: P, p2: P) @This() {
             return @This(){
                 .p0 = p0,
                 .p1 = p1,
-                .center = center,
-                .angle = angle,
+                .p2 = p2,
             };
         }
     };
