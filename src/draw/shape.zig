@@ -449,18 +449,8 @@ pub const ShapeBuilder = struct {
                     .y = -1.0,
                 },
                 .translate = PointF32{
-                    .x = 0.0,
+                    .x = -(bounds2.getHeight() / 2.0),
                     .y = -(bounds2.getHeight() / 2.0),
-                },
-            });
-            b.shape.transformCurrentPath(TransformF32{
-                .scale = PointF32{
-                    .x = 1.0,
-                    .y = 1.0,
-                },
-                .translate = PointF32{
-                    .x = 0.0,
-                    .y = bounds2.getHeight() / 2.0,
                 },
             });
 
