@@ -108,6 +108,65 @@ pub const Style = packed struct {
     stroke: ?Stroke = null,
 };
 
+pub const PathMonid = extern struct {
+    path_index: u32 = 0,
+    segment_index: u32 = 0,
+    segment_offset: u32 = 0,
+    transform_index: u32 = 0,
+    style_index: u32 = 0,
+
+    pub fn createTag(tag: PathTag) @This() {
+        switch (tag.kind) {
+            .segment => {
+                const segment = tag.tag.segment;
+                const segment_offset: u32 = switch(segment.kind) {
+                    .none => unreachable,
+                    .line_f32 => @sizeOf(Point(f32)),
+                    .line_i16 => @sizeOf(Point(i16)),
+                    .arc_f32 => @sizeOf(Point(f32)) * 2,
+                    .arc_i16 => @sizeOf(Point(i16)) * 2,
+                    .quadratic_bezier_f32 => @sizeOf(Point(f32)) * 2,
+                    .quadratic_bezier_i16 => @sizeOf(Point(i16)) * 2,
+                    .cubic_bezier_f32 => @sizeOf(Point(f32)) * 3,
+                    .cubic_bezier_i16 => @sizeOf(Point(i16)) * 3,
+                };
+                return @This() {
+                    .segment_index = 1,
+                    .segment_offset = segment_offset,
+                };
+            },
+            .index => {
+                const index = tag.tag.index;
+                return @This() {
+                    .path_index = @intCast(index.path),
+                    .transform_index = @intCast(index.transform),
+                    .style_index = @intCast(index.style),
+                };
+            },
+        }
+    }
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .path_index = self.path_index + other.path_index,
+            .segment_index = self.segment_index + other.segment_index,
+            .segment_offset = self.segment_offset + other.segment_offset,
+            .transform_index = self.transform_index + other.transform_index,
+            .style_index = self.style_index + other.style_index,
+        };
+    }
+
+    pub fn expandTags(tags: []const PathTag, expanded: []PathMonid) void {
+        std.debug.assert(tags.len == expanded.len);
+
+        var monoid = PathMonid{};
+        for (tags, expanded) |tag, *expanded_monoid| {
+            monoid = monoid.combine(PathMonid.createTag(tag));
+            expanded_monoid.* = monoid;
+        }
+    }
+};
+
 // Encodes all data needed for a single draw command to the GPU or CPU
 pub const Encoding = struct {
     path_tags: []const PathTag,
