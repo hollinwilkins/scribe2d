@@ -1,5 +1,5 @@
 pub fn Range(comptime T: type) type {
-    return struct {
+    return extern struct {
         const Self = @This();
 
         start: T = 0,

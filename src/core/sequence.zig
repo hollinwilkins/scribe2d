@@ -2,7 +2,7 @@ const std = @import("std");
 const atomic = std.atomic;
 
 pub fn Sequence(comptime T: type) type {
-    return struct {
+    return extern struct {
         const Self = @This();
         const Value = atomic.Value(T);
 

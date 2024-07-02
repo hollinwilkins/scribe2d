@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub fn Point(comptime T: type) type {
-    return struct {
+    return extern struct {
         pub const T_MIN: T = switch (@typeInfo(T)) {
             .Int => |_| std.math.minInt(T),
             .Float => |_| std.math.floatMin(T),
@@ -183,7 +183,7 @@ pub const PointU32 = Point(u32);
 pub const PointI32 = Point(i32);
 
 pub fn Dimensions(comptime T: type) type {
-    return struct {
+    return extern struct {
         width: T,
         height: T,
 
@@ -216,7 +216,7 @@ pub const DimensionsU32 = Dimensions(u32);
 pub const DimensionsU16 = Dimensions(u16);
 
 pub fn Rect(comptime T: type) type {
-    return struct {
+    return extern struct {
         pub const NONE: @This() = @This(){
             .min = P.MAX,
             .max = P.MIN,
@@ -306,10 +306,10 @@ pub const RectI32 = Rect(i32);
 pub const RectU32 = Rect(u32);
 
 pub fn Transform(comptime T: type) type {
-    return struct {
+    return extern struct {
         const SelfTransform = @This();
 
-        pub const Matrix = struct {
+        pub const Matrix = extern struct {
             pub const IDENTITY: Matrix = (SelfTransform{}).toMatrix();
 
             coefficients: [6]T = [_]T{undefined} ** 6,
