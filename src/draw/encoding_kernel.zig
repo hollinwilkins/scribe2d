@@ -111,6 +111,7 @@ pub const SegmentEstimate = packed struct {
 pub const Estimate = struct {
     const VIRTUAL_INTERSECTIONS: u32 = 2;
     const INTERSECTION_FUDGE: u32 = 2;
+    const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
     pub const RoundArcEstimate = struct {
         items: u32 = 0,
@@ -168,11 +169,11 @@ pub const Estimate = struct {
             },
             .arc_f32 => {
                 const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                se.estimates = estimateArc(arc);
+                se.estimates = estimateArc(config, arc);
             },
             .arc_i16 => {
                 const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                se.estimates = estimateArc(arc);
+                se.estimates = estimateArc(config, arc);
             },
             .quadratic_bezier_f32 => {
                 const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
@@ -229,17 +230,20 @@ pub const Estimate = struct {
     }
 
     pub fn estimateLineWidth(scaled_width: f32) Estimates {
+        return Estimates{
+            .lines = 1,
+            .intersections = estimateLineWidthIntersections(scaled_width),
+        };
+    }
+
+    pub fn estimateLineWidthIntersections(scaled_width: f32) u32 {
         const dxdy = PointF32{
             .x = scaled_width,
             .y = scaled_width,
         };
-        var intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
-        intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
 
-        return Estimates{
-            .lines = 1,
-            .intersections = intersections,
-        };
+        const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
     }
 
     pub fn estimateLine(line: LineF32) Estimates {
@@ -253,19 +257,74 @@ pub const Estimate = struct {
         };
     }
 
-    pub fn estimateArc(arc: ArcF32) Estimates {
-        _ = arc;
-        return Estimates{};
+    pub fn estimateArc(config: KernelConfig, arc: ArcF32) Estimates {
+        const width = arc.p0.sub(arc.p1).length() + arc.p2.sub(arc.p1).length();
+        const arc_estimate = estimateRoundArc(config, width);
+
+        return Estimates{
+            .lines = arc_estimate.items,
+            .intersections = estimateLineWidthIntersections(arc_estimate.length),
+        };
     }
 
     pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Estimates {
-        _ = quadratic_bezier;
-        return Estimates{};
+        const lines = @as(u32, @intFromFloat(Wang.quadratic(
+            @floatCast(RSQRT_OF_TOL),
+            quadratic_bezier.p0,
+            quadratic_bezier.p1,
+            quadratic_bezier.p2,
+        )));
+        const intersections = estimateStepCurveIntersections(
+            QuadraticBezierF32,
+            quadratic_bezier,
+            quadratic_bezier.p0,
+            quadratic_bezier.p2,
+            lines,
+        );
+
+        return Estimates{
+            .lines = lines,
+            .intersections = intersections,
+        };
     }
 
     pub fn estimateCubicBezier(cubic_bezier: CubicBezierF32) Estimates {
-        _ = cubic_bezier;
-        return Estimates{};
+        const lines = @as(u32, @intFromFloat(Wang.cubic(
+            @floatCast(RSQRT_OF_TOL),
+            cubic_bezier.p0,
+            cubic_bezier.p1,
+            cubic_bezier.p2,
+            cubic_bezier.p3,
+        )));
+        const intersections = estimateStepCurveIntersections(
+            CubicBezierF32,
+            cubic_bezier,
+            cubic_bezier.p0,
+            cubic_bezier.p2,
+            lines,
+        );
+
+        return Estimates{
+            .lines = lines,
+            .intersections = intersections,
+        };
+    }
+
+    pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u32) u32 {
+        var intersections: u32 = 0;
+        const step = 1.0 / @as(f32, @floatFromInt(samples));
+
+        var p0 = start;
+        for (0..samples - 1) |i| {
+            const p1 = curve.apply(@as(f32, @floatFromInt(i)) * step);
+            intersections += estimateLineWidthIntersections(p1.sub(p0).length());
+            p0 = p1;
+        }
+
+        const p1 = end;
+        intersections += estimateLineWidthIntersections(p1.sub(p0).length());
+
+        return intersections;
     }
 
     fn estimateRoundArc(config: KernelConfig, scaled_width: f32) RoundArcEstimate {
@@ -278,6 +337,33 @@ pub const Estimate = struct {
             .length = 2.0 * std.math.sin(theta) * radius,
         };
     }
+
+    pub const Wang = struct {
+        // The curve degree term sqrt(n * (n - 1) / 8) specialized for cubics:
+        //
+        //    sqrt(3 * (3 - 1) / 8)
+        //
+        const SQRT_OF_DEGREE_TERM_CUBIC: f32 = 0.86602540378;
+
+        // The curve degree term sqrt(n * (n - 1) / 8) specialized for quadratics:
+        //
+        //    sqrt(2 * (2 - 1) / 8)
+        //
+        const SQRT_OF_DEGREE_TERM_QUAD: f32 = 0.5;
+
+        pub fn quadratic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32) f32 {
+            const v = p1.add(p0).add(p2).mulScalar(-2.0);
+            const m = v.length();
+            return @ceil(SQRT_OF_DEGREE_TERM_QUAD * std.math.sqrt(m) * rsqrt_of_tol);
+        }
+
+        pub fn cubic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) f32 {
+            const v1 = p1.add(p0).add(p2).mulScalar(-2.0);
+            const v2 = p2.add(p1).add(p3).mulScalar(-2.0);
+            const m = @max(v1.length(), v2.length());
+            return @ceil(SQRT_OF_DEGREE_TERM_CUBIC * std.math.sqrt(m) * rsqrt_of_tol);
+        }
+    };
 };
 
 pub const Flatten = struct {
