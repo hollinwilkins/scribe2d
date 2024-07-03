@@ -21,7 +21,6 @@ const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
 const KernelConfig = encoding_kernel.KernelConfig;
-const SegmentEstimate = encoding_kernel.SegmentEstimate;
 const SegmentOffsets = encoding_kernel.SegmentOffsets;
 
 pub const PathTag = packed struct {
@@ -656,7 +655,6 @@ pub fn PathEncoder(comptime T: type) type {
 pub const CpuRasterizer = struct {
     const PathTagList = std.ArrayListUnmanaged(PathTag);
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
-    const SegmentEstimateList = std.ArrayListUnmanaged(SegmentEstimate);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffsets);
     const LineList = std.ArrayListUnmanaged(LineF32);
 
@@ -664,7 +662,7 @@ pub const CpuRasterizer = struct {
     config: KernelConfig,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
-    segment_estimates: SegmentEstimateList = SegmentEstimateList{},
+    segment_estimates: SegmentOffsetList = SegmentOffsetList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
 
     pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {

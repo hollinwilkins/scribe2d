@@ -91,6 +91,13 @@ pub const Estimates = packed struct {
     lines: u16 = 0,
     intersections: u16 = 0,
 
+    pub fn mulScalar(self: @This(), scalar: f32) @This() {
+        return @This(){
+            .lines = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.lines)) * scalar)),
+            .intersections = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersections)) * scalar)),
+        };
+    }
+
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .lines = self.lines + other.lines,
@@ -99,63 +106,15 @@ pub const Estimates = packed struct {
     }
 };
 
-pub const EstimateOffsets = packed struct {
-    line_offset: u32 = 0,
-    intersection_offest: u32 = 0,
-
-    pub usingnamespace MonoidFunctions(SegmentEstimate, @This());
-
-    pub fn createTag(estimates: Estimates) @This() {
-        return @This(){
-            .line_offset = estimates.lines,
-            .intersection_offest = estimates.intersections,
-        };
-    }
-
-    pub fn mulScalar(self: @This(), scalar: f32) @This() {
-        return @This(){
-            .line_offset = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.line_offset)) * scalar)),
-            .intersection_offest = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersection_offest)) * scalar)),
-        };
-    }
-
-    pub fn combine(self: @This(), other: @This()) @This() {
-        return @This(){
-            .line_offset = self.line_offset + other.line_offset,
-            .intersection_offest = self.intersection_offest + other.intersection_offest,
-        };
-    }
-};
-
-pub const SegmentEstimate = packed struct {
-    estimates: Estimates = Estimates{},
-    cap_estimates: Estimates = Estimates{},
-    join_estimates: Estimates = Estimates{},
-    stroke_fudge: f32 = 0.0,
-};
-
 pub const SegmentOffsets = packed struct {
-    fill: EstimateOffsets = EstimateOffsets{},
-    front_stroke: EstimateOffsets = EstimateOffsets{},
-    back_stroke: EstimateOffsets = EstimateOffsets{},
+    fill: Estimates = Estimates{},
+    front_stroke: Estimates = Estimates{},
+    back_stroke: Estimates = Estimates{},
 
-    pub usingnamespace MonoidFunctions(SegmentEstimate, @This());
+    pub usingnamespace MonoidFunctions(SegmentOffsets, @This());
 
-    pub fn createTag(segment_estimate: SegmentEstimate) @This() {
-        const fill = EstimateOffsets.createTag(segment_estimate.estimates);
-        const stroke = fill.mulScalar(segment_estimate.stroke_fudge);
-        const front_stroke = stroke.combine(
-            EstimateOffsets.createTag(segment_estimate.cap_estimates),
-        ).combine(
-            EstimateOffsets.createTag(segment_estimate.join_estimates),
-        );
-        const back_stroke = front_stroke.combine(stroke);
-
-        return @This(){
-            .fill = EstimateOffsets.createTag(segment_estimate.estimates),
-            .front_stroke = front_stroke,
-            .back_stroke = back_stroke,
-        };
+    pub fn createTag(offsets: SegmentOffsets) @This() {
+        return offsets;
     }
 
     pub fn combine(self: @This(), other: @This()) @This() {
@@ -186,7 +145,7 @@ pub const Estimate = struct {
         segment_data: []const u8,
         range: RangeU32,
         // outputs
-        estimates: []SegmentEstimate,
+        offsets: []SegmentOffsets,
     ) void {
         for (range.start..range.end) |index| {
             const path_tag = path_tags[index];
@@ -197,7 +156,7 @@ pub const Estimate = struct {
                 .segment_data = segment_data,
             };
 
-            estimates[index] = estimateSegment(
+            offsets[index] = estimateSegment(
                 config,
                 path_tag,
                 path_monoid,
@@ -215,55 +174,58 @@ pub const Estimate = struct {
         style: Style,
         transform: TransformF32.Affine,
         segment_data: SegmentData,
-    ) SegmentEstimate {
-        var se = SegmentEstimate{};
+    ) SegmentOffsets {
+        var so = SegmentOffsets{};
+
+        switch (path_tag.segment.kind) {
+            .line_f32 => {
+                const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
+                so.fill = estimateLine(line);
+            },
+            .line_i16 => {
+                const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
+                so.fill = estimateLine(line);
+            },
+            .arc_f32 => {
+                const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
+                so.fill = estimateArc(config, arc);
+            },
+            .arc_i16 => {
+                const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
+                so.fill = estimateArc(config, arc);
+            },
+            .quadratic_bezier_f32 => {
+                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
+                so.fill = estimateQuadraticBezier(qb);
+            },
+            .quadratic_bezier_i16 => {
+                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).cast(f32).affineTransform(transform);
+                so.fill = estimateQuadraticBezier(qb);
+            },
+            .cubic_bezier_f32 => {
+                const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
+                so.fill = estimateCubicBezier(cb);
+            },
+            .cubic_bezier_i16 => {
+                const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
+                so.fill = estimateCubicBezier(cb);
+            },
+        }
 
         if (style.isStroke()) {
             // TODO: this still seems wrong
             const scale = transform.getScale() * 0.5;
             const stroke = style.stroke;
             const scaled_width = @max(1.0, stroke.width) * scale;
-            se.cap_estimates = estimateCap(config, path_tag, stroke, scaled_width);
-            se.join_estimates = estimateJoin(config, stroke, scaled_width);
-            se.stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
+            const stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
+            const cap = estimateCap(config, path_tag, stroke, scaled_width);
+            const join = estimateJoin(config, stroke, scaled_width);
+            const base_stroke = so.fill.mulScalar(stroke_fudge);
+            so.front_stroke = base_stroke.combine(cap).combine(join);
+            so.back_stroke = so.front_stroke.combine(base_stroke);
         }
 
-        switch (path_tag.segment.kind) {
-            .line_f32 => {
-                const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
-                se.estimates = estimateLine(line);
-            },
-            .line_i16 => {
-                const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
-                se.estimates = estimateLine(line);
-            },
-            .arc_f32 => {
-                const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                se.estimates = estimateArc(config, arc);
-            },
-            .arc_i16 => {
-                const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                se.estimates = estimateArc(config, arc);
-            },
-            .quadratic_bezier_f32 => {
-                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
-                se.estimates = estimateQuadraticBezier(qb);
-            },
-            .quadratic_bezier_i16 => {
-                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).cast(f32).affineTransform(transform);
-                se.estimates = estimateQuadraticBezier(qb);
-            },
-            .cubic_bezier_f32 => {
-                const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                se.estimates = estimateCubicBezier(cb);
-            },
-            .cubic_bezier_i16 => {
-                const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                se.estimates = estimateCubicBezier(cb);
-            },
-        }
-
-        return se;
+        return so;
     }
 
     pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Estimates {
@@ -467,7 +429,7 @@ pub const Flatten = struct {
         styles: []const Style,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
-        segment_estimates: []const SegmentEstimate,
+        segment_estimates: []const SegmentOffsets,
         segment_offsets: []const SegmentOffsets,
         range: RangeU32,
         // outputs
@@ -480,7 +442,6 @@ pub const Flatten = struct {
         _ = flat_path_mask;
         _ = flat_path_tags;
         _ = flat_path_monoids;
-        _ = transforms;
 
         for (range.start..range.end) |index| {
             const path_monoid = path_monoids[index];
@@ -504,28 +465,43 @@ pub const Flatten = struct {
         }
     }
 
-    // pub fn fill(
-    //     config: KernelConfig,
-    //     segment_index: usize,
-    //     path_tags: []const PathTag,
-    //     path_monoids: []const PathMonoid,
-    //     segment_estimates: []const SegmentEstimate,
-    //     segment_offsets: []const SegmentOffsets,
-    //     transforms: []const TransformF32.Affine,
-    //     segment_data: []const u8,
-    //     flat_segment_data: []u8,
-    // ) void {
-    //     const se = segment_estimates[segment_index];
-    //     const so =segment_offsets[segment_index];
-    //     var writer = Writer{
-    //         .segment_data = flat_segment_data.segment_data[so.fill.line_offset..so.fill.line_offset + se.cap_estimates],
-    //     };
+    pub fn fill(
+        config: KernelConfig,
+        segment_index: usize,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        segment_estimates: []const SegmentOffsets,
+        segment_offsets: []const SegmentOffsets,
+        transforms: []const TransformF32.Affine,
+        segment_data: []const u8,
+        flat_segment_data: []u8,
+    ) void {
+        const path_tag = path_tags[segment_index];
+        const path_monoid = path_monoids[segment_index];
+        const transform = transforms[path_monoid.transform_index];
+        const se = segment_estimates[segment_index];
+        const so = segment_offsets[segment_index];
+        const start = so.fill.lines - se.fill.lines;
+        const writer = Writer{
+            .segment_data = flat_segment_data.segment_data[start..se.fill.lines],
+        };
 
-    //     // const cubic_points = getCubicPoints(
-    //     //     curve,
-    //     //     points[curve.point_offsets.start..curve.point_offsets.end],
-    //     // );
-    // }
+        const cubic_points = getCubicPoints(
+            path_tag,
+            path_monoid,
+            segment_data,
+        );
+
+        flattenEuler(
+            config,
+            cubic_points,
+            transform,
+            0.0,
+            cubic_points.p0,
+            cubic_points.p3,
+            writer,
+        );
+    }
 
     fn flattenEuler(
         config: KernelConfig,
@@ -682,7 +658,7 @@ pub const Flatten = struct {
 
                     const l0 = if (offset >= 0.0) lp0 else lp1;
                     const l1 = if (offset >= 0.0) lp1 else lp0;
-                    const line = Line.create(transform.apply(l0), transform.apply(l1));
+                    const line = LineF32.create(transform.apply(l0), transform.apply(l1));
                     writer.write(line);
 
                     lp0 = lp1;
