@@ -463,14 +463,8 @@ pub const Flatten = struct {
         // true if path is used, false to ignore
         segment_offsets: []SegmentOffsets,
         flat_path_mask: []bool,
-        flat_path_tags: []PathTag, // 2x path_tags for left/right
-        flat_path_monoids: []PathMonoid, // 2x path_tags for left/right
         flat_segment_data: []u8,
     ) void {
-        _ = flat_path_mask;
-        _ = flat_path_tags;
-        _ = flat_path_monoids;
-
         for (range.start..range.end) |index| {
             const path_monoid = path_monoids[index];
             const style = styles[path_monoid.style_index];
@@ -484,6 +478,7 @@ pub const Flatten = struct {
                     segment_offsets,
                     transforms,
                     segment_data,
+                    flat_path_mask,
                     flat_segment_data,
                 );
             }
@@ -500,6 +495,7 @@ pub const Flatten = struct {
         segment_offsets: []SegmentOffsets,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
+        flat_path_mask: []bool,
         flat_segment_data: []u8,
     ) void {
         const path_tag = path_tags[segment_index];
@@ -507,6 +503,7 @@ pub const Flatten = struct {
         const transform = transforms[path_monoid.transform_index];
         const so = segment_offsets[segment_index];
         var writer = Writer{
+            .flat_path_mask = flat_path_mask[so.fill_line_offsets.start..so.fill_line_offsets.end],
             .segment_data = flat_segment_data[so.fill_line_offsets.start..so.fill_line_offsets.end],
         };
 
@@ -911,6 +908,7 @@ pub const Flatten = struct {
     // }
 
     const Writer = struct {
+        flat_path_mask: []bool,
         segment_data: []u8,
         offset: usize = 0,
 
@@ -932,6 +930,7 @@ pub const Flatten = struct {
 
         pub fn addPoint(self: *@This(), point: PointF32) void {
             std.mem.bytesAsValue(PointF32, self.segment_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
+            self.flat_path_mask[self.offset] = true;
             self.offset += @sizeOf(PointF32);
         }
     };
