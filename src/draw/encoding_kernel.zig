@@ -174,7 +174,7 @@ pub const Estimate = struct {
         segment_data: []const u8,
         range: RangeU32,
         // outputs
-        offsets: []SegmentOffsets,
+        flat_segment_offsets: []SegmentOffsets,
     ) void {
         for (range.start..range.end) |index| {
             const path_tag = path_tags[index];
@@ -185,7 +185,7 @@ pub const Estimate = struct {
                 .segment_data = segment_data,
             };
 
-            offsets[index] = estimateSegment(
+            flat_segment_offsets[index] = estimateSegment(
                 config,
                 path_tag,
                 path_monoid,
@@ -937,15 +937,23 @@ pub const Flatten = struct {
     };
 };
 
-pub const Rasterize = struct {
-    // scanlineFill(
-    //   path_masks,
-    //   path_tags,
-    //   path_monoids,
-    //   segment data,
-    //   grid_intersections,
-    //   boundary_fragments,
-    //   merge_fragments,
-    //   spans,
-    // )
-};
+// pub const Rasterize = struct {
+//     pub fn rasterize(
+//         config: KernelConfig,
+//         path_tags: []const PathTag,
+//         path_monoids: []const PathMonoid,
+//         flat_segment_offsets: []const SegmentOffsets,
+//         flat_segment_data: []const u8,
+//     ) void {
+//     }
+//     // scanlineFill(
+//     //   path_masks,
+//     //   path_tags,
+//     //   path_monoids,
+//     //   segment data,
+//     //   grid_intersections,
+//     //   boundary_fragments,
+//     //   merge_fragments,
+//     //   spans,
+//     // )
+// };

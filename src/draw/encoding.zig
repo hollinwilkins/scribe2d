@@ -664,8 +664,8 @@ pub const CpuRasterizer = struct {
     config: KernelConfig,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
-    segment_estimates: SegmentOffsetList = SegmentOffsetList{},
-    segment_offsets: SegmentOffsetList = SegmentOffsetList{},
+    flat_segment_estimates: SegmentOffsetList = SegmentOffsetList{},
+    flat_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segment_data: Buffer = Buffer{},
 
     pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
@@ -678,15 +678,15 @@ pub const CpuRasterizer = struct {
 
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
-        self.segment_estimates.deinit(self.allocator);
-        self.segment_offsets.deinit(self.allocator);
+        self.flat_segment_estimates.deinit(self.allocator);
+        self.flat_segment_offsets.deinit(self.allocator);
         self.flat_segment_data.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
-        self.segment_estimates.items.len = 0;
-        self.segment_offsets.items.len = 0;
+        self.flat_segment_estimates.items.len = 0;
+        self.flat_segment_offsets.items.len = 0;
         self.flat_segment_data.items.len = 0;
     }
 
@@ -716,7 +716,7 @@ pub const CpuRasterizer = struct {
 
     fn estimateSegments(self: *@This()) !void {
         const estimator = encoding_kernel.Estimate;
-        const segment_estimates = try self.segment_estimates.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
+        const flat_segment_estimates = try self.flat_segment_estimates.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
         const range = RangeU32{
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
@@ -732,18 +732,18 @@ pub const CpuRasterizer = struct {
                 self.encoding.transforms,
                 self.encoding.segment_data,
                 chunk,
-                segment_estimates,
+                flat_segment_estimates,
             );
         }
 
         // TODO: expand SegmentEstimate into SegmentOffsets
-        const segment_offsets = try self.segment_offsets.addManyAsSlice(self.allocator, segment_estimates.len);
-        SegmentOffsets.expand(segment_estimates, segment_offsets);
+        const flat_segment_offsets = try self.flat_segment_offsets.addManyAsSlice(self.allocator, flat_segment_estimates.len);
+        SegmentOffsets.expand(flat_segment_estimates, flat_segment_offsets);
     }
 
     fn flatten(self: *@This()) !void {
         const flattener = encoding_kernel.Flatten;
-        const last_segment_offsets = self.segment_offsets.getLast();
+        const last_segment_offsets = self.flat_segment_offsets.getLast();
         const flat_segment_data = try self.flat_segment_data.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_offsets.end);
 
         const range = RangeU32{
@@ -761,7 +761,7 @@ pub const CpuRasterizer = struct {
                 self.encoding.transforms,
                 self.encoding.segment_data,
                 chunk,
-                self.segment_offsets.items,
+                self.flat_segment_offsets.items,
                 flat_segment_data,
             );
         }
@@ -811,9 +811,9 @@ pub const CpuRasterizer = struct {
                 }),
             }
 
-            const estimate = self.segment_estimates.items[segment_index];
+            const estimate = self.flat_segment_estimates.items[segment_index];
             std.debug.print("Estimate: {}\n", .{estimate});
-            const offset = self.segment_offsets.items[segment_index];
+            const offset = self.flat_segment_offsets.items[segment_index];
             std.debug.print("Offset: {}\n", .{offset});
             std.debug.print("----------\n", .{});
         }
