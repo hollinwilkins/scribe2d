@@ -458,10 +458,10 @@ pub const Flatten = struct {
         styles: []const Style,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
-        segment_offsets: []const SegmentOffsets,
         range: RangeU32,
         // outputs
         // true if path is used, false to ignore
+        segment_offsets: []SegmentOffsets,
         flat_path_mask: []bool,
         flat_path_tags: []PathTag, // 2x path_tags for left/right
         flat_path_monoids: []PathMonoid, // 2x path_tags for left/right
@@ -506,9 +506,14 @@ pub const Flatten = struct {
         const path_monoid = path_monoids[segment_index];
         const transform = transforms[path_monoid.transform_index];
         const so = segment_offsets[segment_index];
-        const writer = Writer{
-            .segment_data = flat_segment_data.segment_data[so.fill_line_offsets.start..so.fill_line_offsets.end],
+        var writer = Writer{
+            .segment_data = flat_segment_data[so.fill_line_offsets.start..so.fill_line_offsets.end],
         };
+
+        if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
+            std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
+            return;
+        }
 
         const cubic_points = getCubicPoints(
             path_tag,
@@ -523,7 +528,7 @@ pub const Flatten = struct {
             0.0,
             cubic_points.p0,
             cubic_points.p3,
-            writer,
+            &writer,
         );
     }
 
@@ -536,10 +541,10 @@ pub const Flatten = struct {
         end_point: PointF32,
         writer: *Writer,
     ) void {
-        const p0 = transform.apply(cubic_points.point0);
-        const p1 = transform.apply(cubic_points.point1);
-        const p2 = transform.apply(cubic_points.point2);
-        const p3 = transform.apply(cubic_points.point3);
+        const p0 = transform.apply(cubic_points.p0);
+        const p1 = transform.apply(cubic_points.p1);
+        const p2 = transform.apply(cubic_points.p2);
+        const p3 = transform.apply(cubic_points.p3);
         const scale = 0.5 * transform.getScale();
 
         var t_start: PointF32 = undefined;
@@ -798,50 +803,54 @@ pub const Flatten = struct {
         };
     }
 
-    pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: SegmentData) CubicBezierF32 {
-        var cubic_points = CubicBezierF32{};
+    pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) CubicBezierF32 {
+        var cubic_points: CubicBezierF32 = undefined;
+        const sd = SegmentData{
+            .segment_data = segment_data,
+        };
 
         switch (path_tag.segment.kind) {
             .line_f32 => {
-                const line = segment_data.getSegment(LineF32, path_monoid);
-                cubic_points.point0 = line.p0;
-                cubic_points.point1 = line.p1;
-                cubic_points.point3 = cubic_points.point1;
-                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
+                const line = sd.getSegment(LineF32, path_monoid);
+                cubic_points.p0 = line.p0;
+                cubic_points.p1 = line.p1;
+                cubic_points.p3 = cubic_points.p1;
+                cubic_points.p2 = cubic_points.p3.lerp(cubic_points.p0, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
             },
             .line_i16 => {
-                const line = segment_data.getSegment(LineI16, path_monoid).cast(f32);
-                cubic_points.point0 = line.p0;
-                cubic_points.point1 = line.p1;
-                cubic_points.point3 = cubic_points.point1;
-                cubic_points.point2 = cubic_points.point3.lerp(cubic_points.point0, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point0.lerp(cubic_points.point3, 1.0 / 3.0);
+                const line = sd.getSegment(LineI16, path_monoid).cast(f32);
+                cubic_points.p0 = line.p0;
+                cubic_points.p1 = line.p1;
+                cubic_points.p3 = cubic_points.p1;
+                cubic_points.p2 = cubic_points.p3.lerp(cubic_points.p0, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
             },
             .quadratic_bezier_f32 => {
-                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid);
-                cubic_points.point0 = qb.p0;
-                cubic_points.point1 = qb.p1;
-                cubic_points.point2 = qb.p2;
-                cubic_points.point3 = cubic_points.point2;
-                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
+                const qb = sd.getSegment(QuadraticBezierF32, path_monoid);
+                cubic_points.p0 = qb.p0;
+                cubic_points.p1 = qb.p1;
+                cubic_points.p2 = qb.p2;
+                cubic_points.p3 = cubic_points.p2;
+                cubic_points.p2 = cubic_points.p1.lerp(cubic_points.p2, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
             },
             .quadratic_bezier_i16 => {
-                const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32);
-                cubic_points.point0 = qb.p0;
-                cubic_points.point1 = qb.p1;
-                cubic_points.point2 = qb.p2;
-                cubic_points.point3 = cubic_points.point2;
-                cubic_points.point2 = cubic_points.point1.lerp(cubic_points.point2, 1.0 / 3.0);
-                cubic_points.point1 = cubic_points.point1.lerp(cubic_points.point0, 1.0 / 3.0);
+                const qb = sd.getSegment(QuadraticBezierI16, path_monoid).cast(f32);
+                cubic_points.p0 = qb.p0;
+                cubic_points.p1 = qb.p1;
+                cubic_points.p2 = qb.p2;
+                cubic_points.p3 = cubic_points.p2;
+                cubic_points.p2 = cubic_points.p1.lerp(cubic_points.p2, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
             },
             .cubic_bezier_f32 => {
-                cubic_points = segment_data.getSegment(CubicBezierF32, path_monoid);
+                cubic_points = sd.getSegment(CubicBezierF32, path_monoid);
             },
             .cubic_bezier_i16 => {
-                cubic_points = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32);
+                cubic_points = sd.getSegment(CubicBezierI16, path_monoid).cast(f32);
             },
+            else => @panic("Cannot get cubic points for Arc"),
         }
 
         return cubic_points;
@@ -905,13 +914,25 @@ pub const Flatten = struct {
         segment_data: []u8,
         offset: usize = 0,
 
+        pub fn write(self: *@This(), line: LineF32) void {
+            if (self.offset == 0) {
+                self.addPoint(line.p0);
+                self.addPoint(line.p1);
+                return;
+            }
+
+            const last_point = self.lastPoint();
+            std.debug.assert(std.meta.eql(last_point, line.p0));
+            self.addPoint(line.p1);
+        }
+
+        pub fn lastPoint(self: @This()) PointF32 {
+            return std.mem.bytesToValue(PointF32, self.segment_data[self.offset - @sizeOf(PointF32) .. self.offset]);
+        }
+
         pub fn addPoint(self: *@This(), point: PointF32) void {
             std.mem.bytesAsValue(PointF32, self.segment_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
-        }
-
-        pub fn lineTo(self: *@This(), point: PointF32) void {
-            self.addPoint(point);
         }
     };
 };

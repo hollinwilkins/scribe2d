@@ -657,6 +657,8 @@ pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffsets);
     const LineList = std.ArrayListUnmanaged(LineF32);
+    const BoolList = std.ArrayListUnmanaged(bool);
+    const Buffer = std.ArrayListUnmanaged(u8);
 
     allocator: Allocator,
     config: KernelConfig,
@@ -664,6 +666,10 @@ pub const CpuRasterizer = struct {
     path_monoids: PathMonoidList = PathMonoidList{},
     segment_estimates: SegmentOffsetList = SegmentOffsetList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
+    flat_path_mask: BoolList = BoolList{},
+    flat_path_tags: PathTagList = PathTagList{},
+    flat_path_monoids: PathMonoidList = PathMonoidList{},
+    flat_segment_data: Buffer = Buffer{},
 
     pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
         return @This(){
@@ -677,11 +683,20 @@ pub const CpuRasterizer = struct {
         self.path_monoids.deinit(self.allocator);
         self.segment_estimates.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
+        self.flat_path_mask.deinit(self.allocator);
+        self.flat_path_tags.deinit(self.allocator);
+        self.flat_path_monoids.deinit(self.allocator);
+        self.flat_segment_data.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
         self.segment_estimates.items.len = 0;
+        self.segment_offsets.items.len = 0;
+        self.flat_path_mask.items.len = 0;
+        self.flat_path_tags.items.len = 0;
+        self.flat_path_monoids.items.len = 0;
+        self.flat_segment_data.items.len = 0;
     }
 
     pub fn setEncoding(self: *@This(), encoding: Encoding) void {
@@ -697,6 +712,7 @@ pub const CpuRasterizer = struct {
         try self.estimateSegments();
         // allocate the FlatEncoder
         // use the FlatEncoder to flatten the encoding
+        try self.flatten();
         // estimate the ScanlineEncoding
         // use the FlatEncoding to calculate ScanlineEncoding
         // use the ScanlineEncoding to rasterize pixels
@@ -734,9 +750,36 @@ pub const CpuRasterizer = struct {
         SegmentOffsets.expand(segment_estimates, segment_offsets);
     }
 
-    fn flatten(self: *@This(), encoding: Encoding) !void {
-        _ = self;
-        _ = encoding;
+    fn flatten(self: *@This()) !void {
+        const flattener = encoding_kernel.Flatten;
+        const last_segment_offsets = self.segment_offsets.getLast();
+        const flat_path_mask = try self.flat_path_mask.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
+        const flat_path_tags = try self.flat_path_tags.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
+        const flat_path_monoids = try self.flat_path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
+        const flat_segment_data = try self.flat_segment_data.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_offsets.end);
+
+        const range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.path_monoids.items.len),
+        };
+        var chunk_iter = range.chunkIterator(self.config.chunk_size);
+
+        while (chunk_iter.next()) |chunk| {
+            flattener.flatten(
+                self.config,
+                self.encoding.path_tags,
+                self.path_monoids.items,
+                self.encoding.styles,
+                self.encoding.transforms,
+                self.encoding.segment_data,
+                chunk,
+                self.segment_offsets.items,
+                flat_path_mask,
+                flat_path_tags,
+                flat_path_monoids,
+                flat_segment_data,
+            );
+        }
     }
 
     fn estimateScanlineEncoding(self: *@This()) !void {
