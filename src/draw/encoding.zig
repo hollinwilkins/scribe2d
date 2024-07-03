@@ -76,11 +76,32 @@ pub const PathTag = packed struct {
     }
 };
 
+pub const Color = [4]u8;
 pub const Style = packed struct {
-    pub const Fill = enum(u2) {
-        none = 0,
+    comptime {
+        std.debug.assert(@sizeOf(Style) <= 16);
+    }
+
+    pub const Brush = enum(u1) {
+        noop,
+        color,
+
+        pub fn offset(self: @This()) u32 {
+            return switch (self) {
+                .noop => 0,
+                .color => @sizeOf(Color),
+            };
+        }
+    };
+
+    pub const FillRule = enum(u2) {
         even_odd = 1,
         non_zero = 2,
+    };
+
+    pub const Fill = packed struct {
+        rule: FillRule,
+        brush: Brush,
     };
 
     pub const Join = enum(u2) {
@@ -108,6 +129,7 @@ pub const Style = packed struct {
         miter_limit: f16 = 4.0,
         // encode dash in the stroke, because we will want to expand it using kernels
         dash: Dash = Dash{},
+        brush: Brush,
     };
 
     fill: ?Fill = null,
@@ -187,7 +209,7 @@ pub const Encoding = struct {
     transforms: []const TransformF32.Affine,
     styles: []const Style,
     segment_data: []const u8,
-    draw_data: []const u8,
+    brush_data: []const u8,
 
     pub fn createFromBytes(bytes: []const u8) Encoding {
         _ = bytes;

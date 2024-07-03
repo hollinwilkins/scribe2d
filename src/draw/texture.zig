@@ -5,7 +5,7 @@ const Allocator = mem.Allocator;
 const DimensionsU32 = core.DimensionsU32;
 const PointU32 = core.PointU32;
 
-pub const Color = struct {
+pub const Color = extern struct {
     pub const BLACK: Color = Color{.r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0};
     pub const RED: Color = Color{.r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0};
     pub const GREEN: Color = Color{.r = 0.0, .g = 1.0, .b = 0.0, .a = 1.0};
