@@ -62,11 +62,8 @@ pub const PathTag = packed struct {
         style: u1 = 0,
     };
 
-    kind: Kind,
-    tag: packed union {
-        segment: Segment,
-        index: Index,
-    },
+    segment: Segment,
+    index: Index,
 
     pub fn curve(kind: SegmentKind) @This() {
         return @This(){
@@ -153,34 +150,26 @@ pub const PathMonid = extern struct {
     style_index: u32 = 0,
 
     pub fn createTag(tag: PathTag) @This() {
-        switch (tag.kind) {
-            .segment => {
-                const segment = tag.tag.segment;
-                const segment_offset: u32 = switch (segment.kind) {
-                    .none => unreachable,
-                    .line_f32 => @sizeOf(Point(f32)),
-                    .line_i16 => @sizeOf(Point(i16)),
-                    .arc_f32 => @sizeOf(Point(f32)) * 2,
-                    .arc_i16 => @sizeOf(Point(i16)) * 2,
-                    .quadratic_bezier_f32 => @sizeOf(Point(f32)) * 2,
-                    .quadratic_bezier_i16 => @sizeOf(Point(i16)) * 2,
-                    .cubic_bezier_f32 => @sizeOf(Point(f32)) * 3,
-                    .cubic_bezier_i16 => @sizeOf(Point(i16)) * 3,
-                };
-                return @This(){
-                    .segment_index = 1,
-                    .segment_offset = segment_offset,
-                };
-            },
-            .index => {
-                const index = tag.tag.index;
-                return @This(){
-                    .path_index = @intCast(index.path),
-                    .transform_index = @intCast(index.transform),
-                    .style_index = @intCast(index.style),
-                };
-            },
-        }
+        const segment = tag.tag.segment;
+        const index = tag.tag.index;
+        const segment_offset: u32 = switch (segment.kind) {
+            .none => unreachable,
+            .line_f32 => @sizeOf(Point(f32)),
+            .line_i16 => @sizeOf(Point(i16)),
+            .arc_f32 => @sizeOf(Point(f32)) * 2,
+            .arc_i16 => @sizeOf(Point(i16)) * 2,
+            .quadratic_bezier_f32 => @sizeOf(Point(f32)) * 2,
+            .quadratic_bezier_i16 => @sizeOf(Point(i16)) * 2,
+            .cubic_bezier_f32 => @sizeOf(Point(f32)) * 3,
+            .cubic_bezier_i16 => @sizeOf(Point(i16)) * 3,
+        };
+        return @This(){
+            .segment_index = 1,
+            .segment_offset = segment_offset,
+            .path_index = @intCast(index.path),
+            .transform_index = @intCast(index.transform),
+            .style_index = @intCast(index.style),
+        };
     }
 
     pub fn combine(self: @This(), other: @This()) @This() {
@@ -231,6 +220,8 @@ pub const Encoder = struct {
     styles: StyleList = StyleList{},
     segment_data: Buffer = Buffer{},
     draw_data: Buffer = Buffer{},
+    staged_transform: ?TransformF32.Affine = null,
+    staged_style: ?Style = null,
 
     pub fn init(allocator: Allocator) @This() {
         return @This(){
@@ -265,10 +256,24 @@ pub const Encoder = struct {
     }
 
     pub fn encodePathTag(self: *@This(), tag: PathTag) !void {
-        (try self.path_tags.addOne()).* = tag;
+        var tag2 = tag;
+
+        if (self.staged_transform) |transform| {
+            (try self.transforms.addOne(self.allocator)).* = transform;
+            self.staged_transform = null;
+            tag2.index.transform = 1;
+        }
+
+        if (self.staged_style) |style| {
+            (try self.styles.addOne(self.allocator)).* = style;
+            self.staged_style = null;
+            tag2.index.style = 1;
+        }
+
+        (try self.path_tags.addOne()).* = tag2;
     }
 
-    pub fn currentAffine(self: *@This()) ?*TransformF32.Affine {
+    pub fn currentTransform(self: *@This()) ?*TransformF32.Affine {
         if (self.transforms.items.len > 0) {
             return self.transforms.items[self.transforms.items.len - 1];
         }
@@ -276,15 +281,14 @@ pub const Encoder = struct {
         return null;
     }
 
-    pub fn encodeAffine(self: *@This(), affine: TransformF32.Affine) !bool {
-        if (self.currentAffine()) |current| {
+    pub fn encodeTransform(self: *@This(), affine: TransformF32.Affine) !bool {
+        if (self.currentTransform()) |current| {
             if (std.meta.eql(current, affine)) {
                 return false;
             }
         }
 
-        (try self.transforms.addOne()).* = affine;
-        try self.encodePathTag(PathTag.TRANSFORM);
+        self.staged_transform = affine;
         return true;
     }
 
@@ -303,8 +307,7 @@ pub const Encoder = struct {
             }
         }
 
-        (try self.styles.addOne()).* = style;
-        try self.encodePathTag(PathTag.STYLE);
+        self.staged_style = style;
         return true;
     }
 
@@ -562,7 +565,7 @@ pub const FlatEncoder = struct {
     lines: LineList = LineList{},
 
     pub fn init(allocator: Allocator) @This() {
-        return @This() {
+        return @This(){
             .allocator = allocator,
         };
     }
@@ -582,11 +585,9 @@ pub const FlatEncoder = struct {
     }
 };
 
-pub const ScanlineEncoding = struct {
-};
+pub const ScanlineEncoding = struct {};
 
-pub const ScanlineEncoder = struct {
-};
+pub const ScanlineEncoder = struct {};
 
 pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonid);
@@ -597,7 +598,7 @@ pub const CpuRasterizer = struct {
     flat_encoder: FlatEncoder,
 
     pub fn init(allocator: Allocator, encoding: Encoding) @This() {
-        return @This() {
+        return @This(){
             .allocator = allocator,
             .encoding = encoding,
             .flat_encoder = FlatEncoder.init(allocator),
