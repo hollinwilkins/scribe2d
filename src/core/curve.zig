@@ -67,6 +67,9 @@ pub fn QuadraticBezier(comptime T: type) type {
     };
 }
 
+pub const QuadraticBezierF32 = QuadraticBezier(f32);
+pub const QuadraticBezierI16 = QuadraticBezier(i16);
+
 pub fn CubicBezier(comptime T: type) type {
     const P = Point(T);
 
@@ -89,3 +92,5 @@ pub fn CubicBezier(comptime T: type) type {
     };
 }
 
+pub const CubicBezierF32 = CubicBezier(f32);
+pub const CubicBezierI16 = CubicBezier(i16);

@@ -27,19 +27,32 @@ test "encoding path monoids" {
     _ = try path_encoder.lineTo(core.PointF32.create(1.0, 1.0));
     try path_encoder.finish();
 
+    var path_encoder2 = encoder.pathEncoder(i16);
+    try path_encoder2.moveTo(core.PointI16.create(10, 10));
+    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
+    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
+    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
+    _ = try path_encoder2.cubicTo(
+        core.PointI16.create(120, 120),
+        core.PointI16.create(70, 130),
+        core.PointI16.create(22, 22),
+    );
+    try path_encoder2.finish();
+
     const encoding = encoder.encode();
     var rasterizer = draw.encoding.CpuRasterizer.init(std.testing.allocator, encoding);
     defer rasterizer.deinit();
 
     try rasterizer.rasterize();
 
-    var path_specs = [_]draw.encoding.PathSpec{undefined} ** 3;
+    const path_specs: []draw.encoding.PathSpec = try std.testing.allocator.alloc(draw.encoding.PathSpec, encoding.path_tags.len);
+    defer std.testing.allocator.free(path_specs);
 
-    for (encoding.path_tags, rasterizer.path_monoids.items, &path_specs) |tag, monoid, *spec| {
+    for (encoding.path_tags, rasterizer.path_monoids.items, path_specs) |tag, monoid, *spec| {
         spec.* = draw.encoding.PathSpec{ .tag = tag, .monoid = monoid };
     }
 
-    // rasterizer.debugPrint();
+    rasterizer.debugPrint();
 
     try std.testing.expectEqualDeep(
         core.LineF32.create(core.PointF32.create(1.0, 1.0), core.PointF32.create(2.0, 2.0)),
@@ -56,5 +69,10 @@ test "encoding path monoids" {
     try std.testing.expectEqualDeep(
         core.LineF32.create(core.PointF32.create(4.0, 2.0), core.PointF32.create(1.0, 1.0)),
         encoding.getSegment(core.LineF32, path_specs[2].getSegmentOffset()),
+    );
+
+    try std.testing.expectEqualDeep(
+        core.LineI16.create(core.PointI16.create(10, 10), core.PointI16.create(20,20)),
+        encoding.getSegment(core.LineI16, path_specs[3].getSegmentOffset()),
     );
 }

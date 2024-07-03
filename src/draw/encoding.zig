@@ -383,7 +383,6 @@ pub const Encoder = struct {
     }
 
     pub fn pathEncoder(self: *@This(), comptime T: type) PathEncoder(T) {
-        std.debug.assert(!self.staged_path);
         const style = self.currentStyle().?;
         return PathEncoder(T).create(self, style.isFill());
     }
@@ -481,8 +480,8 @@ pub fn PathEncoder(comptime T: type) type {
             if (self.is_fill) {
                 if (self.encoder.currentPathTag()) |tag| {
                     // ensure filled subpaths are closed
-                    const start_point = self.encoder.pathSegment(PPoint, self.start_offset);
-                    const closed = try self.lineTo(start_point.*);
+                    const start_point = self.encoder.pathSegment(PPoint, self.start_offset).*;
+                    const closed = try self.lineTo(start_point);
 
                     if (closed) {
                         tag.segment.cap = true;
@@ -725,19 +724,30 @@ pub const CpuRasterizer = struct {
             };
 
             switch (path_tag.segment.kind) {
-                .line_f32 => std.debug.print("Line: {}\n", .{
-                    self.encoding.getSegment(core.Line(f32), path_spec.getSegmentOffset()),
+                .line_f32 => std.debug.print("LineF32: {}\n", .{
+                    self.encoding.getSegment(core.LineF32, path_spec.getSegmentOffset()),
                 }),
-                .arc_f32 => std.debug.print("Arc: {}\n", .{
-                    self.encoding.getSegment(core.Arc(f32), path_spec.getSegmentOffset()),
+                .arc_f32 => std.debug.print("ArcF32: {}\n", .{
+                    self.encoding.getSegment(core.ArcF32, path_spec.getSegmentOffset()),
                 }),
-                .quadratic_bezier_f32 => std.debug.print("QuadraticBezier: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezier(f32), path_spec.getSegmentOffset()),
+                .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
+                    self.encoding.getSegment(core.QuadraticBezierF32, path_spec.getSegmentOffset()),
                 }),
-                .cubic_bezier_f32 => std.debug.print("Arc: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezier(f32), path_spec.getSegmentOffset()),
+                .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
+                    self.encoding.getSegment(core.CubicBezierF32, path_spec.getSegmentOffset()),
                 }),
-                else => std.debug.print("{}:\n", .{path_spec.tag.segment.kind}),
+                .line_i16 => std.debug.print("LineI16: {}\n", .{
+                    self.encoding.getSegment(core.LineI16, path_spec.getSegmentOffset()),
+                }),
+                .arc_i16 => std.debug.print("ArcI16: {}\n", .{
+                    self.encoding.getSegment(core.ArcI16, path_spec.getSegmentOffset()),
+                }),
+                .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
+                    self.encoding.getSegment(core.QuadraticBezierI16, path_spec.getSegmentOffset()),
+                }),
+                .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
+                    self.encoding.getSegment(core.CubicBezierI16, path_spec.getSegmentOffset()),
+                }),
             }
         }
         std.debug.print("======================================\n", .{});
