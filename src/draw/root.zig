@@ -13,6 +13,7 @@ const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const msaa = @import("./msaa.zig");
 const kernel = @import("./kernel.zig");
+const encoding = @import("./encoding.zig");
 
 pub const Shape = shape.Shape;
 pub const ShapeBuilder = shape.ShapeBuilder;
@@ -42,3 +43,5 @@ pub const Scene = scene.Scene;
 pub const HalfPlanesU16 = msaa.HalfPlanesU16;
 
 pub const KernelConfig = kernel.KernelConfig;
+
+pub const Encoder = encoding.Encoder;

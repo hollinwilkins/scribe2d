@@ -130,8 +130,13 @@ pub const Style = packed struct {
         brush: Brush,
     };
 
-    fill: ?Fill = null,
-    stroke: ?Stroke = null,
+    pub const Flags = packed struct {
+        fill: bool = false,
+        stroke: bool = false,
+    };
+
+    fill: Fill = Fill{},
+    stroke: Stroke = Stroke{},
 
     pub fn isFill(self: @This()) bool {
         return self.fill != null;
@@ -332,6 +337,10 @@ pub const Encoder = struct {
         const bytes = (try self.draw_data.addManyAsSlice(self.allocator, @sizeOf(Color)));
         std.mem.bytesAsValue(Color, bytes).* = color;
     }
+
+    pub fn pathEncoder(self: *@This(), comptime T: type) PathEncoder(T) {
+        return PathEncoder(T).create(self);
+    }
 };
 
 pub fn PathEncoder(comptime T: type) type {
@@ -400,10 +409,6 @@ pub fn PathEncoder(comptime T: type) type {
                 .is_fill = is_fill,
                 .start_index = encoder.segment_data.items.len,
             };
-        }
-
-        pub fn deinit(self: *@This()) !void {
-            _ = try self.finish();
         }
 
         pub fn isEmpty(self: @This()) bool {
