@@ -77,6 +77,12 @@ pub const PathTag = packed struct {
 };
 
 pub const Style = packed struct {
+    pub const Fill = enum(u2) {
+        none = 0,
+        even_odd = 1,
+        non_zero = 2,
+    };
+
     pub const Join = enum(u2) {
         bevel,
         miter,
@@ -104,8 +110,16 @@ pub const Style = packed struct {
         dash: Dash = Dash{},
     };
 
-    fill: bool = false,
+    fill: ?Fill = null,
     stroke: ?Stroke = null,
+
+    pub fn isFill(self: @This()) bool {
+        return self.fill != null;
+    }
+
+    pub fn isStroke(self: @This()) bool {
+        return self.stroke != null;
+    }
 };
 
 pub const PathMonid = extern struct {
@@ -119,7 +133,7 @@ pub const PathMonid = extern struct {
         switch (tag.kind) {
             .segment => {
                 const segment = tag.tag.segment;
-                const segment_offset: u32 = switch(segment.kind) {
+                const segment_offset: u32 = switch (segment.kind) {
                     .none => unreachable,
                     .line_f32 => @sizeOf(Point(f32)),
                     .line_i16 => @sizeOf(Point(i16)),
@@ -130,14 +144,14 @@ pub const PathMonid = extern struct {
                     .cubic_bezier_f32 => @sizeOf(Point(f32)) * 3,
                     .cubic_bezier_i16 => @sizeOf(Point(i16)) * 3,
                 };
-                return @This() {
+                return @This(){
                     .segment_index = 1,
                     .segment_offset = segment_offset,
                 };
             },
             .index => {
                 const index = tag.tag.index;
-                return @This() {
+                return @This(){
                     .path_index = @intCast(index.path),
                     .transform_index = @intCast(index.transform),
                     .style_index = @intCast(index.style),
@@ -172,7 +186,8 @@ pub const Encoding = struct {
     path_tags: []const PathTag,
     transforms: []const TransformF32.Affine,
     styles: []const Style,
-    segments: []const u8,
+    segment_data: []const u8,
+    draw_data: []const u8,
 
     pub fn createFromBytes(bytes: []const u8) Encoding {
         _ = bytes;
@@ -191,7 +206,8 @@ pub const Encoder = struct {
     path_tags: PathTagList = PathTagList{},
     transforms: AffineList = AffineList{},
     styles: StyleList = StyleList{},
-    segments: Buffer = Buffer{},
+    segment_data: Buffer = Buffer{},
+    draw_data: Buffer = Buffer{},
 
     pub fn init(allocator: Allocator) @This() {
         return @This(){
@@ -203,7 +219,8 @@ pub const Encoder = struct {
         self.path_tags.deinit(self.allocator);
         self.transforms.deinit(self.allocator);
         self.styles.deinit(self.allocator);
-        self.segments.deinit(self.allocator);
+        self.segment_data.deinit(self.allocator);
+        self.draw_data.deinit(self.allocator);
     }
 
     pub fn encode(self: @This()) Encoding {
@@ -211,7 +228,8 @@ pub const Encoder = struct {
             .path_tags = self.path_tags.items,
             .transforms = self.transforms.items,
             .styles = self.styles.items,
-            .segments = self.segments.items,
+            .segment_data = self.segment_data.items,
+            .draw_data = self.draw_data.items,
         };
     }
 
@@ -267,21 +285,41 @@ pub const Encoder = struct {
         return true;
     }
 
+    // pub fn currentDraw(self: *@This()) ?*PathTag.Draw {
+    //     if (self.styles.items.len > 0) {
+    //         return self.styles.items[self.styles.items.len - 1];
+    //     }
+
+    //     return null;
+    // }
+
+    // pub fn encodeStyle(self: *@This(), style: Style) !bool {
+    //     if (self.currentStyle()) |current| {
+    //         if (std.meta.eql(current, style)) {
+    //             return false;
+    //         }
+    //     }
+
+    //     (try self.styles.addOne()).* = style;
+    //     try self.encodePathTag(PathTag.STYLE);
+    //     return true;
+    // }
+
     pub fn extendPath(self: *@This(), comptime T: type, kind: ?PathTag.SegmentKind) !*T {
         if (kind) |k| {
             try self.encodePathTag(PathTag.curve(k));
         }
 
-        const bytes = try self.segments.addManyAsSlice(self.allocator, @sizeOf(T));
+        const bytes = try self.segment_data.addManyAsSlice(self.allocator, @sizeOf(T));
         return std.mem.bytesAsValue(T, bytes);
     }
 
     pub fn pathSegment(self: *@This(), comptime T: type, offset: usize) *T {
-        return std.mem.bytesAsValue(T, self.segments.items[offset - @sizeOf(T) ..]);
+        return std.mem.bytesAsValue(T, self.segment_data.items[offset - @sizeOf(T) ..]);
     }
 
     pub fn pathTailSegment(self: *@This(), comptime T: type) *T {
-        return std.mem.bytesAsValue(T, self.segments.items[self.segments.items.len - @sizeOf(T) ..]);
+        return std.mem.bytesAsValue(T, self.segment_data.items[self.segment_data.items.len - @sizeOf(T) ..]);
     }
 };
 
@@ -342,46 +380,54 @@ pub fn PathEncoder(comptime T: type) type {
     return struct {
         encoder: *Encoder,
         start_offset: usize,
+        is_fill: bool,
         state: State = .start,
 
         pub fn create(encoder: *Encoder) @This() {
+            const style = encoder.currentStyle().?;
+
             return @This(){
                 .encoder = encoder,
-                .start_index = encoder.segments.items.len,
+                .is_fill = style.isFill(),
+                .start_index = encoder.segment_data.items.len,
             };
         }
 
         pub fn deinit(self: *@This()) !void {
-            if (self.encoder.currentStyle()) |style| {
-                if (style.fill) {
-                    try self.close();
-                }
-            }
+            _ = try self.finish();
         }
 
         pub fn isEmpty(self: @This()) bool {
-            return self.start_offset == self.encoder.segments.items.len;
+            return self.start_offset == self.encoder.segment_data.items.len;
+        }
+
+        pub fn finish(self: *@This()) !bool {
+            if (self.state == .start) {
+                return false;
+            }
+
+            if (self.is_fill) {
+                _ = try self.close();
+            }
         }
 
         pub fn close(self: *@This()) !bool {
-            if (self.isEmpty()) {
+            if (self.state != .draw or self.isEmpty()) {
                 return;
             }
 
-            if (self.encoder.currentStyle()) |style| {
-                if (style.fill) {
-                    if (self.encoder.currentPathTag()) |tag| {
-                        // ensure filled subpaths are closed
-                        const start_point = self.encoder.pathSegment(PPoint, self.start_offset);
-                        const closed = try self.lineTo(start_point.*);
+            if (self.is_fill) {
+                if (self.encoder.currentPathTag()) |tag| {
+                    // ensure filled subpaths are closed
+                    const start_point = self.encoder.pathSegment(PPoint, self.start_offset);
+                    const closed = try self.lineTo(start_point.*);
 
-                        if (closed) {
-                            std.debug.assert(tag.kind == .segment);
-                            tag.tag.segment.cap = true;
-                        }
-
-                        return closed;
+                    if (closed) {
+                        std.debug.assert(tag.kind == .segment);
+                        tag.tag.segment.cap = true;
                     }
+
+                    return closed;
                 }
             }
 
