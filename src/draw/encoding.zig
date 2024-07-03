@@ -19,7 +19,6 @@ const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
 
-
 pub const PathTag = packed struct {
     comptime {
         // make sure SegmentTag fits into a single byte
@@ -453,6 +452,7 @@ pub fn PathEncoder(comptime T: type) type {
 
     return struct {
         encoder: *Encoder,
+        start_path_index: usize,
         start_offset: usize,
         is_fill: bool,
         state: State = .start,
@@ -461,6 +461,7 @@ pub fn PathEncoder(comptime T: type) type {
             return @This(){
                 .encoder = encoder,
                 .is_fill = is_fill,
+                .start_path_index = @intCast(encoder.path_tags.items.len),
                 .start_offset = @intCast(encoder.segment_data.items.len),
             };
         }
@@ -491,6 +492,7 @@ pub fn PathEncoder(comptime T: type) type {
                     const closed = try self.lineTo(start_point);
 
                     if (closed) {
+                        self.encoder.path_tags.items[self.start_path_index].segment.cap = true;
                         tag.segment.cap = true;
                     }
                 }
@@ -818,7 +820,7 @@ test "encoding path monoids" {
     );
 
     try std.testing.expectEqualDeep(
-        core.LineI16.create(core.PointI16.create(10, 10), core.PointI16.create(20,20)),
+        core.LineI16.create(core.PointI16.create(10, 10), core.PointI16.create(20, 20)),
         encoding.getSegment(core.LineI16, path_monoids[3]),
     );
 }
