@@ -25,12 +25,7 @@ pub const PathTag = packed struct {
         std.debug.assert(@sizeOf(@This()) == 1);
     }
 
-    pub const Kind = enum(u1) {
-        segment = 0,
-        index = 1,
-    };
-
-    pub const SegmentKind = enum(u3) {
+    pub const Kind = enum(u3) {
         line_f32,
         arc_f32,
         quadratic_bezier_f32,
@@ -43,7 +38,7 @@ pub const PathTag = packed struct {
 
     pub const Segment = packed struct {
         // what kind of segment is this
-        kind: SegmentKind,
+        kind: Kind,
         // marks end of a subpath
         subpath_end: bool = false,
         // draw caps if true
@@ -53,7 +48,8 @@ pub const PathTag = packed struct {
     pub const Index = packed struct {
         // increments path index by 1 or 0
         // set to 1 for the start of a new path
-        path: u1 = 0,
+        // 1-based indexing
+        path_id: u1 = 0,
         // increments transform index by 1 or 0
         // set to 1 for a new transform
         transform: u1 = 0,
@@ -64,7 +60,7 @@ pub const PathTag = packed struct {
     segment: Segment,
     index: Index = Index{},
 
-    pub fn curve(kind: SegmentKind) @This() {
+    pub fn curve(kind: Kind) @This() {
         return @This(){
             .segment = Segment{
                 .kind = kind,
@@ -164,7 +160,8 @@ pub const Style = packed struct {
 };
 
 pub const PathMonoid = extern struct {
-    path_index: u32 = 0,
+    path_id: u32 = 0,
+    subpath_index: u32 = 0,
     segment_index: u32 = 0,
     segment_offset: u32 = 0,
     transform_index: u32 = 0,
@@ -184,9 +181,9 @@ pub const PathMonoid = extern struct {
             .cubic_bezier_f32 => @sizeOf(CubicBezierF32) - @sizeOf(PointF32),
             .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
         };
-        var path_segment_offset: u32 = 0;
-        if (index.path == 1) {
-            path_segment_offset += switch (segment.kind) {
+        var path_offset: u32 = 0;
+        if (index.path_id == 1) {
+            path_offset += switch (segment.kind) {
                 .line_f32 => @sizeOf(PointF32),
                 .line_i16 => @sizeOf(PointI16),
                 .arc_f32 => @sizeOf(PointF32),
@@ -198,9 +195,9 @@ pub const PathMonoid = extern struct {
             };
         }
         return @This(){
+            .path_id = @intCast(index.path_id),
             .segment_index = 1,
-            .segment_offset = path_segment_offset + segment_offset,
-            .path_index = @intCast(index.path),
+            .segment_offset = path_offset + segment_offset,
             .transform_index = @intCast(index.transform),
             .style_index = @intCast(index.style),
         };
@@ -208,7 +205,7 @@ pub const PathMonoid = extern struct {
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .path_index = self.path_index + other.path_index,
+            .path_id = self.path_id + other.path_id,
             .segment_index = self.segment_index + other.segment_index,
             .segment_offset = self.segment_offset + other.segment_offset,
             .transform_index = self.transform_index + other.transform_index,
@@ -228,6 +225,10 @@ pub const PathMonoid = extern struct {
 
     pub fn getSegmentOffset(self: @This(), comptime T: type) u32 {
         return self.segment_offset - @sizeOf(T);
+    }
+
+    pub fn getPathIndex(self: @This()) u32 {
+        return self.path_id - 1;
     }
 };
 
@@ -318,7 +319,7 @@ pub const Encoder = struct {
 
         if (self.staged_path) {
             self.staged_path = false;
-            tag2.index.path = 1;
+            tag2.index.path_id = 1;
         }
 
         (try self.path_tags.addOne(self.allocator)).* = tag2;
@@ -366,7 +367,7 @@ pub const Encoder = struct {
         self.staged_style = true;
     }
 
-    pub fn extendPath(self: *@This(), comptime T: type, kind: ?PathTag.SegmentKind) !*T {
+    pub fn extendPath(self: *@This(), comptime T: type, kind: ?PathTag.Kind) !*T {
         if (kind) |k| {
             try self.encodePathTag(PathTag.curve(k));
         }
@@ -401,7 +402,7 @@ pub fn PathEncoder(comptime T: type) type {
 
     // Extend structs used to extend an open subpath
     const ExtendLine = extern struct {
-        const KIND: PathTag.SegmentKind = switch (T) {
+        const KIND: PathTag.Kind = switch (T) {
             f32 => .line_f32,
             i16 => .line_i16,
             else => @panic("Must provide f32 or i16 as type for PathEncoder\n"),
@@ -411,7 +412,7 @@ pub fn PathEncoder(comptime T: type) type {
     };
 
     const ExtendArc = extern struct {
-        const KIND: PathTag.SegmentKind = switch (T) {
+        const KIND: PathTag.Kind = switch (T) {
             f32 => .arc_f32,
             i16 => .arc_i16,
             else => @panic("Must provide f32 or i16 as type for PathEncoder\n"),
@@ -422,7 +423,7 @@ pub fn PathEncoder(comptime T: type) type {
     };
 
     const ExtendQuadraticBezier = extern struct {
-        const KIND: PathTag.SegmentKind = switch (T) {
+        const KIND: PathTag.Kind = switch (T) {
             f32 => .quadratic_bezier_f32,
             i16 => .quadratic_bezier_i16,
             else => @panic("Must provide f32 or i16 as type for PathEncoder\n"),
@@ -433,7 +434,7 @@ pub fn PathEncoder(comptime T: type) type {
     };
 
     const ExtendCubicBezier = extern struct {
-        const KIND: PathTag.SegmentKind = switch (T) {
+        const KIND: PathTag.Kind = switch (T) {
             f32 => .cubic_bezier_f32,
             i16 => .cubic_bezier_i16,
             else => @panic("Must provide f32 or i16 as type for PathEncoder\n"),
