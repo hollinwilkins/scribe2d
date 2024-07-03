@@ -150,6 +150,11 @@ pub const SegmentOffsets = packed struct {
     }
 };
 
+pub const FlatPathTag = packed struct {
+    path: u1 = 0,
+    subpath: u1 = 0,
+};
+
 pub const Estimate = struct {
     const VIRTUAL_INTERSECTIONS: u16 = 2;
     const INTERSECTION_FUDGE: u16 = 2;
@@ -462,7 +467,6 @@ pub const Flatten = struct {
         // outputs
         // true if path is used, false to ignore
         segment_offsets: []SegmentOffsets,
-        flat_path_mask: []bool,
         flat_segment_data: []u8,
     ) void {
         for (range.start..range.end) |index| {
@@ -475,10 +479,9 @@ pub const Flatten = struct {
                     index,
                     path_tags,
                     path_monoids,
-                    segment_offsets,
                     transforms,
                     segment_data,
-                    flat_path_mask,
+                    segment_offsets,
                     flat_segment_data,
                 );
             }
@@ -492,18 +495,16 @@ pub const Flatten = struct {
         segment_index: usize,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        segment_offsets: []SegmentOffsets,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
-        flat_path_mask: []bool,
+        segment_offsets: []SegmentOffsets,
         flat_segment_data: []u8,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
         const transform = transforms[path_monoid.transform_index];
-        const so = segment_offsets[segment_index];
+        const so = &segment_offsets[segment_index];
         var writer = Writer{
-            .flat_path_mask = flat_path_mask[so.fill_line_offsets.start..so.fill_line_offsets.end],
             .segment_data = flat_segment_data[so.fill_line_offsets.start..so.fill_line_offsets.end],
         };
 
@@ -527,6 +528,8 @@ pub const Flatten = struct {
             cubic_points.p3,
             &writer,
         );
+
+        so.fill_line_offsets.end = so.fill_line_offsets.start + writer.offset;
     }
 
     fn flattenEuler(
@@ -908,9 +911,8 @@ pub const Flatten = struct {
     // }
 
     const Writer = struct {
-        flat_path_mask: []bool,
         segment_data: []u8,
-        offset: usize = 0,
+        offset: u32 = 0,
 
         pub fn write(self: *@This(), line: LineF32) void {
             if (self.offset == 0) {
@@ -930,7 +932,6 @@ pub const Flatten = struct {
 
         pub fn addPoint(self: *@This(), point: PointF32) void {
             std.mem.bytesAsValue(PointF32, self.segment_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
-            self.flat_path_mask[self.offset] = true;
             self.offset += @sizeOf(PointF32);
         }
     };

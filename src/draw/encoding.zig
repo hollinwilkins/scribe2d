@@ -666,7 +666,6 @@ pub const CpuRasterizer = struct {
     path_monoids: PathMonoidList = PathMonoidList{},
     segment_estimates: SegmentOffsetList = SegmentOffsetList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
-    flat_path_mask: BoolList = BoolList{},
     flat_segment_data: Buffer = Buffer{},
 
     pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
@@ -681,7 +680,6 @@ pub const CpuRasterizer = struct {
         self.path_monoids.deinit(self.allocator);
         self.segment_estimates.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
-        self.flat_path_mask.deinit(self.allocator);
         self.flat_segment_data.deinit(self.allocator);
     }
 
@@ -689,7 +687,6 @@ pub const CpuRasterizer = struct {
         self.path_monoids.items.len = 0;
         self.segment_estimates.items.len = 0;
         self.segment_offsets.items.len = 0;
-        self.flat_path_mask.items.len = 0;
         self.flat_segment_data.items.len = 0;
     }
 
@@ -747,10 +744,6 @@ pub const CpuRasterizer = struct {
     fn flatten(self: *@This()) !void {
         const flattener = encoding_kernel.Flatten;
         const last_segment_offsets = self.segment_offsets.getLast();
-        const flat_path_mask = try self.flat_path_mask.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_offsets.end);
-        for (flat_path_mask) |*m| {
-            m.* = false;
-        }
         const flat_segment_data = try self.flat_segment_data.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_offsets.end);
 
         const range = RangeU32{
@@ -769,7 +762,6 @@ pub const CpuRasterizer = struct {
                 self.encoding.segment_data,
                 chunk,
                 self.segment_offsets.items,
-                flat_path_mask,
                 flat_segment_data,
             );
         }
