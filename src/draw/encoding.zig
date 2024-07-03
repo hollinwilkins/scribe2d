@@ -6,6 +6,7 @@ const TransformF32 = core.TransformF32;
 const Point = core.Point;
 const Line = core.Line;
 const Arc = core.Arc;
+const LineF32 = core.LineF32;
 const QuadraticBezier = core.QuadraticBezier;
 const CubicBezier = core.CubicBezier;
 
@@ -390,12 +391,10 @@ pub fn PathEncoder(comptime T: type) type {
         is_fill: bool,
         state: State = .start,
 
-        pub fn create(encoder: *Encoder) @This() {
-            const style = encoder.currentStyle().?;
-
+        pub fn create(encoder: *Encoder, is_fill: bool) @This() {
             return @This(){
                 .encoder = encoder,
-                .is_fill = style.isFill(),
+                .is_fill = is_fill,
                 .start_index = encoder.segment_data.items.len,
             };
         }
@@ -552,15 +551,38 @@ pub fn PathEncoder(comptime T: type) type {
     };
 }
 
+pub const FlatEncoder = struct {
+    const LineList = std.ArrayListUnmanaged(LineF32);
+
+    allocator: Allocator,
+    lines: LineList = LineList{},
+
+    pub fn init(allocator: Allocator) @This() {
+        return @This() {
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.lines.deinit(self.allocator);
+    }
+
+    pub fn reset(self: *@This()) void {
+        self.lines.items.len = 0;
+    }
+};
+
 pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonid);
 
     allocator: Allocator,
     path_monoids: PathMonoidList = PathMonoidList{},
+    flat_encoder: FlatEncoder,
 
     pub fn init(allocator: Allocator) @This() {
         return @This() {
             .allocator = allocator,
+            .flat_encoder = FlatEncoder.init(allocator),
         };
     }
 
@@ -570,14 +592,37 @@ pub const CpuRasterizer = struct {
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
+        self.flat_encoder.reset();
     }
 
     pub fn rasterize(self: *@This()) !void {
         _ = self;
+
+        // expand path monoids
+        // estimate FlatEncoder memory requirements
+        // allocator the FlatEncoder
+        // use the FlatEncoder to flatten the encoding
+        // use the FlatEncoding to power the li et al rasterizer
     }
 
     fn expand(self: *@This(), encoding: Encoding) !void {
         self.path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, encoding.path_tags.len);
         PathMonid.expandTags(encoding.path_tags, self.path_monoids);
+    }
+
+    fn estimate(self: *@This(), encoding: Encoding) !void {
+        _ = self;
+        _ = encoding;
+
+        // need to estimate memory and set fills
+    }
+
+    fn flatten(self: *@This(), encoding: Encoding) !void {
+        _ = self;
+        _ = encoding;
+    }
+
+    fn rasterizeFlatData(self: *@This()) !void {
+        _ = self;
     }
 };
