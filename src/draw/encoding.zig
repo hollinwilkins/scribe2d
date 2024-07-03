@@ -551,6 +551,10 @@ pub fn PathEncoder(comptime T: type) type {
     };
 }
 
+pub const FlatEncoding = struct {
+    lines: []const Line,
+};
+
 pub const FlatEncoder = struct {
     const LineList = std.ArrayListUnmanaged(LineF32);
 
@@ -570,18 +574,32 @@ pub const FlatEncoder = struct {
     pub fn reset(self: *@This()) void {
         self.lines.items.len = 0;
     }
+
+    pub fn encode(self: @This()) FlatEncoding {
+        return FlatEncoding{
+            .lines = self.lines.items,
+        };
+    }
+};
+
+pub const ScanlineEncoding = struct {
+};
+
+pub const ScanlineEncoder = struct {
 };
 
 pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonid);
 
     allocator: Allocator,
+    encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
     flat_encoder: FlatEncoder,
 
-    pub fn init(allocator: Allocator) @This() {
+    pub fn init(allocator: Allocator, encoding: Encoding) @This() {
         return @This() {
             .allocator = allocator,
+            .encoding = encoding,
             .flat_encoder = FlatEncoder.init(allocator),
         };
     }
@@ -595,24 +613,31 @@ pub const CpuRasterizer = struct {
         self.flat_encoder.reset();
     }
 
+    pub fn setEncoding(self: *@This(), encoding: Encoding) void {
+        self.encoding = encoding;
+    }
+
     pub fn rasterize(self: *@This()) !void {
-        _ = self;
-
+        // reset the rasterizer
+        self.reset();
         // expand path monoids
+        try self.expandPathMonoids();
         // estimate FlatEncoder memory requirements
-        // allocator the FlatEncoder
+        try self.estimateFlatEncoding();
+        // allocate the FlatEncoder
         // use the FlatEncoder to flatten the encoding
-        // use the FlatEncoding to power the li et al rasterizer
+        // estimate the ScanlineEncoding
+        // use the FlatEncoding to calculate ScanlineEncoding
+        // use the ScanlineEncoding to rasterize pixels
     }
 
-    fn expand(self: *@This(), encoding: Encoding) !void {
-        self.path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, encoding.path_tags.len);
-        PathMonid.expandTags(encoding.path_tags, self.path_monoids);
+    fn expandPathMonoids(self: *@This()) !void {
+        self.path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
+        PathMonid.expandTags(self.encoding.path_tags, self.path_monoids);
     }
 
-    fn estimate(self: *@This(), encoding: Encoding) !void {
+    fn estimateFlatEncoding(self: *@This()) !void {
         _ = self;
-        _ = encoding;
 
         // need to estimate memory and set fills
     }
@@ -622,7 +647,11 @@ pub const CpuRasterizer = struct {
         _ = encoding;
     }
 
-    fn rasterizeFlatData(self: *@This()) !void {
+    fn estimateScanlineEncoding(self: *@This()) !void {
+        _ = self;
+    }
+
+    fn rasterizeScanlineEncoding(self: *@This()) !void {
         _ = self;
     }
 };
