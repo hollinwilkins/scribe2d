@@ -35,6 +35,9 @@ pub const RangeF32 = range.RangeF32;
 pub const Sequence = sequence.Sequence;
 pub const SequenceU32 = Sequence(u32);
 
+pub const Intersection = curve.Intersection;
+pub const IntersectionF32 = curve.IntersectionF32;
+
 pub const Line = curve.Line;
 pub const LineF32 = curve.LineF32;
 pub const LineI16 = curve.LineI16;

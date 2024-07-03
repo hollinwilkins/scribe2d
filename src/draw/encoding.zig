@@ -22,6 +22,10 @@ const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
 const KernelConfig = encoding_kernel.KernelConfig;
 const SegmentOffsets = encoding_kernel.SegmentOffsets;
+const GridIntersection = encoding_kernel.GridIntersection;
+const BoundaryFragment = encoding_kernel.BoundaryFragment;
+const MergeFragment = encoding_kernel.MergeFragment;
+const Span = encoding_kernel.Span;
 
 pub const PathTag = packed struct {
     comptime {
@@ -659,6 +663,10 @@ pub const CpuRasterizer = struct {
     const LineList = std.ArrayListUnmanaged(LineF32);
     const BoolList = std.ArrayListUnmanaged(bool);
     const Buffer = std.ArrayListUnmanaged(u8);
+    const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
+    const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
+    const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
+    const SpanList = std.ArrayListUnmanaged(Span);
 
     allocator: Allocator,
     config: KernelConfig,
@@ -667,6 +675,10 @@ pub const CpuRasterizer = struct {
     flat_segment_estimates: SegmentOffsetList = SegmentOffsetList{},
     flat_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segment_data: Buffer = Buffer{},
+    grid_intersections: GridIntersectionList = GridIntersectionList{},
+    boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
+    merge_fragments: MergeFragmentList = MergeFragmentList{},
+    spans: SpanList = SpanList{},
 
     pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
         return @This(){
@@ -681,6 +693,10 @@ pub const CpuRasterizer = struct {
         self.flat_segment_estimates.deinit(self.allocator);
         self.flat_segment_offsets.deinit(self.allocator);
         self.flat_segment_data.deinit(self.allocator);
+        self.grid_intersections.deinit(self.allocator);
+        self.boundary_fragments.deinit(self.allocator);
+        self.merge_fragments.deinit(self.allocator);
+        self.spans.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
@@ -688,6 +704,10 @@ pub const CpuRasterizer = struct {
         self.flat_segment_estimates.items.len = 0;
         self.flat_segment_offsets.items.len = 0;
         self.flat_segment_data.items.len = 0;
+        self.grid_intersections.items.len = 0;
+        self.boundary_fragments.items.len = 0;
+        self.merge_fragments.items.len = 0;
+        self.spans.items.len = 0;
     }
 
     pub fn setEncoding(self: *@This(), encoding: Encoding) void {
@@ -704,9 +724,8 @@ pub const CpuRasterizer = struct {
         // allocate the FlatEncoder
         // use the FlatEncoder to flatten the encoding
         try self.flatten();
-        // estimate the ScanlineEncoding
-        // use the FlatEncoding to calculate ScanlineEncoding
-        // use the ScanlineEncoding to rasterize pixels
+        // calculate scanline encoding
+        try self.kernelRasterize();
     }
 
     fn expandPathMonoids(self: *@This()) !void {
@@ -767,12 +786,25 @@ pub const CpuRasterizer = struct {
         }
     }
 
-    fn estimateScanlineEncoding(self: *@This()) !void {
-        _ = self;
-    }
+    fn kernelRasterize(self: *@This()) !void {
+        const rasterizer = encoding_kernel.Rasterize;
+        const last_segment_offsets = self.flat_segment_offsets.getLast();
+        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end);
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end);
+        const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end);
+        const spans = try self.spans.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end / 2 + 1);
 
-    fn rasterizeScanlineEncoding(self: *@This()) !void {
-        _ = self;
+        rasterizer.rasterize(
+            self.config,
+            self.encoding.path_tags,
+            self.path_monoids.items,
+            self.flat_segment_offsets.items,
+            self.flat_segment_data.items,
+            grid_intersections,
+            boundary_fragments,
+            merge_fragments,
+            spans,
+        );
     }
 
     pub fn debugPrint(self: @This()) void {

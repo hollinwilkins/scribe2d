@@ -2,6 +2,8 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const encoding_module = @import("./encoding.zig");
 const euler_module = @import("./euler.zig");
+const msaa_module = @import("./msaa.zig");
+const RangeI32 = core.RangeI32;
 const RangeU32 = core.RangeU32;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
@@ -9,7 +11,9 @@ const SegmentData = encoding_module.SegmentData;
 const Style = encoding_module.Style;
 const MonoidFunctions = encoding_module.MonoidFunctions;
 const TransformF32 = core.TransformF32;
+const IntersectionF32 = core.IntersectionF32;
 const PointF32 = core.PointF32;
+const PointI32 = core.PointI32;
 const LineF32 = core.LineF32;
 const LineI16 = core.LineI16;
 const ArcF32 = core.ArcF32;
@@ -22,6 +26,7 @@ const CubicPoints = euler_module.CubicPoints;
 const CubicParams = euler_module.CubicParams;
 const EulerParams = euler_module.EulerParams;
 const EulerSegment = euler_module.EulerSegment;
+const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const KernelConfig = struct {
     pub const DEFAULT: @This() = init(@This(){});
@@ -114,10 +119,13 @@ pub const Offsets = packed struct {
 pub const SegmentOffsets = packed struct {
     fill: Estimates = Estimates{},
     fill_line_offsets: Offsets = Offsets{},
+    fill_line_intersections: Offsets = Offsets{},
     front_stroke: Estimates = Estimates{},
     front_line_offsets: Offsets = Offsets{},
+    front_line_intersections: Offsets = Offsets{},
     back_stroke: Estimates = Estimates{},
     back_line_offsets: Offsets = Offsets{},
+    back_line_intersections: Offsets = Offsets{},
 
     pub usingnamespace MonoidFunctions(SegmentOffsets, @This());
 
@@ -132,15 +140,27 @@ pub const SegmentOffsets = packed struct {
                 .start = self.fill_line_offsets.end,
                 .end = self.fill_line_offsets.end + lineBytes(other.fill.lines),
             },
+            .fill_line_intersections = Offsets{
+                .start = self.fill_line_intersections.end,
+                .end = self.fill_line_intersections.end + lineBytes(other.fill.intersections),
+            },
             .front_stroke = self.front_stroke.combine(other.front_stroke),
             .front_line_offsets = Offsets{
                 .start = self.front_line_offsets.end,
                 .end = self.front_line_offsets.end + lineBytes(other.front_stroke.lines),
             },
+            .front_line_intersections = Offsets{
+                .start = self.front_line_intersections.end,
+                .end = self.front_line_intersections.end + lineBytes(other.front_stroke.intersections),
+            },
             .back_stroke = self.back_stroke.combine(other.back_stroke),
             .back_line_offsets = Offsets{
                 .start = self.back_line_offsets.end,
                 .end = self.back_line_offsets.end + lineBytes(other.back_stroke.lines),
+            },
+            .back_line_intersections = Offsets{
+                .start = self.back_line_intersections.end,
+                .end = self.back_line_intersections.end + lineBytes(other.back_stroke.intersections),
             },
         };
     }
@@ -153,6 +173,187 @@ pub const SegmentOffsets = packed struct {
 pub const FlatPathTag = packed struct {
     path: u1 = 0,
     subpath: u1 = 0,
+};
+
+pub const Masks = struct {
+    vertical_mask0: u16 = 0,
+    vertical_sign0: f32 = 0.0,
+    vertical_mask1: u16 = 0,
+    vertical_sign1: f32 = 0.0,
+    horizontal_mask: u16 = 0,
+    horizontal_sign: f32 = 0.0,
+
+    pub fn debugPrint(self: @This()) void {
+        std.debug.print("-----------\n", .{});
+        std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask0});
+        std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask1});
+        std.debug.print(" H: {b:0>16}\n", .{self.horizontal_mask});
+        std.debug.print("-----------\n", .{});
+    }
+};
+
+pub const BoundaryFragment = struct {
+    pub const MAIN_RAY: LineF32 = LineF32.create(PointF32{
+        .x = 0.0,
+        .y = 0.5,
+    }, PointF32{
+        .x = 1.0,
+        .y = 0.5,
+    });
+
+    pixel: PointI32,
+    intersections: [2]IntersectionF32,
+
+    pub fn create(grid_intersections: [2]*const GridIntersection) @This() {
+        const pixel = grid_intersections[0].pixel.min(grid_intersections[1].pixel);
+
+        // can move diagonally, but cannot move by more than 1 pixel in both directions
+        std.debug.assert(@abs(pixel.sub(grid_intersections[0].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[0].pixel).y) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[1].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[1].pixel).y) <= 1);
+
+        const intersections: [2]IntersectionF32 = [2]IntersectionF32{
+            IntersectionF32{
+                // retain t
+                .t = grid_intersections[0].intersection.t,
+                // float component of the intersection points, range [0.0, 1.0]
+                .point = PointF32{
+                    .x = std.math.clamp(@abs(grid_intersections[0].intersection.point.x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[0].intersection.point.y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
+                },
+            },
+            IntersectionF32{
+                // retain t
+                .t = grid_intersections[1].intersection.t,
+                // float component of the intersection points, range [0.0, 1.0]
+                .point = PointF32{
+                    .x = std.math.clamp(@abs(grid_intersections[1].intersection.point.x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[1].intersection.point.y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
+                },
+            },
+        };
+
+        std.debug.assert(intersections[0].point.x <= 1.0);
+        std.debug.assert(intersections[0].point.y <= 1.0);
+        std.debug.assert(intersections[1].point.x <= 1.0);
+        std.debug.assert(intersections[1].point.y <= 1.0);
+        return @This(){
+            .pixel = pixel,
+            .intersections = intersections,
+        };
+    }
+
+    pub fn calculateMasks(self: @This(), half_planes: *const HalfPlanesU16) Masks {
+        var masks = Masks{};
+        if (self.intersections[0].point.x == 0.0 and self.intersections[1].point.x != 0.0) {
+            const vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
+
+            if (self.intersections[0].point.y < 0.5) {
+                masks.vertical_mask0 = ~vertical_mask;
+                masks.vertical_sign0 = -1;
+            } else if (self.intersections[0].point.y > 0.5) {
+                masks.vertical_mask0 = vertical_mask;
+                masks.vertical_sign0 = 1;
+            } else {
+                // need two masks and two signs...
+                masks.vertical_mask0 = vertical_mask; // > 0.5
+                masks.vertical_sign0 = 0.5;
+                masks.vertical_mask1 = ~vertical_mask; // < 0.5
+                masks.vertical_sign1 = -0.5;
+            }
+        } else if (self.intersections[1].point.x == 0.0 and self.intersections[0].point.x != 0.0) {
+            const vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
+
+            if (self.intersections[1].point.y < 0.5) {
+                masks.vertical_mask0 = ~vertical_mask;
+                masks.vertical_sign0 = 1;
+            } else if (self.intersections[1].point.y > 0.5) {
+                masks.vertical_mask0 = vertical_mask;
+                masks.vertical_sign0 = -1;
+            } else {
+                // need two masks and two signs...
+                masks.vertical_mask0 = vertical_mask; // > 0.5
+                masks.vertical_sign0 = -0.5;
+                masks.vertical_mask1 = ~vertical_mask; // < 0.5
+                masks.vertical_sign1 = 0.5;
+            }
+        }
+
+        if (self.intersections[0].point.y > self.intersections[1].point.y) {
+            // crossing top to bottom
+            masks.horizontal_sign = 1;
+        } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+            masks.horizontal_sign = -1;
+        }
+
+        if (self.intersections[0].t > self.intersections[1].t) {
+            masks.horizontal_sign *= -1;
+            masks.vertical_sign0 *= -1;
+            masks.vertical_sign1 *= -1;
+        }
+
+        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
+        return masks;
+    }
+
+    pub fn getLine(self: @This()) LineF32 {
+        return LineF32.create(self.intersections[0].point, self.intersections[1].point);
+    }
+
+    pub fn calculateMainRayWinding(self: @This()) f32 {
+        if (self.getLine().intersectHorizontalLine(MAIN_RAY) != null) {
+            // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
+
+            var winding: f32 = 0.0;
+
+            if (self.intersections[0].point.y > self.intersections[1].point.y) {
+                winding = 1.0;
+            } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+                winding = -1.0;
+            }
+
+            if (self.intersections[0].point.y == 0.5 or self.intersections[1].point.y == 0.5) {
+                winding *= 0.5;
+            }
+
+            return winding;
+        }
+
+        return 0.0;
+    }
+};
+
+pub const MergeFragment = struct {
+    pixel: PointI32,
+    main_ray_winding: f32 = 0.0,
+    winding: [16]f32 = [_]f32{0.0} ** 16,
+    stencil_mask: u16 = 0,
+    boundary_offsets: RangeU32 = RangeU32{},
+
+    pub fn getIntensity(self: @This()) f32 {
+        return @as(f32, @floatFromInt(@popCount(self.stencil_mask))) / 16.0;
+    }
+};
+
+pub const Span = struct {
+    y: i32 = 0,
+    x_range: RangeI32 = RangeI32{},
+};
+
+pub const GridIntersection = struct {
+    intersection: IntersectionF32,
+    pixel: PointI32,
+
+    pub fn create(intersection: IntersectionF32) @This() {
+        return @This(){
+            .intersection = intersection,
+            .pixel = PointI32{
+                .x = @intFromFloat(intersection.point.x),
+                .y = @intFromFloat(intersection.point.y),
+            },
+        };
+    }
 };
 
 pub const Estimate = struct {
@@ -937,23 +1138,26 @@ pub const Flatten = struct {
     };
 };
 
-// pub const Rasterize = struct {
-//     pub fn rasterize(
-//         config: KernelConfig,
-//         path_tags: []const PathTag,
-//         path_monoids: []const PathMonoid,
-//         flat_segment_offsets: []const SegmentOffsets,
-//         flat_segment_data: []const u8,
-//     ) void {
-//     }
-//     // scanlineFill(
-//     //   path_masks,
-//     //   path_tags,
-//     //   path_monoids,
-//     //   segment data,
-//     //   grid_intersections,
-//     //   boundary_fragments,
-//     //   merge_fragments,
-//     //   spans,
-//     // )
-// };
+pub const Rasterize = struct {
+    pub fn rasterize(
+        config: KernelConfig,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        flat_segment_offsets: []const SegmentOffsets,
+        flat_segment_data: []const u8,
+        grid_intersections: []GridIntersection,
+        boundary_fragments: []BoundaryFragment,
+        merge_fragments: []MergeFragment,
+        spans: []Span,
+    ) void {
+        _ = config;
+        _ = path_tags;
+        _ = path_monoids;
+        _ = flat_segment_offsets;
+        _ = flat_segment_data;
+        _ = grid_intersections;
+        _ = boundary_fragments;
+        _ = merge_fragments;
+        _ = spans;
+    }
+};

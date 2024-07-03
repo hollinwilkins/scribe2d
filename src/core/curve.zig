@@ -4,6 +4,17 @@ const geometry_module = @import("./geometry.zig");
 const Point = geometry_module.Point;
 const Transform = geometry_module.Transform;
 
+pub fn Intersection(comptime T: type) type {
+    const P = Point(T);
+
+    return struct {
+        t: f32,
+        point: P,
+    };
+}
+
+pub const IntersectionF32 = Intersection(f32);
+
 pub fn Line(comptime T: type) type {
     const P = Point(T);
 
