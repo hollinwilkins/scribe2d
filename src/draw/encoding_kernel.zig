@@ -7,11 +7,8 @@ const PathMonoid = encoding_module.PathMonoid;
 pub const SegmentEstimate = packed struct {
     lines: u16 = 0,
     intersections: u16 = 0,
-    cap_lines: u14 = 0,
-    join_lines: u14 = 0,
-    path_index: u1 = 0, // increment path_tag index
-    // separate left/right subpath of closed stroke path
-    new_subpath: bool = false,
+    cap_lines: u16 = 0,
+    join_lines: u16 = 0,
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
@@ -19,7 +16,6 @@ pub const SegmentEstimate = packed struct {
             .intersections = self.intersections + other.intersections,
             .cap_lines = self.cap_lines + other.cap_lines,
             .join_lines = self.join_lines + other.join_lines,
-            .path_index = self.path_index + other.path_index,
         };
     }
 };
@@ -64,4 +60,59 @@ pub const Estimate = struct {
             _ = estimate;
         }
     }
+
+    pub fn flattenFill(
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        segment_data: []const u8,
+        range: RangeU32,
+        // outputs
+        // true if path is used, false to ignore
+        flat_path_mask: []bool,
+        flat_path_tags: []PathTag,
+        flat_path_monoids: []PathMonoid,
+        flat_segment_data: []u8,
+    ) void {
+        _ = path_tags;
+        _ = path_monoids;
+        _ = segment_data;
+        _ = range;
+        _ = flat_path_mask;
+        _ = flat_path_tags;
+        _ = flat_path_monoids;
+        _ = flat_segment_data;
+    }
+
+    pub fn flattenStroke(
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        segment_data: []const u8,
+        range: RangeU32,
+        // outputs
+        // true if path is used, false to ignore
+        flat_path_mask: []bool,
+        flat_path_tags: []PathTag, // 2x path_tags for left/right
+        flat_path_monoids: []PathMonoid,  // 2x path_tags for left/right
+        flat_segment_data: []u8,
+    ) void {
+        _ = path_tags;
+        _ = path_monoids;
+        _ = segment_data;
+        _ = range;
+        _ = flat_path_mask;
+        _ = flat_path_tags;
+        _ = flat_path_monoids;
+        _ = flat_segment_data;
+    }
+
+    // scanlineFill(
+    //   masks,
+    //   tags,
+    //   monoids,
+    //   segment data,
+    //   grid_intersections,
+    //   boundary_fragments,
+    //   merge_fragments,
+    //   spans,
+    // )
 };

@@ -238,6 +238,7 @@ pub const PathSpec = struct {
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU
+// This may need to be a single buffer with a Config
 pub const Encoding = struct {
     path_tags: []const PathTag,
     transforms: []const TransformF32.Affine,
