@@ -1,8 +1,10 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
+const encoding_kernel = @import("./encoding_kernel.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const TransformF32 = core.TransformF32;
+const RangeU32 = core.RangeU32;
 const Point = core.Point;
 const Line = core.Line;
 const Arc = core.Arc;
@@ -18,6 +20,8 @@ const QuadraticBezierF32 = core.QuadraticBezierF32;
 const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
+const KernelConfig = encoding_kernel.KernelConfig;
+const SegmentEstimate = encoding_kernel.SegmentEstimate;
 
 pub const PathTag = packed struct {
     comptime {
@@ -235,6 +239,14 @@ pub const PathMonoid = extern struct {
 pub const PathSpec = struct {
     tag: PathTag,
     monoid: PathMonoid,
+};
+
+pub const SegmentData = extern struct {
+    segment_data: []const u8,
+
+    pub fn getSegment(self: @This(), comptime T: type, path_monoid: PathMonoid) T {
+        return std.mem.bytesToValue(T, self.segment_data[path_monoid.segment_offset - @sizeOf(T) .. path_monoid.segment_offset]);
+    }
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU
@@ -618,54 +630,22 @@ pub fn PathEncoder(comptime T: type) type {
     };
 }
 
-pub const FlatEncoding = struct {
-    lines: []const Line,
-};
-
-pub const FlatEncoder = struct {
+pub const CpuRasterizer = struct {
+    const PathTagList = std.ArrayListUnmanaged(PathTag);
+    const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
+    const SegmentEstimateList = std.ArrayListUnmanaged(SegmentEstimate);
     const LineList = std.ArrayListUnmanaged(LineF32);
 
     allocator: Allocator,
-    lines: LineList = LineList{},
-
-    pub fn init(allocator: Allocator) @This() {
-        return @This(){
-            .allocator = allocator,
-        };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.lines.deinit(self.allocator);
-    }
-
-    pub fn reset(self: *@This()) void {
-        self.lines.items.len = 0;
-    }
-
-    pub fn encode(self: @This()) FlatEncoding {
-        return FlatEncoding{
-            .lines = self.lines.items,
-        };
-    }
-};
-
-pub const ScanlineEncoding = struct {};
-
-pub const ScanlineEncoder = struct {};
-
-pub const CpuRasterizer = struct {
-    const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
-
-    allocator: Allocator,
     encoding: Encoding,
+    config: KernelConfig,
     path_monoids: PathMonoidList = PathMonoidList{},
-    flat_encoder: FlatEncoder,
+    fill_segment_estimates: SegmentEstimateList = SegmentEstimateList{},
 
     pub fn init(allocator: Allocator, encoding: Encoding) @This() {
         return @This(){
             .allocator = allocator,
             .encoding = encoding,
-            .flat_encoder = FlatEncoder.init(allocator),
         };
     }
 
@@ -675,6 +655,7 @@ pub const CpuRasterizer = struct {
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
+        self.fill_segment_estimates.items.len = 0;
         self.flat_encoder.reset();
     }
 
@@ -702,9 +683,26 @@ pub const CpuRasterizer = struct {
     }
 
     fn estimateFlatEncoding(self: *@This()) !void {
-        _ = self;
+        const estimator = encoding_kernel.Estimate;
+        const range = RangeU32{
+            .start = 0,
+            .end = self.path_monoids.items.len,
+        };
+        var chunk_iter = range.chunkIterator(self.config.chunk_size);
+
+        while (chunk_iter.next()) |chunk| {
+            estimator.estimate(
+                self.config,
+                self.encoding.path_tags,
+                self.path_monoids.items,
+                self.encoding.segment_data,
+                chunk,
+                self.fill_segment_estimates.items,
+            );
+        }
 
         // need to estimate memory and set fills
+
     }
 
     fn flatten(self: *@This(), encoding: Encoding) !void {

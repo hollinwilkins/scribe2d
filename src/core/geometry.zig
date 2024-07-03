@@ -33,6 +33,43 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn cast(self: @This(), comptime T2: type) Point(T2) {
+            switch (@typeInfo(T)) {
+                .Float => |_| {
+                    switch (@typeInfo(T2)) {
+                        .Float => |_| {
+                            return Point(T2){
+                                .x = @floatCast(self.x),
+                                .y = @floatCast(self.y),
+                            };
+                        },
+                        .Int => |_| {
+                            return Point(T2){
+                                .x = @floatFromInt(self.x),
+                                .y = @floatFromInt(self.y),
+                            };
+                        },
+                    }
+                },
+                .Int => |_| {
+                    switch (@typeInfo(T2)) {
+                        .Float => |_| {
+                            return Point(T2){
+                                .x = @intFromFloat(self.x),
+                                .y = @intFromFloat(self.y),
+                            };
+                        },
+                        .Int => |_| {
+                            return Point(T2){
+                                .x = @intCast(self.x),
+                                .y = @intCast(self.y),
+                            };
+                        },
+                    }
+                },
+            }
+        }
+
         pub fn approxEqAbs(self: @This(), other: @This(), tolerance: T) bool {
             return std.math.approxEqAbs(
                 T,
@@ -45,6 +82,13 @@ pub fn Point(comptime T: type) type {
                 other.y,
                 tolerance,
             );
+        }
+
+        pub fn affineTransform(self: @This(), transform: Transform(T)) @This() {
+            return @This(){
+                .x = transform.apply(self.x),
+                .y = transform.apply(self.y),
+            };
         }
 
         pub fn normalize(self: @This()) ?@This() {

@@ -2,6 +2,7 @@ const std = @import("std");
 const muck_module = @import("./muck.zig");
 const geometry_module = @import("./geometry.zig");
 const Point = geometry_module.Point;
+const Transform = geometry_module.Transform;
 
 pub fn Line(comptime T: type) type {
     const P = Point(T);
@@ -16,6 +17,20 @@ pub fn Line(comptime T: type) type {
             return @This(){
                 .p0 = p0,
                 .p1 = p1,
+            };
+        }
+
+        pub fn cast(self: @This(), comptime T2: type) Line(T2) {
+            return Line(T2){
+                .p0 = self.p0.cast(T2),
+                .p1 = self.p1.cast(T2),
+            };
+        }
+
+        pub fn affineTransform(self: @This(), affine: Transform(T).Affine) @This() {
+            return @This(){
+                .p0 = self.p0.affineTransform(affine),
+                .p1 = self.p1.affineTransform(affine),
             };
         }
     };
@@ -41,6 +56,22 @@ pub fn Arc(comptime T: type) type {
                 .p2 = p2,
             };
         }
+
+        pub fn cast(self: @This(), comptime T2: type) Line(T2) {
+            return Line(T2){
+                .p0 = self.p0.cast(T2),
+                .p1 = self.p1.cast(T2),
+                .p2 = self.p2.cast(T2),
+            };
+        }
+
+        pub fn affineTransform(self: @This(), affine: Transform(T).Affine) @This() {
+            return @This(){
+                .p0 = self.p0.affineTransform(affine),
+                .p1 = self.p1.affineTransform(affine),
+                .p2 = self.p2.affineTransform(affine),
+            };
+        }
     };
 }
 
@@ -62,6 +93,22 @@ pub fn QuadraticBezier(comptime T: type) type {
                 .p0 = p0,
                 .p1 = p1,
                 .p2 = p2,
+            };
+        }
+
+        pub fn cast(self: @This(), comptime T2: type) Line(T2) {
+            return Line(T2){
+                .p0 = self.p0.cast(T2),
+                .p1 = self.p1.cast(T2),
+                .p2 = self.p2.cast(T2),
+            };
+        }
+
+        pub fn affineTransform(self: @This(), affine: Transform(T).Affine) @This() {
+            return @This(){
+                .p0 = self.p0.affineTransform(affine),
+                .p1 = self.p1.affineTransform(affine),
+                .p2 = self.p2.affineTransform(affine),
             };
         }
     };
@@ -87,6 +134,24 @@ pub fn CubicBezier(comptime T: type) type {
                 .p1 = p1,
                 .p2 = p2,
                 .p3 = p3,
+            };
+        }
+
+        pub fn cast(self: @This(), comptime T2: type) Line(T2) {
+            return Line(T2){
+                .p0 = self.p0.cast(T2),
+                .p1 = self.p1.cast(T2),
+                .p2 = self.p2.cast(T2),
+                .p3 = self.p3.cast(T2),
+            };
+        }
+
+        pub fn affineTransform(self: @This(), affine: Transform(T).Affine) @This() {
+            return @This(){
+                .p0 = self.p0.affineTransform(affine),
+                .p1 = self.p1.affineTransform(affine),
+                .p2 = self.p2.affineTransform(affine),
+                .p3 = self.p3.affineTransform(affine),
             };
         }
     };
