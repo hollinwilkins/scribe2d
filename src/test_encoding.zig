@@ -45,18 +45,12 @@ test "encoding path monoids" {
 
     try rasterizer.rasterize();
 
-    const path_specs: []draw.encoding.PathSpec = try std.testing.allocator.alloc(draw.encoding.PathSpec, encoding.path_tags.len);
-    defer std.testing.allocator.free(path_specs);
-
-    for (encoding.path_tags, rasterizer.path_monoids.items, path_specs) |tag, monoid, *spec| {
-        spec.* = draw.encoding.PathSpec{ .tag = tag, .monoid = monoid };
-    }
-
-    rasterizer.debugPrint();
+    // rasterizer.debugPrint();
+    const path_monoids = rasterizer.path_monoids.items;
 
     try std.testing.expectEqualDeep(
         core.LineF32.create(core.PointF32.create(1.0, 1.0), core.PointF32.create(2.0, 2.0)),
-        encoding.getSegment(core.LineF32, path_specs[0].getSegmentOffset()),
+        encoding.getSegment(core.LineF32, path_monoids[0]),
     );
     try std.testing.expectEqualDeep(
         core.ArcF32.create(
@@ -64,15 +58,15 @@ test "encoding path monoids" {
             core.PointF32.create(3.0, 3.0),
             core.PointF32.create(4.0, 2.0),
         ),
-        encoding.getSegment(core.ArcF32, path_specs[1].getSegmentOffset()),
+        encoding.getSegment(core.ArcF32, path_monoids[1]),
     );
     try std.testing.expectEqualDeep(
         core.LineF32.create(core.PointF32.create(4.0, 2.0), core.PointF32.create(1.0, 1.0)),
-        encoding.getSegment(core.LineF32, path_specs[2].getSegmentOffset()),
+        encoding.getSegment(core.LineF32, path_monoids[2]),
     );
 
     try std.testing.expectEqualDeep(
         core.LineI16.create(core.PointI16.create(10, 10), core.PointI16.create(20,20)),
-        encoding.getSegment(core.LineI16, path_specs[3].getSegmentOffset()),
+        encoding.getSegment(core.LineI16, path_monoids[3]),
     );
 }

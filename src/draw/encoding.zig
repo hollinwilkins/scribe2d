@@ -6,9 +6,19 @@ const TransformF32 = core.TransformF32;
 const Point = core.Point;
 const Line = core.Line;
 const Arc = core.Arc;
-const LineF32 = core.LineF32;
 const QuadraticBezier = core.QuadraticBezier;
 const CubicBezier = core.CubicBezier;
+const PointF32 = core.PointF32;
+const PointI16 = core.PointI16;
+const LineF32 = core.LineF32;
+const LineI16 = core.LineI16;
+const ArcF32 = core.ArcF32;
+const ArcI16 = core.ArcI16;
+const QuadraticBezierF32 = core.QuadraticBezierF32;
+const QuadraticBezierI16 = core.QuadraticBezierI16;
+const CubicBezierF32 = core.CubicBezierF32;
+const CubicBezierI16 = core.CubicBezierI16;
+
 
 pub const PathTag = packed struct {
     comptime {
@@ -166,18 +176,31 @@ pub const PathMonoid = extern struct {
         const segment = tag.segment;
         const index = tag.index;
         const segment_offset: u32 = switch (segment.kind) {
-            .line_f32 => @sizeOf(Point(f32)),
-            .line_i16 => @sizeOf(Point(i16)),
-            .arc_f32 => @sizeOf(Point(f32)) * 2,
-            .arc_i16 => @sizeOf(Point(i16)) * 2,
-            .quadratic_bezier_f32 => @sizeOf(Point(f32)) * 2,
-            .quadratic_bezier_i16 => @sizeOf(Point(i16)) * 2,
-            .cubic_bezier_f32 => @sizeOf(Point(f32)) * 3,
-            .cubic_bezier_i16 => @sizeOf(Point(i16)) * 3,
+            .line_f32 => @sizeOf(LineF32) - @sizeOf(PointF32),
+            .line_i16 => @sizeOf(LineI16) - @sizeOf(PointI16),
+            .arc_f32 => @sizeOf(ArcF32) - @sizeOf(PointF32),
+            .arc_i16 => @sizeOf(ArcI16) - @sizeOf(PointI16),
+            .quadratic_bezier_f32 => @sizeOf(QuadraticBezierF32) - @sizeOf(PointF32),
+            .quadratic_bezier_i16 => @sizeOf(QuadraticBezierI16) - @sizeOf(PointI16),
+            .cubic_bezier_f32 => @sizeOf(CubicBezierF32) - @sizeOf(PointF32),
+            .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
         };
+        var path_segment_offset: u32 = 0;
+        if (index.path == 1) {
+            path_segment_offset += switch (segment.kind) {
+                .line_f32 => @sizeOf(PointF32),
+                .line_i16 => @sizeOf(PointI16),
+                .arc_f32 => @sizeOf(PointF32),
+                .arc_i16 => @sizeOf(PointI16),
+                .quadratic_bezier_f32 => @sizeOf(PointF32),
+                .quadratic_bezier_i16 => @sizeOf(PointI16),
+                .cubic_bezier_f32 => @sizeOf(PointF32),
+                .cubic_bezier_i16 => @sizeOf(PointI16),
+            };
+        }
         return @This(){
             .segment_index = 1,
-            .segment_offset = segment_offset,
+            .segment_offset = path_segment_offset + segment_offset,
             .path_index = @intCast(index.path),
             .transform_index = @intCast(index.transform),
             .style_index = @intCast(index.style),
@@ -203,31 +226,15 @@ pub const PathMonoid = extern struct {
             expanded_monoid.* = monoid;
         }
     }
+
+    pub fn getSegmentOffset(self: @This(), comptime T: type) u32 {
+        return self.segment_offset - @sizeOf(T);
+    }
 };
 
 pub const PathSpec = struct {
     tag: PathTag,
     monoid: PathMonoid,
-
-    pub fn getSegmentOffset(self: @This()) u32 {
-        return self.monoid.segment_offset - self.startOffset();
-    }
-
-    pub fn startOffset(self: @This()) u32 {
-        const pointf32_size = @sizeOf(Point(f32));
-        const pointi16_size = @sizeOf(Point(i16));
-
-        return switch (self.tag.segment.kind) {
-            .line_f32 => pointf32_size,
-            .arc_f32 => pointf32_size * 2,
-            .quadratic_bezier_f32 => pointf32_size * 2,
-            .cubic_bezier_f32 => pointf32_size * 3,
-            .line_i16 => pointi16_size,
-            .arc_i16 => pointi16_size * 2,
-            .quadratic_bezier_i16 => pointi16_size * 2,
-            .cubic_bezier_i16 => pointi16_size * 3,
-        };
-    }
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU
@@ -243,8 +250,8 @@ pub const Encoding = struct {
         @panic("TODO: implement this for GPU kernels");
     }
 
-    pub fn getSegment(self: @This(), comptime T: type, offset: u32) T {
-        return std.mem.bytesToValue(T, self.segment_data[offset .. offset + @sizeOf(T)]);
+    pub fn getSegment(self: @This(), comptime T: type, path_monoid: PathMonoid) T {
+        return std.mem.bytesToValue(T, self.segment_data[path_monoid.segment_offset - @sizeOf(T) .. path_monoid.segment_offset]);
     }
 };
 
@@ -383,6 +390,8 @@ pub const Encoder = struct {
     }
 
     pub fn pathEncoder(self: *@This(), comptime T: type) PathEncoder(T) {
+        std.debug.assert(!self.staged_path);
+        self.staged_path = true;
         const style = self.currentStyle().?;
         return PathEncoder(T).create(self, style.isFill());
     }
@@ -468,8 +477,6 @@ pub fn PathEncoder(comptime T: type) type {
             if (self.is_fill) {
                 _ = try self.close();
             }
-
-            self.encoder.staged_path = true;
         }
 
         pub fn close(self: *@This()) !void {
@@ -718,35 +725,30 @@ pub const CpuRasterizer = struct {
 
         std.debug.print("============ Path Segments ============\n", .{});
         for (self.encoding.path_tags, self.path_monoids.items) |path_tag, path_monoid| {
-            const path_spec = PathSpec{
-                .tag = path_tag,
-                .monoid = path_monoid,
-            };
-
             switch (path_tag.segment.kind) {
                 .line_f32 => std.debug.print("LineF32: {}\n", .{
-                    self.encoding.getSegment(core.LineF32, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.LineF32, path_monoid),
                 }),
                 .arc_f32 => std.debug.print("ArcF32: {}\n", .{
-                    self.encoding.getSegment(core.ArcF32, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.ArcF32, path_monoid),
                 }),
                 .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierF32, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
                 }),
                 .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierF32, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.CubicBezierF32, path_monoid),
                 }),
                 .line_i16 => std.debug.print("LineI16: {}\n", .{
-                    self.encoding.getSegment(core.LineI16, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.LineI16, path_monoid),
                 }),
                 .arc_i16 => std.debug.print("ArcI16: {}\n", .{
-                    self.encoding.getSegment(core.ArcI16, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.ArcI16, path_monoid),
                 }),
                 .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierI16, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
                 }),
                 .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierI16, path_spec.getSegmentOffset()),
+                    self.encoding.getSegment(core.CubicBezierI16, path_monoid),
                 }),
             }
         }
