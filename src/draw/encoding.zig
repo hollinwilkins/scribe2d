@@ -794,6 +794,7 @@ test "encoding path monoids" {
     style.setFill(Style.Fill{
         .brush = .color,
     });
+    style.setStroke(Style.Stroke{});
     try encoder.encodeStyle(style);
 
     var path_encoder = encoder.pathEncoder(f32);

@@ -113,7 +113,7 @@ pub const Estimate = struct {
     const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
     pub const RoundArcEstimate = struct {
-        items: u16 = 0,
+        lines: u16 = 0,
         length: f32 = 0.0,
     };
 
@@ -137,10 +137,6 @@ pub const Estimate = struct {
                 .segment_data = segment_data,
             };
 
-            // const estimate = &estimates[index];
-
-            // _ = estimate;
-
             estimates[index] = estimateSegment(
                 config,
                 path_tag,
@@ -163,10 +159,10 @@ pub const Estimate = struct {
         var se = SegmentEstimate{};
 
         if (style.isStroke()) {
-            // const stroke = style.stroke;
-            // const scaled_width = @max(1.0, stroke.width) * transform.getScale();
-            // se.cap_lines += estimateCapLines(config, path_tag, style.stroke, scaled_width);
-            // se.join_lines += estimateJoinLines(config, style.stroke, scaled_width);
+            const stroke = style.stroke;
+            const scaled_width = @max(1.0, stroke.width) * transform.getScale();
+            se.cap_estimates = estimateCap(config, path_tag, stroke, scaled_width);
+            se.join_estimates = estimateJoin(config, stroke, scaled_width);
         }
 
         switch (path_tag.segment.kind) {
@@ -207,37 +203,60 @@ pub const Estimate = struct {
         return se;
     }
 
-    pub fn estimateJoinLines(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) u32 {
+    pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Estimates {
         switch (stroke.join) {
             .bevel => {
-                return 1;
+                return Estimates{
+                    .lines = 1,
+                    .intersections = estimateLineWidthIntersections(scaled_width),
+                };
             },
             .miter => {
-                return 2;
+                const MITER_FUDGE: u16 = 2;
+                return Estimates{
+                    .lines = 2,
+                    .intersections = estimateLineWidthIntersections(scaled_width) * 2 * MITER_FUDGE,
+                };
             },
             .round => {
-                return estimateRoundArc(config, scaled_width).items;
+                const arc_estimate = estimateRoundArc(config, scaled_width);
+                return Estimates{
+                    .lines = arc_estimate.lines,
+                    .intersections = estimateLineWidthIntersections(arc_estimate.length),
+                };
             },
         }
     }
 
-    pub fn estimateCapLines(config: KernelConfig, path_tag: PathTag, stroke: Style.Stroke, scaled_width: f32) u32 {
+    pub fn estimateCap(config: KernelConfig, path_tag: PathTag, stroke: Style.Stroke, scaled_width: f32) Estimates {
         if (path_tag.segment.cap) {
             const is_end_cap = path_tag.segment.subpath_end;
             const cap = if (is_end_cap) stroke.end_cap else stroke.start_cap;
 
             switch (cap) {
                 .butt => {
-                    return 1;
+                    return Estimates{
+                        .lines = 1,
+                        .intersections = estimateLineWidthIntersections(scaled_width),
+                    };
                 },
                 .square => {
-                    return 3;
+                    return Estimates{
+                        .lines = 3,
+                        .intersections = estimateLineWidthIntersections(scaled_width) * 2,
+                    };
                 },
                 .round => {
-                    return estimateRoundArc(config, scaled_width).items;
+                    const arc_estimate = estimateRoundArc(config, scaled_width);
+                    return Estimates{
+                        .lines = arc_estimate.lines,
+                        .intersections = estimateLineWidthIntersections(arc_estimate.length),
+                    };
                 },
             }
         }
+
+        return Estimates{};
     }
 
     pub fn estimateLineWidth(scaled_width: f32) Estimates {
@@ -273,7 +292,7 @@ pub const Estimate = struct {
         const arc_estimate = estimateRoundArc(config, width);
 
         return Estimates{
-            .lines = arc_estimate.items,
+            .lines = arc_estimate.lines,
             .intersections = estimateLineWidthIntersections(arc_estimate.length),
         };
     }
@@ -344,7 +363,7 @@ pub const Estimate = struct {
         const arc_lines = @max(2, @as(u16, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
 
         return RoundArcEstimate{
-            .items = arc_lines,
+            .lines = arc_lines,
             .length = 2.0 * std.math.sin(theta) * radius,
         };
     }
