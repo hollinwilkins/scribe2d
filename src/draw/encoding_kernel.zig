@@ -106,10 +106,18 @@ pub const Estimates = packed struct {
     }
 };
 
+pub const Offsets = packed struct {
+    start: u32 = 0,
+    end: u32 = 0,
+};
+
 pub const SegmentOffsets = packed struct {
     fill: Estimates = Estimates{},
+    fill_line_offsets: Offsets = Offsets{},
     front_stroke: Estimates = Estimates{},
+    front_line_offsets: Offsets = Offsets{},
     back_stroke: Estimates = Estimates{},
+    back_line_offsets: Offsets = Offsets{},
 
     pub usingnamespace MonoidFunctions(SegmentOffsets, @This());
 
@@ -120,9 +128,25 @@ pub const SegmentOffsets = packed struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .fill = self.fill.combine(other.fill),
+            .fill_line_offsets = Offsets{
+                .start = self.fill_line_offsets.end,
+                .end = self.fill_line_offsets.end + lineBytes(other.fill.lines),
+            },
             .front_stroke = self.front_stroke.combine(other.front_stroke),
+            .front_line_offsets = Offsets{
+                .start = self.front_line_offsets.end,
+                .end = self.front_line_offsets.end + lineBytes(other.front_stroke.lines),
+            },
             .back_stroke = self.back_stroke.combine(other.back_stroke),
+            .back_line_offsets = Offsets{
+                .start = self.back_line_offsets.end,
+                .end = self.back_line_offsets.end + lineBytes(other.back_stroke.lines),
+            },
         };
+    }
+
+    pub fn lineBytes(n_lines: u16) u32 {
+        return @sizeOf(PointF32) + n_lines * @sizeOf(PointF32);
     }
 };
 
@@ -224,6 +248,11 @@ pub const Estimate = struct {
             so.front_stroke = base_stroke.combine(cap).combine(join);
             so.back_stroke = so.front_stroke.combine(base_stroke);
         }
+
+        // first point + additional points for lines
+        // so.fill_line_end = @sizeOf(PointF32) + so.fill.lines * @sizeOf(PointF32);
+        // so.front_line_offset = @sizeOf(PointF32) + so.front_stroke.lines * @sizeOf(PointF32);
+        // so.back_line_offset = @sizeOf(PointF32) + so.back_stroke.lines * @sizeOf(PointF32);
 
         return so;
     }
@@ -470,8 +499,8 @@ pub const Flatten = struct {
         segment_index: usize,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        segment_estimates: []const SegmentOffsets,
-        segment_offsets: []const SegmentOffsets,
+        segment_estimates: []SegmentOffsets,
+        segment_offsets: []SegmentOffsets,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         flat_segment_data: []u8,
