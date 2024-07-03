@@ -6,6 +6,7 @@ const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const SegmentData = encoding_module.SegmentData;
 const Style = encoding_module.Style;
+const MonoidFunctions = encoding_module.MonoidFunctions;
 const TransformF32 = core.TransformF32;
 const PointF32 = core.PointF32;
 const LineF32 = core.LineF32;
@@ -93,16 +94,70 @@ pub const Estimates = packed struct {
     }
 };
 
+pub const EstimateOffsets = packed struct {
+    line_offset: u32 = 0,
+    intersection_offest: u32 = 0,
+
+    pub usingnamespace MonoidFunctions(SegmentEstimate, @This());
+
+    pub fn createTag(estimates: Estimates) @This() {
+        return @This(){
+            .line_offset = estimates.lines,
+            .intersection_offest = estimates.intersections,
+        };
+    }
+
+    pub fn mulScalar(self: @This(), scalar: f32) @This() {
+        return @This(){
+            .line_offset = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.line_offset)) * scalar)),
+            .intersection_offest = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersection_offest)) * scalar)),
+        };
+    }
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .line_offset = self.line_offset + other.line_offset,
+            .intersection_offest = self.intersection_offest + other.intersection_offest,
+        };
+    }
+};
+
 pub const SegmentEstimate = packed struct {
     estimates: Estimates = Estimates{},
     cap_estimates: Estimates = Estimates{},
     join_estimates: Estimates = Estimates{},
+    stroke_fudge: f32 = 0.0,
+};
+
+pub const SegmentOffsets = packed struct {
+    fill: EstimateOffsets = EstimateOffsets{},
+    front_stroke: EstimateOffsets = EstimateOffsets{},
+    back_stroke: EstimateOffsets = EstimateOffsets{},
+
+    pub usingnamespace MonoidFunctions(SegmentEstimate, @This());
+
+    pub fn createTag(segment_estimate: SegmentEstimate) @This() {
+        const fill = EstimateOffsets.createTag(segment_estimate.estimates);
+        const stroke = fill.mulScalar(segment_estimate.stroke_fudge);
+        const front_stroke = stroke.combine(
+            EstimateOffsets.createTag(segment_estimate.cap_estimates),
+        ).combine(
+            EstimateOffsets.createTag(segment_estimate.join_estimates),
+        );
+        const back_stroke = front_stroke.combine(stroke);
+
+        return @This(){
+            .fill = EstimateOffsets.createTag(segment_estimate.estimates),
+            .front_stroke = front_stroke,
+            .back_stroke = back_stroke,
+        };
+    }
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .estimates = self.estimates.combine(other.estimates),
-            .cap_estimates = self.estimates.combine(other.cap_estimates),
-            .join_estimates = self.estimates.combine(other.join_estimates),
+            .fill = self.fill.combine(other.fill),
+            .front_stroke = self.front_stroke.combine(other.front_stroke),
+            .back_stroke = self.back_stroke.combine(other.back_stroke),
         };
     }
 };
@@ -159,10 +214,12 @@ pub const Estimate = struct {
         var se = SegmentEstimate{};
 
         if (style.isStroke()) {
+            const scale = transform.getScale() * 0.5;
             const stroke = style.stroke;
-            const scaled_width = @max(1.0, stroke.width) * transform.getScale();
+            const scaled_width = @max(1.0, stroke.width) * scale;
             se.cap_estimates = estimateCap(config, path_tag, stroke, scaled_width);
             se.join_estimates = estimateJoin(config, stroke, scaled_width);
+            se.stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
         }
 
         switch (path_tag.segment.kind) {
@@ -396,55 +453,43 @@ pub const Estimate = struct {
     };
 };
 
-pub const Flatten = struct {
-    pub fn fill(
-        config: KernelConfig,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
-        segment_data: []const u8,
-        range: RangeU32,
-        // outputs
-        // true if path is used, false to ignore
-        flat_path_mask: []bool,
-        flat_path_tags: []PathTag,
-        flat_path_monoids: []PathMonoid,
-        flat_segment_data: []u8,
-    ) void {
-        _ = config;
-        _ = path_tags;
-        _ = path_monoids;
-        _ = segment_data;
-        _ = range;
-        _ = flat_path_mask;
-        _ = flat_path_tags;
-        _ = flat_path_monoids;
-        _ = flat_segment_data;
-    }
+// pub const Flatten = struct {
+//     pub fn flatten(
+//         config: KernelConfig,
+//         path_tags: []const PathTag,
+//         path_monoids: []const PathMonoid,
+//         segment_data: []const u8,
+//         segment_estimates: []const SegmentEstimate,
+//         range: RangeU32,
+//         // outputs
+//         // true if path is used, false to ignore
+//         flat_path_mask: []bool,
+//         flat_path_tags: []PathTag, // 2x path_tags for left/right
+//         flat_path_monoids: []PathMonoid, // 2x path_tags for left/right
+//         flat_segment_data: []u8,
+//     ) void {
+//         _ = config;
+//         _ = flat_path_mask;
+//         _ = flat_path_tags;
+//         _ = flat_path_monoids;
+//         _ = flat_segment_data;
 
-    pub fn stroke(
-        config: KernelConfig,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
-        segment_data: []const u8,
-        range: RangeU32,
-        // outputs
-        // true if path is used, false to ignore
-        flat_path_mask: []bool,
-        flat_path_tags: []PathTag, // 2x path_tags for left/right
-        flat_path_monoids: []PathMonoid, // 2x path_tags for left/right
-        flat_segment_data: []u8,
-    ) void {
-        _ = config;
-        _ = path_tags;
-        _ = path_monoids;
-        _ = segment_data;
-        _ = range;
-        _ = flat_path_mask;
-        _ = flat_path_tags;
-        _ = flat_path_monoids;
-        _ = flat_segment_data;
-    }
-};
+//         for (range.start..range.end) |index| {
+//             const path_tag = path_tags[index];
+//             const path_monoid = path_monoids[index];
+//             const sd = SegmentData{
+//                 .segment_data = segment_data,
+//             };
+//         }
+//     }
+
+//     pub fn fill(
+//         config: KernelConfig,
+//         path_tag: PathTag,
+//         path_monoid: PathMonoid,
+//         segment_data: SegmentData,
+//     ) void {}
+// };
 
 pub const Rasterize = struct {
     // scanlineFill(

@@ -22,6 +22,7 @@ const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
 const KernelConfig = encoding_kernel.KernelConfig;
 const SegmentEstimate = encoding_kernel.SegmentEstimate;
+const SegmentOffsets = encoding_kernel.SegmentOffsets;
 
 pub const PathTag = packed struct {
     comptime {
@@ -163,6 +164,24 @@ pub const Style = packed struct {
     }
 };
 
+pub fn MonoidFunctions(comptime T: type, comptime M: type) type {
+    return struct {
+        pub fn expand(tags: []const T, expanded: []M) void {
+            std.debug.assert(tags.len == expanded.len);
+
+            var monoid = M{};
+            for (tags, expanded) |tag, *expanded_monoid| {
+                monoid = monoid.combine(M.createTag(tag));
+                expanded_monoid.* = monoid;
+            }
+
+            if (std.meta.hasFn(M, "fixExpansion")) {
+                M.fixExpansion(expanded);
+            }
+        }
+    };
+}
+
 pub const PathMonoid = extern struct {
     path_index: u32 = 0,
     subpath_index: u32 = 0,
@@ -171,6 +190,8 @@ pub const PathMonoid = extern struct {
     transform_index: u32 = 0,
     style_index: u32 = 0,
     brush_offset: u32 = 0,
+
+    pub usingnamespace MonoidFunctions(PathTag, @This());
 
     pub fn createTag(tag: PathTag) @This() {
         const segment = tag.segment;
@@ -217,25 +238,13 @@ pub const PathMonoid = extern struct {
         };
     }
 
-    pub fn expandTags(tags: []const PathTag, expanded: []PathMonoid) void {
-        std.debug.assert(tags.len == expanded.len);
-
-        var monoid = PathMonoid{};
-        for (tags, expanded) |tag, *expanded_monoid| {
-            monoid = monoid.combine(PathMonoid.createTag(tag));
-            expanded_monoid.* = monoid;
+    pub fn fixExpansion(expanded: []@This()) void {
+        for (expanded) |*monoid| {
+            monoid.path_index -= 1;
+            monoid.segment_index -= 1;
+            monoid.transform_index -= 1;
+            monoid.style_index -= 1;
         }
-
-        for (expanded) |*expanded_monoid| {
-            expanded_monoid.fixExpansion();
-        }
-    }
-
-    pub fn fixExpansion(self: *@This()) void {
-        self.path_index -= 1;
-        self.segment_index -= 1;
-        self.transform_index -= 1;
-        self.style_index -= 1;
     }
 
     pub fn getSegmentOffset(self: @This(), comptime T: type) u32 {
@@ -648,6 +657,7 @@ pub const CpuRasterizer = struct {
     const PathTagList = std.ArrayListUnmanaged(PathTag);
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const SegmentEstimateList = std.ArrayListUnmanaged(SegmentEstimate);
+    const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffsets);
     const LineList = std.ArrayListUnmanaged(LineF32);
 
     allocator: Allocator,
@@ -655,6 +665,7 @@ pub const CpuRasterizer = struct {
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
     segment_estimates: SegmentEstimateList = SegmentEstimateList{},
+    segment_offsets: SegmentOffsetList = SegmentOffsetList{},
 
     pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
         return @This(){
@@ -667,6 +678,7 @@ pub const CpuRasterizer = struct {
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
         self.segment_estimates.deinit(self.allocator);
+        self.segment_offsets.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
@@ -694,7 +706,7 @@ pub const CpuRasterizer = struct {
 
     fn expandPathMonoids(self: *@This()) !void {
         const path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
-        PathMonoid.expandTags(self.encoding.path_tags, path_monoids);
+        PathMonoid.expand(self.encoding.path_tags, path_monoids);
     }
 
     fn estimateSegments(self: *@This()) !void {
@@ -719,8 +731,9 @@ pub const CpuRasterizer = struct {
             );
         }
 
-        // need to estimate memory and set fills
-
+        // TODO: expand SegmentEstimate into SegmentOffsets
+        const segment_offsets = try self.segment_offsets.addManyAsSlice(self.allocator, segment_estimates.len);
+        SegmentOffsets.expand(segment_estimates, segment_offsets);
     }
 
     fn flatten(self: *@This(), encoding: Encoding) !void {
@@ -774,6 +787,8 @@ pub const CpuRasterizer = struct {
 
             const estimate = self.segment_estimates.items[segment_index];
             std.debug.print("Estimate: {}\n", .{estimate});
+            const offset = self.segment_offsets.items[segment_index];
+            std.debug.print("Offset: {}\n", .{offset});
             std.debug.print("----------\n", .{});
         }
         std.debug.print("======================================\n", .{});

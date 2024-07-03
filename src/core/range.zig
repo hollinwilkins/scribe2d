@@ -5,6 +5,13 @@ pub fn Range(comptime T: type) type {
         start: T = 0,
         end: T = 0,
 
+        pub fn create(start: T, end: T) @This() {
+            return @This(){
+                .start = start,
+                .end = end,
+            };
+        }
+
         pub fn size(self: @This()) usize {
             return @intCast(self.end - self.start);
         }
