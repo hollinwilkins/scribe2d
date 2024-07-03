@@ -416,6 +416,8 @@ pub fn PathEncoder(comptime T: type) type {
             if (self.is_fill) {
                 _ = try self.close();
             }
+
+            try self.encoder.encodePathTag(PathTag.PATH);
         }
 
         pub fn close(self: *@This()) !bool {
@@ -549,3 +551,33 @@ pub fn PathEncoder(comptime T: type) type {
         }
     };
 }
+
+pub const CpuRasterizer = struct {
+    const PathMonoidList = std.ArrayListUnmanaged(PathMonid);
+
+    allocator: Allocator,
+    path_monoids: PathMonoidList = PathMonoidList{},
+
+    pub fn init(allocator: Allocator) @This() {
+        return @This() {
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.path_monoids.deinit(self.allocator);
+    }
+
+    pub fn reset(self: *@This()) void {
+        self.path_monoids.items.len = 0;
+    }
+
+    pub fn rasterize(self: *@This()) !void {
+        _ = self;
+    }
+
+    fn expand(self: *@This(), encoding: Encoding) !void {
+        self.path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, encoding.path_tags.len);
+        PathMonid.expandTags(encoding.path_tags, self.path_monoids);
+    }
+};
