@@ -5,6 +5,7 @@ const RangeU32 = core.RangeU32;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const SegmentData = encoding_module.SegmentData;
+const Style = encoding_module.Style;
 const TransformF32 = core.TransformF32;
 const PointF32 = core.PointF32;
 const LineF32 = core.LineF32;
@@ -81,18 +82,28 @@ pub const KernelConfig = struct {
     }
 };
 
-pub const SegmentEstimate = packed struct {
+pub const Estimates = packed struct {
     lines: u16 = 0,
     intersections: u16 = 0,
-    cap_lines: u16 = 0,
-    join_lines: u16 = 0,
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .lines = self.lines + other.lines,
             .intersections = self.intersections + other.intersections,
-            .cap_lines = self.cap_lines + other.cap_lines,
-            .join_lines = self.join_lines + other.join_lines,
+        };
+    }
+};
+
+pub const SegmentEstimate = packed struct {
+    estimates: Estimates = Estimates{},
+    cap_estimates: Estimates = Estimates{},
+    join_estimates: Estimates = Estimates{},
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .estimates = self.estimates.combine(other.estimates),
+            .cap_estimates = self.estimates.combine(other.cap_estimates),
+            .join_estimates = self.estimates.combine(other.join_estimates),
         };
     }
 };
@@ -100,6 +111,11 @@ pub const SegmentEstimate = packed struct {
 pub const Estimate = struct {
     const VIRTUAL_INTERSECTIONS: u32 = 2;
     const INTERSECTION_FUDGE: u32 = 2;
+
+    pub const RoundArcEstimate = struct {
+        items: u32 = 0,
+        length: f32 = 0.0,
+    };
 
     pub fn estimate(
         config: KernelConfig,
@@ -125,153 +141,142 @@ pub const Estimate = struct {
     }
 
     fn estimateCurveBase(
+        config: KernelConfig,
         path_tag: PathTag,
         path_monoid: PathMonoid,
+        style: Style,
         transform: TransformF32.Affine,
         segment_data: SegmentData,
     ) u32 {
         var se = SegmentEstimate{};
 
+        if (style.isStroke()) {
+            const stroke = style.stroke;
+            const scaled_width = @max(1.0, stroke.width) * transform.getScale();
+            se.cap_lines += estimateCapLines(config, path_tag, style.stroke, scaled_width);
+            se.join_lines += estimateJoinLines(config, style.stroke, scaled_width);
+        }
+
         switch (path_tag.segment.kind) {
             .line_f32 => {
                 const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
-                se.lines += 1;
-                se.intersections += estimateLineIntersections(line);
+                se.estimates = estimateLine(line);
             },
             .line_i16 => {
                 const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
-                se.lines += 1;
-                se.intersections += estimateLineIntersections(line);
+                se.estimates = estimateLine(line);
             },
             .arc_f32 => {
                 const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                se.lines += estimateArcLines(arc);
-                se.intersections += estimateLineIntersections(arc);
+                se.estimates = estimateArc(arc);
             },
             .arc_i16 => {
                 const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                se.lines += estimateArcLines(arc);
-                se.intersections += estimateLineIntersections(arc);
+                se.estimates = estimateArc(arc);
             },
             .quadratic_bezier_f32 => {
                 const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
-                se.lines += estimateQuadraticBezierLines(qb);
-                se.intersections += estimateQuadraticBezierIntersections(qb);
+                se.estimates = estimateQuadraticBezier(qb);
             },
             .quadratic_bezier_i16 => {
                 const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).cast(f32).affineTransform(transform);
-                se.lines += estimateQuadraticBezierLines(qb);
-                se.intersections += estimateQuadraticBezierIntersections(qb);
+                se.estimates = estimateQuadraticBezier(qb);
             },
             .cubic_bezier_f32 => {
                 const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                se.lines += estimateCubicBezierLines(cb);
-                se.intersections += estimateQuadraticBezierIntersections(cb);
+                se.estimates = estimateQuadraticBezier(cb);
             },
             .cubic_bezier_i16 => {
                 const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                se.lines += estimateCubicBezierLines(cb);
-                se.intersections += estimateQuadraticBezierIntersections(cb);
+                se.estimates = estimateQuadraticBezier(cb);
             },
         }
 
         return se;
     }
 
-    // fn estimateCurveCap(
-    //     config: KernelConfig,
-    //     curve: shape_module.Curve,
-    //     stroke: Style.Stroke,
-    //     scaled_width: f32,
-    // ) u32 {
-    //     switch (curve.cap) {
-    //         .start => {
-    //             return estimateStrokeCap(config, stroke.start_cap, scaled_width);
-    //         },
-    //         .end => {
-    //             return estimateStrokeCap(config, stroke.end_cap, scaled_width);
-    //         },
-    //         .none => {
-    //             return 0;
-    //         },
-    //     }
-    // }
-
-    // fn estimateStrokeCap(config: KernelConfig, cap: Style.Cap, scaled_width: f32) u32 {
-    //     switch (cap) {
-    //         .butt => {
-    //             return @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
-    //         },
-    //         .square => {
-    //             var items = @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
-    //             items += 2 * @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(0.5 * scaled_width)));
-    //             return items;
-    //         },
-    //         .round => {
-    //             const arc_estimate: ArcEstimate = LineEstimatorImpl.estimateArc(config, scaled_width);
-    //             return arc_estimate.items;
-    //         },
-    //     }
-    // }
-
-    // fn estimateStrokeJoin(config: KernelConfig, join: Style.Join, scaled_width: f32, miter_limit: f32) u32 {
-    //     const inner_estimate = @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
-    //     var outer_estimate: u32 = 0;
-
-    //     switch (join) {
-    //         .bevel => {
-    //             outer_estimate += @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(scaled_width)));
-    //         },
-    //         .miter => {
-    //             const max_miter_len = scaled_width * miter_limit;
-    //             outer_estimate += @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(max_miter_len))) * 2;
-    //         },
-    //         .round => {
-    //             const arc_estimate: ArcEstimate = LineEstimatorImpl.estimateArc(config, scaled_width);
-    //             outer_estimate += @as(u32, @intFromFloat(LineEstimatorImpl.estimateLineLengthItems(arc_estimate.length))) * arc_estimate.items;
-    //         },
-    //     }
-
-    //     return @max(inner_estimate, outer_estimate);
-    // }
-
-    pub fn estimateArcLines(arc: ArcF32) u32 {
-        _ = arc;
+    pub fn estimateJoinLines(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) u32 {
+        switch (stroke.join) {
+            .bevel => {
+                return 1;
+            },
+            .miter => {
+                return 2;
+            },
+            .round => {
+                return estimateRoundArc(config, scaled_width).items;
+            },
+        }
     }
 
-    pub fn estimateQuadraticBezierLines(quadratic_bezier: QuadraticBezierF32) u32 {
-        _ = quadratic_bezier;
+    pub fn estimateCapLines(config: KernelConfig, path_tag: PathTag, stroke: Style.Stroke, scaled_width: f32) u32 {
+        if (path_tag.segment.cap) {
+            const is_end_cap = path_tag.segment.subpath_end;
+            const cap = if (is_end_cap) stroke.end_cap else stroke.start_cap;
+
+            switch (cap) {
+                .butt => {
+                    return 1;
+                },
+                .square => {
+                    return 3;
+                },
+                .round => {
+                    return estimateRoundArc(config, scaled_width).items;
+                },
+            }
+        }
     }
 
-    pub fn estimateCubicBezierLines(cubic_bezier: CubicBezierF32) u32 {
-        _ = cubic_bezier;
+    pub fn estimateLineWidth(scaled_width: f32) Estimates {
+        const dxdy = PointF32{
+            .x = scaled_width,
+            .y = scaled_width,
+        };
+        var intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
+
+        return Estimates{
+            .lines = 1,
+            .intersections = intersections,
+        };
     }
 
-    pub fn estimateLineIntersections(line: LineF32) u32 {
+    pub fn estimateLine(line: LineF32) Estimates {
         const dxdy = line.p1.sub(line.p0);
-        const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
-        return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
+        var intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
+
+        return Estimates{
+            .lines = 1,
+            .intersections = intersections,
+        };
     }
 
-    pub fn estimateArcIntersections(arc: ArcF32) u32 {
+    pub fn estimateArc(arc: ArcF32) Estimates {
         _ = arc;
-        // const dxdy = p1.sub(p0);
-        // const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
-        // return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
+        return Estimates{};
     }
 
-    pub fn estimateQuadraticBezierIntersections(quadratic_bezier: QuadraticBezierF32) u32 {
+    pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Estimates {
         _ = quadratic_bezier;
-        // const dxdy = p1.sub(p0);
-        // const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
-        // return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
+        return Estimates{};
     }
 
-    pub fn estimateCubicBezierIntersections(cubic_bezier: CubicBezierF32) u32 {
+    pub fn estimateCubicBezier(cubic_bezier: CubicBezierF32) Estimates {
         _ = cubic_bezier;
-        // const dxdy = p1.sub(p0);
-        // const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
-        // return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
+        return Estimates{};
+    }
+
+    fn estimateRoundArc(config: KernelConfig, scaled_width: f32) RoundArcEstimate {
+        const radius = @max(config.error_tolerance, scaled_width * 0.5);
+        const theta = @max(config.min_theta2, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
+        const arc_lines = @max(2, @as(u32, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
+
+        return RoundArcEstimate{
+            .items = arc_lines,
+            .length = 2.0 * std.math.sin(theta) * radius,
+        };
     }
 };
 
