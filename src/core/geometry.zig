@@ -381,16 +381,10 @@ pub fn Transform(comptime T: type) type {
                 const c = self.coefficients;
                 const v1x = c[0] + c[4];
                 const v2x = c[0] - c[4];
-                const v1y = c[1] - c[4];
-                const v2y = c[1] + c[4];
+                const v1y = c[1] - c[3];
+                const v2y = c[1] + c[3];
 
-                return (PointF32{
-                    .x = v1x,
-                    .y = v1y,
-                }).length() + (PointF32{
-                    .x = v2x,
-                    .y = v2y,
-                }).length();
+                return std.math.sqrt(v1x * v1x + v1y * v1y) + std.math.sqrt(v2x * v2x + v2y * v2y);
             }
         };
         pub const Affine = Matrix;

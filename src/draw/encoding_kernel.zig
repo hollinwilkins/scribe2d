@@ -214,6 +214,7 @@ pub const Estimate = struct {
         var se = SegmentEstimate{};
 
         if (style.isStroke()) {
+            // TODO: this still seems wrong
             const scale = transform.getScale() * 0.5;
             const stroke = style.stroke;
             const scaled_width = @max(1.0, stroke.width) * scale;
