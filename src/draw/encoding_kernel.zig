@@ -458,7 +458,6 @@ pub const Flatten = struct {
         styles: []const Style,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
-        segment_estimates: []const SegmentOffsets,
         segment_offsets: []const SegmentOffsets,
         range: RangeU32,
         // outputs
@@ -482,7 +481,6 @@ pub const Flatten = struct {
                     index,
                     path_tags,
                     path_monoids,
-                    segment_estimates,
                     segment_offsets,
                     transforms,
                     segment_data,
@@ -499,7 +497,6 @@ pub const Flatten = struct {
         segment_index: usize,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        segment_estimates: []SegmentOffsets,
         segment_offsets: []SegmentOffsets,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
@@ -508,11 +505,9 @@ pub const Flatten = struct {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
         const transform = transforms[path_monoid.transform_index];
-        const se = segment_estimates[segment_index];
         const so = segment_offsets[segment_index];
-        const start = so.fill.lines - se.fill.lines;
         const writer = Writer{
-            .segment_data = flat_segment_data.segment_data[start..se.fill.lines],
+            .segment_data = flat_segment_data.segment_data[so.fill_line_offsets.start..so.fill_line_offsets.end],
         };
 
         const cubic_points = getCubicPoints(
