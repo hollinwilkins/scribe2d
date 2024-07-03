@@ -307,26 +307,6 @@ pub const Encoder = struct {
         return true;
     }
 
-    // pub fn currentDraw(self: *@This()) ?*PathTag.Draw {
-    //     if (self.styles.items.len > 0) {
-    //         return self.styles.items[self.styles.items.len - 1];
-    //     }
-
-    //     return null;
-    // }
-
-    // pub fn encodeStyle(self: *@This(), style: Style) !bool {
-    //     if (self.currentStyle()) |current| {
-    //         if (std.meta.eql(current, style)) {
-    //             return false;
-    //         }
-    //     }
-
-    //     (try self.styles.addOne()).* = style;
-    //     try self.encodePathTag(PathTag.STYLE);
-    //     return true;
-    // }
-
     pub fn extendPath(self: *@This(), comptime T: type, kind: ?PathTag.SegmentKind) !*T {
         if (kind) |k| {
             try self.encodePathTag(PathTag.curve(k));
@@ -342,6 +322,11 @@ pub const Encoder = struct {
 
     pub fn pathTailSegment(self: *@This(), comptime T: type) *T {
         return std.mem.bytesAsValue(T, self.segment_data.items[self.segment_data.items.len - @sizeOf(T) ..]);
+    }
+
+    pub fn encodeColor(self: *@This(), color: Color) !void {
+        const bytes = (try self.draw_data.addManyAsSlice(self.allocator, @sizeOf(Color)));
+        std.mem.bytesAsValue(Color, bytes).* = color;
     }
 };
 
