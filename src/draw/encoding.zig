@@ -16,16 +16,6 @@ pub const PathTag = packed struct {
         std.debug.assert(@sizeOf(@This()) == 1);
     }
 
-    pub const PATH: @This() = @This(){
-        .index = Index{ .path = 1 },
-    };
-    pub const TRANSFORM: @This() = @This(){
-        .transform = Index{ .path = 1 },
-    };
-    pub const STYLE: @This() = @This(){
-        .style = Index{ .path = 1 },
-    };
-
     pub const Kind = enum(u1) {
         segment = 0,
         index = 1,
@@ -44,7 +34,7 @@ pub const PathTag = packed struct {
 
     pub const Segment = packed struct {
         // what kind of segment is this
-        kind: SegmentKind = .line_f32,
+        kind: SegmentKind,
         // marks end of a subpath
         subpath_end: bool = false,
         // draw caps if true
@@ -62,7 +52,7 @@ pub const PathTag = packed struct {
         style: u1 = 0,
     };
 
-    segment: Segment = Segment{},
+    segment: Segment,
     index: Index = Index{},
 
     pub fn curve(kind: SegmentKind) @This() {
@@ -164,7 +154,7 @@ pub const Style = packed struct {
     }
 };
 
-pub const PathMonid = extern struct {
+pub const PathMonoid = extern struct {
     path_index: u32 = 0,
     segment_index: u32 = 0,
     segment_offset: u32 = 0,
@@ -173,10 +163,9 @@ pub const PathMonid = extern struct {
     brush_offset: u32 = 0,
 
     pub fn createTag(tag: PathTag) @This() {
-        const segment = tag.tag.segment;
-        const index = tag.tag.index;
+        const segment = tag.segment;
+        const index = tag.index;
         const segment_offset: u32 = switch (segment.kind) {
-            .none => unreachable,
             .line_f32 => @sizeOf(Point(f32)),
             .line_i16 => @sizeOf(Point(i16)),
             .arc_f32 => @sizeOf(Point(f32)) * 2,
@@ -205,14 +194,39 @@ pub const PathMonid = extern struct {
         };
     }
 
-    pub fn expandTags(tags: []const PathTag, expanded: []PathMonid) void {
+    pub fn expandTags(tags: []const PathTag, expanded: []PathMonoid) void {
         std.debug.assert(tags.len == expanded.len);
 
-        var monoid = PathMonid{};
+        var monoid = PathMonoid{};
         for (tags, expanded) |tag, *expanded_monoid| {
-            monoid = monoid.combine(PathMonid.createTag(tag));
+            monoid = monoid.combine(PathMonoid.createTag(tag));
             expanded_monoid.* = monoid;
         }
+    }
+};
+
+pub const PathSpec = struct {
+    tag: PathTag,
+    monoid: PathMonoid,
+
+    pub fn getSegmentOffset(self: @This()) u32 {
+        return self.monoid.segment_offset - self.startOffset();
+    }
+
+    pub fn startOffset(self: @This()) u32 {
+        const pointf32_size = @sizeOf(Point(f32));
+        const pointi16_size = @sizeOf(Point(i16));
+
+        return switch (self.tag.segment.kind) {
+            .line_f32 => pointf32_size,
+            .arc_f32 => pointf32_size * 2,
+            .quadratic_bezier_f32 => pointf32_size * 2,
+            .cubic_bezier_f32 => pointf32_size * 3,
+            .line_i16 => pointi16_size,
+            .arc_i16 => pointi16_size * 2,
+            .quadratic_bezier_i16 => pointi16_size * 2,
+            .cubic_bezier_i16 => pointi16_size * 3,
+        };
     }
 };
 
@@ -222,11 +236,15 @@ pub const Encoding = struct {
     transforms: []const TransformF32.Affine,
     styles: []const Style,
     segment_data: []const u8,
-    brush_data: []const u8,
+    draw_data: []const u8,
 
     pub fn createFromBytes(bytes: []const u8) Encoding {
         _ = bytes;
         @panic("TODO: implement this for GPU kernels");
+    }
+
+    pub fn getSegment(self: @This(), comptime T: type, offset: u32) T {
+        return std.mem.bytesToValue(T, self.segment_data[offset .. offset + @sizeOf(T)]);
     }
 };
 
@@ -243,6 +261,7 @@ pub const Encoder = struct {
     styles: StyleList = StyleList{},
     segment_data: Buffer = Buffer{},
     draw_data: Buffer = Buffer{},
+    staged_path: bool = false,
     staged_transform: bool = false,
     staged_style: bool = false,
 
@@ -289,6 +308,11 @@ pub const Encoder = struct {
         if (self.staged_style) {
             self.staged_style = false;
             tag2.index.style = 1;
+        }
+
+        if (self.staged_path) {
+            self.staged_path = false;
+            tag2.index.path = 1;
         }
 
         (try self.path_tags.addOne(self.allocator)).* = tag2;
@@ -359,6 +383,7 @@ pub const Encoder = struct {
     }
 
     pub fn pathEncoder(self: *@This(), comptime T: type) PathEncoder(T) {
+        std.debug.assert(!self.staged_path);
         const style = self.currentStyle().?;
         return PathEncoder(T).create(self, style.isFill());
     }
@@ -437,7 +462,7 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn finish(self: *@This()) !void {
-            if (self.state == .start) {
+            if (self.isEmpty() or self.state == .start) {
                 return;
             }
 
@@ -445,7 +470,7 @@ pub fn PathEncoder(comptime T: type) type {
                 _ = try self.close();
             }
 
-            try self.encoder.encodePathTag(PathTag.PATH);
+            self.encoder.staged_path = true;
         }
 
         pub fn close(self: *@This()) !void {
@@ -493,9 +518,9 @@ pub fn PathEncoder(comptime T: type) type {
                     return false;
                 },
                 else => {
-                    const last_point = self.encoder.pathTailSegment(PPoint);
+                    const last_point = self.encoder.pathTailSegment(PPoint).*;
 
-                    if (std.meta.eql(last_point.*, p1)) {
+                    if (std.meta.eql(last_point, p1)) {
                         return false;
                     }
 
@@ -516,9 +541,9 @@ pub fn PathEncoder(comptime T: type) type {
                     return false;
                 },
                 else => {
-                    const last_point = self.encoder.pathTailSegment(PPoint);
+                    const last_point = self.encoder.pathTailSegment(PPoint).*;
 
-                    if (std.meta.eql(last_point.*, p1) and std.meta.eql(last_point.*, p2)) {
+                    if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2)) {
                         return false;
                     }
 
@@ -532,16 +557,17 @@ pub fn PathEncoder(comptime T: type) type {
             }
         }
 
-        pub fn quadTo(self: *@This(), p1: PPoint, p2: PPoint) !void {
+        pub fn quadTo(self: *@This(), p1: PPoint, p2: PPoint) !bool {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
                     try self.moveTo(p2);
+                    return false;
                 },
                 else => {
-                    const last_point = self.encoder.pathTailSegment(PPoint);
+                    const last_point = self.encoder.pathTailSegment(PPoint).*;
 
-                    if (std.meta.eql(last_point.*, p1) and std.meta.eql(last_point.*, p2)) {
+                    if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2)) {
                         return false;
                     }
 
@@ -550,20 +576,22 @@ pub fn PathEncoder(comptime T: type) type {
                         .p2 = p2,
                     };
                     self.state = .draw;
+                    return true;
                 },
             }
         }
 
-        pub fn cubicTo(self: *@This(), p1: PPoint, p2: PPoint, p3: PPoint) !void {
+        pub fn cubicTo(self: *@This(), p1: PPoint, p2: PPoint, p3: PPoint) !bool {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
                     try self.moveTo(p3);
+                    return false;
                 },
                 else => {
-                    const last_point = self.encoder.pathTailSegment(PPoint);
+                    const last_point = self.encoder.pathTailSegment(PPoint).*;
 
-                    if (std.meta.eql(last_point.*, p1) and std.meta.eql(last_point.*, p2) and std.meta.eql(last_point.*, p3)) {
+                    if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2) and std.meta.eql(last_point, p3)) {
                         return false;
                     }
 
@@ -573,6 +601,7 @@ pub fn PathEncoder(comptime T: type) type {
                         .p3 = p3,
                     };
                     self.state = .draw;
+                    return true;
                 },
             }
         }
@@ -615,7 +644,7 @@ pub const ScanlineEncoding = struct {};
 pub const ScanlineEncoder = struct {};
 
 pub const CpuRasterizer = struct {
-    const PathMonoidList = std.ArrayListUnmanaged(PathMonid);
+    const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
 
     allocator: Allocator,
     encoding: Encoding,
@@ -658,8 +687,8 @@ pub const CpuRasterizer = struct {
     }
 
     fn expandPathMonoids(self: *@This()) !void {
-        self.path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
-        PathMonid.expandTags(self.encoding.path_tags, self.path_monoids);
+        const path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
+        PathMonoid.expandTags(self.encoding.path_tags, path_monoids);
     }
 
     fn estimateFlatEncoding(self: *@This()) !void {
@@ -679,5 +708,38 @@ pub const CpuRasterizer = struct {
 
     fn rasterizeScanlineEncoding(self: *@This()) !void {
         _ = self;
+    }
+
+    pub fn debugPrint(self: @This()) void {
+        std.debug.print("============ Path Monoids ============\n", .{});
+        for (self.path_monoids.items) |path_monoid| {
+            std.debug.print("{}\n", .{path_monoid});
+        }
+        std.debug.print("======================================\n", .{});
+
+        std.debug.print("============ Path Segments ============\n", .{});
+        for (self.encoding.path_tags, self.path_monoids.items) |path_tag, path_monoid| {
+            const path_spec = PathSpec{
+                .tag = path_tag,
+                .monoid = path_monoid,
+            };
+
+            switch (path_tag.segment.kind) {
+                .line_f32 => std.debug.print("Line: {}\n", .{
+                    self.encoding.getSegment(core.Line(f32), path_spec.getSegmentOffset()),
+                }),
+                .arc_f32 => std.debug.print("Arc: {}\n", .{
+                    self.encoding.getSegment(core.Arc(f32), path_spec.getSegmentOffset()),
+                }),
+                .quadratic_bezier_f32 => std.debug.print("QuadraticBezier: {}\n", .{
+                    self.encoding.getSegment(core.QuadraticBezier(f32), path_spec.getSegmentOffset()),
+                }),
+                .cubic_bezier_f32 => std.debug.print("Arc: {}\n", .{
+                    self.encoding.getSegment(core.CubicBezier(f32), path_spec.getSegmentOffset()),
+                }),
+                else => std.debug.print("{}:\n", .{path_spec.tag.segment.kind}),
+            }
+        }
+        std.debug.print("======================================\n", .{});
     }
 };

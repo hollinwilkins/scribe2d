@@ -46,3 +46,7 @@ pub const ArcI16 = curve.ArcI16;
 pub const QuadraticBezier = curve.QuadraticBezier;
 pub const QuadraticBezierF32 = curve.QuadraticBezierF32;
 pub const QuadraticBezierI16 = curve.QuadraticBezierI16;
+
+pub const CubicBezier = curve.CubicBezier;
+pub const CubicBezierF32 = curve.CubicBezierF32;
+pub const CubicBezierI16 = curve.CubicBezierI16;
