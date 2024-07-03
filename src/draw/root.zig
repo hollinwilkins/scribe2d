@@ -13,7 +13,7 @@ const texture = @import("./texture.zig");
 const curve = @import("./curve.zig");
 const msaa = @import("./msaa.zig");
 const kernel = @import("./kernel.zig");
-const encoding = @import("./encoding.zig");
+pub const encoding = @import("./encoding.zig");
 
 pub const Shape = shape.Shape;
 pub const ShapeBuilder = shape.ShapeBuilder;

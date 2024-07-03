@@ -44,7 +44,7 @@ pub const PathTag = packed struct {
 
     pub const Segment = packed struct {
         // what kind of segment is this
-        kind: SegmentKind = .none,
+        kind: SegmentKind = .line_f32,
         // marks end of a subpath
         subpath_end: bool = false,
         // draw caps if true
@@ -62,8 +62,8 @@ pub const PathTag = packed struct {
         style: u1 = 0,
     };
 
-    segment: Segment,
-    index: Index,
+    segment: Segment = Segment{},
+    index: Index = Index{},
 
     pub fn curve(kind: SegmentKind) @This() {
         return @This(){
@@ -74,10 +74,21 @@ pub const PathTag = packed struct {
     }
 };
 
-pub const Color = [4]u8;
+pub fn Color(comptime T: type) type {
+    return struct {
+        r: T = 0,
+        g: T = 0,
+        b: T = 0,
+        a: T = 0,
+    };
+}
+
+pub const ColorF32 = Color(f32);
+pub const ColorU8 = Color(u8);
+
 pub const Style = packed struct {
     comptime {
-        std.debug.assert(@sizeOf(Style) <= 16);
+        std.debug.assert(@sizeOf(Style) <= 32);
     }
 
     pub const Brush = enum(u1) {
@@ -87,7 +98,7 @@ pub const Style = packed struct {
         pub fn offset(self: @This()) u32 {
             return switch (self) {
                 .noop => 0,
-                .color => @sizeOf(Color),
+                .color => @sizeOf(ColorU8),
             };
         }
     };
@@ -98,8 +109,8 @@ pub const Style = packed struct {
     };
 
     pub const Fill = packed struct {
-        rule: FillRule,
-        brush: Brush,
+        rule: FillRule = .even_odd,
+        brush: Brush = .noop,
     };
 
     pub const Join = enum(u2) {
@@ -114,11 +125,6 @@ pub const Style = packed struct {
         round,
     };
 
-    pub const Dash = packed struct {
-        dash: [4]f32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 },
-        dash_offset: f32 = 0.0,
-    };
-
     pub const Stroke = packed struct {
         width: f32 = 1.0,
         join: Join = .round,
@@ -126,8 +132,8 @@ pub const Style = packed struct {
         end_cap: Cap = .round,
         miter_limit: f16 = 4.0,
         // encode dash in the stroke, because we will want to expand it using kernels
-        dash: Dash = Dash{},
-        brush: Brush,
+        dash: bool = false,
+        brush: Brush = .noop,
     };
 
     pub const Flags = packed struct {
@@ -135,15 +141,26 @@ pub const Style = packed struct {
         stroke: bool = false,
     };
 
+    flags: Flags = Flags{},
     fill: Fill = Fill{},
     stroke: Stroke = Stroke{},
 
+    pub fn setFill(self: *@This(), new_fill: Fill) void {
+        self.flags.fill = true;
+        self.fill = new_fill;
+    }
+
+    pub fn setStroke(self: *@This(), new_stroke: Stroke) void {
+        self.flags.stroke = true;
+        self.stroke = new_stroke;
+    }
+
     pub fn isFill(self: @This()) bool {
-        return self.fill != null;
+        return self.flags.fill;
     }
 
     pub fn isStroke(self: @This()) bool {
-        return self.stroke != null;
+        self.flags.stroke;
     }
 };
 
@@ -153,6 +170,7 @@ pub const PathMonid = extern struct {
     segment_offset: u32 = 0,
     transform_index: u32 = 0,
     style_index: u32 = 0,
+    brush_offset: u32 = 0,
 
     pub fn createTag(tag: PathTag) @This() {
         const segment = tag.tag.segment;
@@ -225,8 +243,8 @@ pub const Encoder = struct {
     styles: StyleList = StyleList{},
     segment_data: Buffer = Buffer{},
     draw_data: Buffer = Buffer{},
-    staged_transform: ?TransformF32.Affine = null,
-    staged_style: ?Style = null,
+    staged_transform: bool = false,
+    staged_style: bool = false,
 
     pub fn init(allocator: Allocator) @This() {
         return @This(){
@@ -254,7 +272,7 @@ pub const Encoder = struct {
 
     pub fn currentPathTag(self: *@This()) ?*PathTag {
         if (self.path_tags.items.len > 0) {
-            return self.path_tags.items[self.path_tags.items.len - 1];
+            return &self.path_tags.items[self.path_tags.items.len - 1];
         }
 
         return null;
@@ -263,19 +281,17 @@ pub const Encoder = struct {
     pub fn encodePathTag(self: *@This(), tag: PathTag) !void {
         var tag2 = tag;
 
-        if (self.staged_transform) |transform| {
-            (try self.transforms.addOne(self.allocator)).* = transform;
-            self.staged_transform = null;
+        if (self.staged_transform) {
+            self.staged_transform = false;
             tag2.index.transform = 1;
         }
 
-        if (self.staged_style) |style| {
-            (try self.styles.addOne(self.allocator)).* = style;
-            self.staged_style = null;
+        if (self.staged_style) {
+            self.staged_style = false;
             tag2.index.style = 1;
         }
 
-        (try self.path_tags.addOne()).* = tag2;
+        (try self.path_tags.addOne(self.allocator)).* = tag2;
     }
 
     pub fn currentTransform(self: *@This()) ?*TransformF32.Affine {
@@ -286,34 +302,38 @@ pub const Encoder = struct {
         return null;
     }
 
-    pub fn encodeTransform(self: *@This(), affine: TransformF32.Affine) !bool {
+    pub fn encodeTransform(self: *@This(), affine: TransformF32.Affine) !void {
         if (self.currentTransform()) |current| {
             if (std.meta.eql(current, affine)) {
-                return false;
+                return;
+            } else if (self.staged_transform) {
+                current.* = affine;
             }
         }
 
-        self.staged_transform = affine;
-        return true;
+        (try self.transforms.addOne(self.allocator)).* = affine;
+        self.staged_transform = true;
     }
 
     pub fn currentStyle(self: *@This()) ?*Style {
         if (self.styles.items.len > 0) {
-            return self.styles.items[self.styles.items.len - 1];
+            return &self.styles.items[self.styles.items.len - 1];
         }
 
         return null;
     }
 
-    pub fn encodeStyle(self: *@This(), style: Style) !bool {
+    pub fn encodeStyle(self: *@This(), style: Style) !void {
         if (self.currentStyle()) |current| {
-            if (std.meta.eql(current, style)) {
-                return false;
+            if (std.meta.eql(current.*, style)) {
+                return;
+            } else if (self.staged_style) {
+                current.* = style;
             }
         }
 
-        self.staged_style = style;
-        return true;
+        (try self.styles.addOne(self.allocator)).* = style;
+        self.staged_style = true;
     }
 
     pub fn extendPath(self: *@This(), comptime T: type, kind: ?PathTag.SegmentKind) !*T {
@@ -322,24 +342,25 @@ pub const Encoder = struct {
         }
 
         const bytes = try self.segment_data.addManyAsSlice(self.allocator, @sizeOf(T));
-        return std.mem.bytesAsValue(T, bytes);
+        return @alignCast(std.mem.bytesAsValue(T, bytes));
     }
 
     pub fn pathSegment(self: *@This(), comptime T: type, offset: usize) *T {
-        return std.mem.bytesAsValue(T, self.segment_data.items[offset - @sizeOf(T) ..]);
+        return @alignCast(std.mem.bytesAsValue(T, self.segment_data.items[offset - @sizeOf(T) ..]));
     }
 
     pub fn pathTailSegment(self: *@This(), comptime T: type) *T {
-        return std.mem.bytesAsValue(T, self.segment_data.items[self.segment_data.items.len - @sizeOf(T) ..]);
+        return @alignCast(std.mem.bytesAsValue(T, self.segment_data.items[self.segment_data.items.len - @sizeOf(T) ..]));
     }
 
-    pub fn encodeColor(self: *@This(), color: Color) !void {
-        const bytes = (try self.draw_data.addManyAsSlice(self.allocator, @sizeOf(Color)));
-        std.mem.bytesAsValue(Color, bytes).* = color;
+    pub fn encodeColor(self: *@This(), color: ColorU8) !void {
+        const bytes = (try self.draw_data.addManyAsSlice(self.allocator, @sizeOf(ColorU8)));
+        std.mem.bytesAsValue(ColorU8, bytes).* = color;
     }
 
     pub fn pathEncoder(self: *@This(), comptime T: type) PathEncoder(T) {
-        return PathEncoder(T).create(self);
+        const style = self.currentStyle().?;
+        return PathEncoder(T).create(self, style.isFill());
     }
 };
 
@@ -407,7 +428,7 @@ pub fn PathEncoder(comptime T: type) type {
             return @This(){
                 .encoder = encoder,
                 .is_fill = is_fill,
-                .start_index = encoder.segment_data.items.len,
+                .start_offset = @intCast(encoder.segment_data.items.len),
             };
         }
 
@@ -415,9 +436,9 @@ pub fn PathEncoder(comptime T: type) type {
             return self.start_offset == self.encoder.segment_data.items.len;
         }
 
-        pub fn finish(self: *@This()) !bool {
+        pub fn finish(self: *@This()) !void {
             if (self.state == .start) {
-                return false;
+                return;
             }
 
             if (self.is_fill) {
@@ -427,7 +448,7 @@ pub fn PathEncoder(comptime T: type) type {
             try self.encoder.encodePathTag(PathTag.PATH);
         }
 
-        pub fn close(self: *@This()) !bool {
+        pub fn close(self: *@This()) !void {
             if (self.state != .draw or self.isEmpty()) {
                 return;
             }
@@ -439,15 +460,10 @@ pub fn PathEncoder(comptime T: type) type {
                     const closed = try self.lineTo(start_point.*);
 
                     if (closed) {
-                        std.debug.assert(tag.kind == .segment);
-                        tag.tag.segment.cap = true;
+                        tag.segment.cap = true;
                     }
-
-                    return closed;
                 }
             }
-
-            return false;
         }
 
         pub fn moveTo(self: *@This(), p0: PPoint) !void {
@@ -459,7 +475,7 @@ pub fn PathEncoder(comptime T: type) type {
                 },
                 .move_to => {
                     // update the current cursors position
-                    (try self.encoder.pathTailSegment(PPoint, null)).* = p0;
+                    self.encoder.pathTailSegment(PPoint).* = p0;
                 },
                 .draw => {
                     try self.close();
@@ -469,11 +485,12 @@ pub fn PathEncoder(comptime T: type) type {
             }
         }
 
-        pub fn lineTo(self: *@This(), p1: PPoint) !void {
+        pub fn lineTo(self: *@This(), p1: PPoint) Allocator.Error!bool {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
                     try self.moveTo(p1);
+                    return false;
                 },
                 else => {
                     const last_point = self.encoder.pathTailSegment(PPoint);
@@ -486,6 +503,7 @@ pub fn PathEncoder(comptime T: type) type {
                         .p1 = p1,
                     };
                     self.state = .draw;
+                    return true;
                 },
             }
         }
