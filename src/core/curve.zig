@@ -65,8 +65,8 @@ pub fn Arc(comptime T: type) type {
         //     return self.p0.cast(f32).lerp(self.p1.cast(f32), t).cast(T);
         // }
 
-        pub fn cast(self: @This(), comptime T2: type) Line(T2) {
-            return Line(T2){
+        pub fn cast(self: @This(), comptime T2: type) Arc(T2) {
+            return Arc(T2){
                 .p0 = self.p0.cast(T2),
                 .p1 = self.p1.cast(T2),
                 .p2 = self.p2.cast(T2),
@@ -112,8 +112,8 @@ pub fn QuadraticBezier(comptime T: type) type {
             return v1.add(v2).cast(T);
         }
 
-        pub fn cast(self: @This(), comptime T2: type) Line(T2) {
-            return Line(T2){
+        pub fn cast(self: @This(), comptime T2: type) QuadraticBezier(T2) {
+            return QuadraticBezier(T2){
                 .p0 = self.p0.cast(T2),
                 .p1 = self.p1.cast(T2),
                 .p2 = self.p2.cast(T2),
@@ -163,8 +163,8 @@ pub fn CubicBezier(comptime T: type) type {
             return v1.add(v2).add(v3.mulScalar(t)).cast(T);
         }
 
-        pub fn cast(self: @This(), comptime T2: type) Line(T2) {
-            return Line(T2){
+        pub fn cast(self: @This(), comptime T2: type) CubicBezier(T2) {
+            return CubicBezier(T2){
                 .p0 = self.p0.cast(T2),
                 .p1 = self.p1.cast(T2),
                 .p2 = self.p2.cast(T2),

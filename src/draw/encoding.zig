@@ -53,7 +53,7 @@ pub const PathTag = packed struct {
         // increments path index by 1 or 0
         // set to 1 for the start of a new path
         // 1-based indexing
-        path_id: u1 = 0,
+        path: u1 = 0,
         // increments transform index by 1 or 0
         // set to 1 for a new transform
         transform: u1 = 0,
@@ -159,12 +159,12 @@ pub const Style = packed struct {
     }
 
     pub fn isStroke(self: @This()) bool {
-        self.flags.stroke;
+        return self.flags.stroke;
     }
 };
 
 pub const PathMonoid = extern struct {
-    path_id: u32 = 0,
+    path_index: u32 = 0,
     subpath_index: u32 = 0,
     segment_index: u32 = 0,
     segment_offset: u32 = 0,
@@ -186,7 +186,7 @@ pub const PathMonoid = extern struct {
             .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
         };
         var path_offset: u32 = 0;
-        if (index.path_id == 1) {
+        if (index.path == 1) {
             path_offset += switch (segment.kind) {
                 .line_f32 => @sizeOf(PointF32),
                 .line_i16 => @sizeOf(PointI16),
@@ -199,7 +199,7 @@ pub const PathMonoid = extern struct {
             };
         }
         return @This(){
-            .path_id = @intCast(index.path_id),
+            .path_index = @intCast(index.path),
             .segment_index = 1,
             .segment_offset = path_offset + segment_offset,
             .transform_index = @intCast(index.transform),
@@ -209,7 +209,7 @@ pub const PathMonoid = extern struct {
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .path_id = self.path_id + other.path_id,
+            .path_index = self.path_index + other.path_index,
             .segment_index = self.segment_index + other.segment_index,
             .segment_offset = self.segment_offset + other.segment_offset,
             .transform_index = self.transform_index + other.transform_index,
@@ -225,14 +225,21 @@ pub const PathMonoid = extern struct {
             monoid = monoid.combine(PathMonoid.createTag(tag));
             expanded_monoid.* = monoid;
         }
+
+        for (expanded) |*expanded_monoid| {
+            expanded_monoid.fixExpansion();
+        }
+    }
+
+    pub fn fixExpansion(self: *@This()) void {
+        self.path_index -= 1;
+        self.segment_index -= 1;
+        self.transform_index -= 1;
+        self.style_index -= 1;
     }
 
     pub fn getSegmentOffset(self: @This(), comptime T: type) u32 {
         return self.segment_offset - @sizeOf(T);
-    }
-
-    pub fn getPathIndex(self: @This()) u32 {
-        return self.path_id - 1;
     }
 };
 
@@ -241,7 +248,7 @@ pub const PathSpec = struct {
     monoid: PathMonoid,
 };
 
-pub const SegmentData = extern struct {
+pub const SegmentData = struct {
     segment_data: []const u8,
 
     pub fn getSegment(self: @This(), comptime T: type, path_monoid: PathMonoid) T {
@@ -318,7 +325,14 @@ pub const Encoder = struct {
     }
 
     pub fn encodePathTag(self: *@This(), tag: PathTag) !void {
+        std.debug.assert(self.styles.items.len > 0);
+
         var tag2 = tag;
+
+        if (self.transforms.items.len == 0) {
+            // need to make sure each segment has an associated transform, even if it's just the identity transform
+            try self.encodeTransform(TransformF32.Affine.IDENTITY);
+        }
 
         if (self.staged_transform) {
             self.staged_transform = false;
@@ -332,7 +346,7 @@ pub const Encoder = struct {
 
         if (self.staged_path) {
             self.staged_path = false;
-            tag2.index.path_id = 1;
+            tag2.index.path = 1;
         }
 
         (try self.path_tags.addOne(self.allocator)).* = tag2;
@@ -340,7 +354,7 @@ pub const Encoder = struct {
 
     pub fn currentTransform(self: *@This()) ?*TransformF32.Affine {
         if (self.transforms.items.len > 0) {
-            return self.transforms.items[self.transforms.items.len - 1];
+            return &self.transforms.items[self.transforms.items.len - 1];
         }
 
         return null;
@@ -348,7 +362,7 @@ pub const Encoder = struct {
 
     pub fn encodeTransform(self: *@This(), affine: TransformF32.Affine) !void {
         if (self.currentTransform()) |current| {
-            if (std.meta.eql(current, affine)) {
+            if (std.meta.eql(current.*, affine)) {
                 return;
             } else if (self.staged_transform) {
                 current.* = affine;
@@ -637,26 +651,27 @@ pub const CpuRasterizer = struct {
     const LineList = std.ArrayListUnmanaged(LineF32);
 
     allocator: Allocator,
-    encoding: Encoding,
     config: KernelConfig,
+    encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
-    fill_segment_estimates: SegmentEstimateList = SegmentEstimateList{},
+    segment_estimates: SegmentEstimateList = SegmentEstimateList{},
 
-    pub fn init(allocator: Allocator, encoding: Encoding) @This() {
+    pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
         return @This(){
             .allocator = allocator,
+            .config = config,
             .encoding = encoding,
         };
     }
 
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
+        self.segment_estimates.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
-        self.fill_segment_estimates.items.len = 0;
-        self.flat_encoder.reset();
+        self.segment_estimates.items.len = 0;
     }
 
     pub fn setEncoding(self: *@This(), encoding: Encoding) void {
@@ -669,7 +684,7 @@ pub const CpuRasterizer = struct {
         // expand path monoids
         try self.expandPathMonoids();
         // estimate FlatEncoder memory requirements
-        try self.estimateFlatEncoding();
+        try self.estimateSegments();
         // allocate the FlatEncoder
         // use the FlatEncoder to flatten the encoding
         // estimate the ScanlineEncoding
@@ -682,22 +697,25 @@ pub const CpuRasterizer = struct {
         PathMonoid.expandTags(self.encoding.path_tags, path_monoids);
     }
 
-    fn estimateFlatEncoding(self: *@This()) !void {
+    fn estimateSegments(self: *@This()) !void {
         const estimator = encoding_kernel.Estimate;
+        const segment_estimates = try self.segment_estimates.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
         const range = RangeU32{
             .start = 0,
-            .end = self.path_monoids.items.len,
+            .end = @intCast(self.path_monoids.items.len),
         };
         var chunk_iter = range.chunkIterator(self.config.chunk_size);
 
         while (chunk_iter.next()) |chunk| {
-            estimator.estimate(
+            estimator.estimateSegments(
                 self.config,
                 self.encoding.path_tags,
                 self.path_monoids.items,
+                self.encoding.styles,
+                self.encoding.transforms,
                 self.encoding.segment_data,
                 chunk,
-                self.fill_segment_estimates.items,
+                segment_estimates,
             );
         }
 
@@ -726,7 +744,7 @@ pub const CpuRasterizer = struct {
         std.debug.print("======================================\n", .{});
 
         std.debug.print("============ Path Segments ============\n", .{});
-        for (self.encoding.path_tags, self.path_monoids.items) |path_tag, path_monoid| {
+        for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
             switch (path_tag.segment.kind) {
                 .line_f32 => std.debug.print("LineF32: {}\n", .{
                     self.encoding.getSegment(core.LineF32, path_monoid),
@@ -753,6 +771,10 @@ pub const CpuRasterizer = struct {
                     self.encoding.getSegment(core.CubicBezierI16, path_monoid),
                 }),
             }
+
+            const estimate = self.segment_estimates.items[segment_index];
+            std.debug.print("Estimate: {}\n", .{estimate});
+            std.debug.print("----------\n", .{});
         }
         std.debug.print("======================================\n", .{});
     }
@@ -794,12 +816,16 @@ test "encoding path monoids" {
     try path_encoder2.finish();
 
     const encoding = encoder.encode();
-    var rasterizer = CpuRasterizer.init(std.testing.allocator, encoding);
+    var rasterizer = CpuRasterizer.init(
+        std.testing.allocator,
+        encoding_kernel.KernelConfig.DEFAULT,
+        encoding,
+    );
     defer rasterizer.deinit();
 
     try rasterizer.rasterize();
 
-    // rasterizer.debugPrint();
+    rasterizer.debugPrint();
     const path_monoids = rasterizer.path_monoids.items;
 
     try std.testing.expectEqualDeep(

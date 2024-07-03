@@ -52,7 +52,6 @@ pub const KernelConfig = struct {
         return @This(){
             .parallelism = config.parallelism,
             .chunk_size = config.chunk_size,
-            .arcs_enabled = config.arcs_enabled,
 
             .k1_threshold = config.k1_threshold,
             .distance_threshold = config.distance_threshold,
@@ -109,53 +108,65 @@ pub const SegmentEstimate = packed struct {
 };
 
 pub const Estimate = struct {
-    const VIRTUAL_INTERSECTIONS: u32 = 2;
-    const INTERSECTION_FUDGE: u32 = 2;
+    const VIRTUAL_INTERSECTIONS: u16 = 2;
+    const INTERSECTION_FUDGE: u16 = 2;
     const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
 
     pub const RoundArcEstimate = struct {
-        items: u32 = 0,
+        items: u16 = 0,
         length: f32 = 0.0,
     };
 
-    pub fn estimate(
+    pub fn estimateSegments(
         config: KernelConfig,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
+        styles: []const Style,
+        transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         range: RangeU32,
         // outputs
         estimates: []SegmentEstimate,
     ) void {
-        _ = config;
-        _ = segment_data;
-        _ = estimates;
         for (range.start..range.end) |index| {
             const path_tag = path_tags[index];
             const path_monoid = path_monoids[index];
+            const style = styles[path_monoid.style_index];
+            const transform = transforms[path_monoid.transform_index];
+            const sd = SegmentData{
+                .segment_data = segment_data,
+            };
+
             // const estimate = &estimates[index];
 
-            _ = path_tag;
-            _ = path_monoid;
             // _ = estimate;
+
+            estimates[index] = estimateSegment(
+                config,
+                path_tag,
+                path_monoid,
+                style,
+                transform,
+                sd,
+            );
         }
     }
 
-    fn estimateCurveBase(
+    fn estimateSegment(
         config: KernelConfig,
         path_tag: PathTag,
         path_monoid: PathMonoid,
         style: Style,
         transform: TransformF32.Affine,
         segment_data: SegmentData,
-    ) u32 {
+    ) SegmentEstimate {
         var se = SegmentEstimate{};
 
         if (style.isStroke()) {
-            const stroke = style.stroke;
-            const scaled_width = @max(1.0, stroke.width) * transform.getScale();
-            se.cap_lines += estimateCapLines(config, path_tag, style.stroke, scaled_width);
-            se.join_lines += estimateJoinLines(config, style.stroke, scaled_width);
+            // const stroke = style.stroke;
+            // const scaled_width = @max(1.0, stroke.width) * transform.getScale();
+            // se.cap_lines += estimateCapLines(config, path_tag, style.stroke, scaled_width);
+            // se.join_lines += estimateJoinLines(config, style.stroke, scaled_width);
         }
 
         switch (path_tag.segment.kind) {
@@ -185,11 +196,11 @@ pub const Estimate = struct {
             },
             .cubic_bezier_f32 => {
                 const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                se.estimates = estimateQuadraticBezier(cb);
+                se.estimates = estimateCubicBezier(cb);
             },
             .cubic_bezier_i16 => {
                 const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                se.estimates = estimateQuadraticBezier(cb);
+                se.estimates = estimateCubicBezier(cb);
             },
         }
 
@@ -236,19 +247,19 @@ pub const Estimate = struct {
         };
     }
 
-    pub fn estimateLineWidthIntersections(scaled_width: f32) u32 {
+    pub fn estimateLineWidthIntersections(scaled_width: f32) u16 {
         const dxdy = PointF32{
             .x = scaled_width,
             .y = scaled_width,
         };
 
-        const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        const intersections: u16 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
         return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
     }
 
     pub fn estimateLine(line: LineF32) Estimates {
         const dxdy = line.p1.sub(line.p0);
-        var intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        var intersections: u16 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
         intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
 
         return Estimates{
@@ -268,7 +279,7 @@ pub const Estimate = struct {
     }
 
     pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Estimates {
-        const lines = @as(u32, @intFromFloat(Wang.quadratic(
+        const lines = @as(u16, @intFromFloat(Wang.quadratic(
             @floatCast(RSQRT_OF_TOL),
             quadratic_bezier.p0,
             quadratic_bezier.p1,
@@ -289,7 +300,7 @@ pub const Estimate = struct {
     }
 
     pub fn estimateCubicBezier(cubic_bezier: CubicBezierF32) Estimates {
-        const lines = @as(u32, @intFromFloat(Wang.cubic(
+        const lines = @as(u16, @intFromFloat(Wang.cubic(
             @floatCast(RSQRT_OF_TOL),
             cubic_bezier.p0,
             cubic_bezier.p1,
@@ -310,8 +321,8 @@ pub const Estimate = struct {
         };
     }
 
-    pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u32) u32 {
-        var intersections: u32 = 0;
+    pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u16) u16 {
+        var intersections: u16 = 0;
         const step = 1.0 / @as(f32, @floatFromInt(samples));
 
         var p0 = start;
@@ -330,7 +341,7 @@ pub const Estimate = struct {
     fn estimateRoundArc(config: KernelConfig, scaled_width: f32) RoundArcEstimate {
         const radius = @max(config.error_tolerance, scaled_width * 0.5);
         const theta = @max(config.min_theta2, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
-        const arc_lines = @max(2, @as(u32, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
+        const arc_lines = @max(2, @as(u16, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
 
         return RoundArcEstimate{
             .items = arc_lines,

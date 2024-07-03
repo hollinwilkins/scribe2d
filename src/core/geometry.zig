@@ -45,18 +45,19 @@ pub fn Point(comptime T: type) type {
                         },
                         .Int => |_| {
                             return Point(T2){
-                                .x = @floatFromInt(self.x),
-                                .y = @floatFromInt(self.y),
+                                .x = @intFromFloat(self.x),
+                                .y = @intFromFloat(self.y),
                             };
                         },
+                        else => @panic("Must cast to float or int type"),
                     }
                 },
                 .Int => |_| {
                     switch (@typeInfo(T2)) {
                         .Float => |_| {
                             return Point(T2){
-                                .x = @intFromFloat(self.x),
-                                .y = @intFromFloat(self.y),
+                                .x = @floatFromInt(self.x),
+                                .y = @floatFromInt(self.y),
                             };
                         },
                         .Int => |_| {
@@ -65,8 +66,10 @@ pub fn Point(comptime T: type) type {
                                 .y = @intCast(self.y),
                             };
                         },
+                        else => @panic("Must cast to float or int type"),
                     }
                 },
+                else => @panic("Must cast from float or int type"),
             }
         }
 
@@ -84,11 +87,8 @@ pub fn Point(comptime T: type) type {
             );
         }
 
-        pub fn affineTransform(self: @This(), transform: Transform(T)) @This() {
-            return @This(){
-                .x = transform.apply(self.x),
-                .y = transform.apply(self.y),
-            };
+        pub fn affineTransform(self: @This(), transform: Transform(T).Affine) @This() {
+            return transform.apply(self);
         }
 
         pub fn normalize(self: @This()) ?@This() {
