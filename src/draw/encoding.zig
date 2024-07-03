@@ -346,7 +346,7 @@ pub const Encoder = struct {
     }
 
     pub fn pathSegment(self: *@This(), comptime T: type, offset: usize) *T {
-        return @alignCast(std.mem.bytesAsValue(T, self.segment_data.items[offset - @sizeOf(T) ..]));
+        return @alignCast(std.mem.bytesAsValue(T, self.segment_data.items[offset .. offset + @sizeOf(T)]));
     }
 
     pub fn pathTailSegment(self: *@This(), comptime T: type) *T {
@@ -508,11 +508,12 @@ pub fn PathEncoder(comptime T: type) type {
             }
         }
 
-        pub fn arcTo(self: *@This(), p1: PPoint, p2: PPoint) !void {
+        pub fn arcTo(self: *@This(), p1: PPoint, p2: PPoint) !bool {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
                     try self.moveTo(p2);
+                    return false;
                 },
                 else => {
                     const last_point = self.encoder.pathTailSegment(PPoint);
@@ -526,6 +527,7 @@ pub fn PathEncoder(comptime T: type) type {
                         .p2 = p2,
                     };
                     self.state = .draw;
+                    return true;
                 },
             }
         }

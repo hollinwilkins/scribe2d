@@ -21,5 +21,9 @@ test "encoding path monoids" {
     try encoder.encodeStyle(style);
 
     var path_encoder = encoder.pathEncoder(f32);
+    try path_encoder.moveTo(core.PointF32.create(1.0, 1.0));
+    _ = try path_encoder.lineTo(core.PointF32.create(2.0, 2.0));
+    _ = try path_encoder.arcTo(core.PointF32.create(3.0, 3.0), core.PointF32.create(4.0, 2.0));
+    _ = try path_encoder.lineTo(core.PointF32.create(1.0, 1.0));
     try path_encoder.finish();
 }
