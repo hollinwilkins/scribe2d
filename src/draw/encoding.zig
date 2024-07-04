@@ -255,9 +255,9 @@ pub const PathMonoid = extern struct {
     }
 };
 
-pub const PathSpec = struct {
-    tag: PathTag,
-    monoid: PathMonoid,
+pub const Offsets = packed struct {
+    start: u32 = 0,
+    end: u32 = 0,
 };
 
 pub const SegmentData = struct {
@@ -763,7 +763,10 @@ pub const CpuRasterizer = struct {
     fn flatten(self: *@This()) !void {
         const flattener = encoding_kernel.Flatten;
         const last_segment_offsets = self.flat_segment_offsets.getLast();
-        const flat_segment_data = try self.flat_segment_data.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_offsets.end);
+        const flat_segment_data = try self.flat_segment_data.addManyAsSlice(
+            self.allocator,
+            last_segment_offsets.fill.lineOffset(),
+        );
 
         const range = RangeU32{
             .start = 0,
@@ -780,6 +783,7 @@ pub const CpuRasterizer = struct {
                 self.encoding.transforms,
                 self.encoding.segment_data,
                 chunk,
+                self.flat_segment_estimates.items,
                 self.flat_segment_offsets.items,
                 flat_segment_data,
             );
@@ -789,10 +793,10 @@ pub const CpuRasterizer = struct {
     fn kernelRasterize(self: *@This()) !void {
         const rasterizer = encoding_kernel.Rasterize;
         const last_segment_offsets = self.flat_segment_offsets.getLast();
-        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end);
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end);
-        const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end);
-        const spans = try self.spans.addManyAsSlice(self.allocator, last_segment_offsets.fill_line_intersections.end / 2 + 1);
+        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
+        const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
+        const spans = try self.spans.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections / 2 + 1);
 
         rasterizer.rasterize(
             self.config,

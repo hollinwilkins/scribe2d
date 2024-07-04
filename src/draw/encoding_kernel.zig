@@ -9,6 +9,7 @@ const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const SegmentData = encoding_module.SegmentData;
 const Style = encoding_module.Style;
+const Offsets = encoding_module.Offsets;
 const MonoidFunctions = encoding_module.MonoidFunctions;
 const TransformF32 = core.TransformF32;
 const IntersectionF32 = core.IntersectionF32;
@@ -109,23 +110,16 @@ pub const Estimates = packed struct {
             .intersections = self.intersections + other.intersections,
         };
     }
-};
 
-pub const Offsets = packed struct {
-    start: u32 = 0,
-    end: u32 = 0,
+    pub fn lineOffset(self: @This()) u32 {
+        return @sizeOf(PointF32) + self.lines * @sizeOf(PointF32);
+    }
 };
 
 pub const SegmentOffsets = packed struct {
     fill: Estimates = Estimates{},
-    fill_line_offsets: Offsets = Offsets{},
-    fill_line_intersections: Offsets = Offsets{},
     front_stroke: Estimates = Estimates{},
-    front_line_offsets: Offsets = Offsets{},
-    front_line_intersections: Offsets = Offsets{},
     back_stroke: Estimates = Estimates{},
-    back_line_offsets: Offsets = Offsets{},
-    back_line_intersections: Offsets = Offsets{},
 
     pub usingnamespace MonoidFunctions(SegmentOffsets, @This());
 
@@ -136,37 +130,9 @@ pub const SegmentOffsets = packed struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .fill = self.fill.combine(other.fill),
-            .fill_line_offsets = Offsets{
-                .start = self.fill_line_offsets.end,
-                .end = self.fill_line_offsets.end + lineBytes(other.fill.lines),
-            },
-            .fill_line_intersections = Offsets{
-                .start = self.fill_line_intersections.end,
-                .end = self.fill_line_intersections.end + lineBytes(other.fill.intersections),
-            },
             .front_stroke = self.front_stroke.combine(other.front_stroke),
-            .front_line_offsets = Offsets{
-                .start = self.front_line_offsets.end,
-                .end = self.front_line_offsets.end + lineBytes(other.front_stroke.lines),
-            },
-            .front_line_intersections = Offsets{
-                .start = self.front_line_intersections.end,
-                .end = self.front_line_intersections.end + lineBytes(other.front_stroke.intersections),
-            },
             .back_stroke = self.back_stroke.combine(other.back_stroke),
-            .back_line_offsets = Offsets{
-                .start = self.back_line_offsets.end,
-                .end = self.back_line_offsets.end + lineBytes(other.back_stroke.lines),
-            },
-            .back_line_intersections = Offsets{
-                .start = self.back_line_intersections.end,
-                .end = self.back_line_intersections.end + lineBytes(other.back_stroke.intersections),
-            },
         };
-    }
-
-    pub fn lineBytes(n_lines: u16) u32 {
-        return @sizeOf(PointF32) + n_lines * @sizeOf(PointF32);
     }
 };
 
@@ -667,7 +633,8 @@ pub const Flatten = struct {
         range: RangeU32,
         // outputs
         // true if path is used, false to ignore
-        segment_offsets: []SegmentOffsets,
+        flat_segment_estimates: []SegmentOffsets,
+        flat_segment_offsets: []SegmentOffsets,
         flat_segment_data: []u8,
     ) void {
         for (range.start..range.end) |index| {
@@ -682,7 +649,8 @@ pub const Flatten = struct {
                     path_monoids,
                     transforms,
                     segment_data,
-                    segment_offsets,
+                    flat_segment_estimates,
+                    flat_segment_offsets,
                     flat_segment_data,
                 );
             }
@@ -698,15 +666,19 @@ pub const Flatten = struct {
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
-        segment_offsets: []SegmentOffsets,
+        flat_segment_estimates: []SegmentOffsets,
+        flat_segment_offsets: []SegmentOffsets,
         flat_segment_data: []u8,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
         const transform = transforms[path_monoid.transform_index];
-        const so = &segment_offsets[segment_index];
+        const se = &flat_segment_estimates[segment_index];
+        const so = &flat_segment_offsets[segment_index];
+        const end_offset = so.fill.lineOffset();
+
         var writer = Writer{
-            .segment_data = flat_segment_data[so.fill_line_offsets.start..so.fill_line_offsets.end],
+            .segment_data = flat_segment_data[end_offset - se.fill.lineOffset()..end_offset],
         };
 
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
@@ -730,7 +702,9 @@ pub const Flatten = struct {
             &writer,
         );
 
-        so.fill_line_offsets.end = so.fill_line_offsets.start + writer.offset;
+        // adjust lines to represent actual filled lines
+        se.fill.lines = writer.lines;
+        so.fill.lines -= writer.lines;
     }
 
     fn flattenEuler(
@@ -1114,24 +1088,27 @@ pub const Flatten = struct {
     const Writer = struct {
         segment_data: []u8,
         offset: u32 = 0,
+        lines: u16 = 0,
 
         pub fn write(self: *@This(), line: LineF32) void {
             if (self.offset == 0) {
                 self.addPoint(line.p0);
                 self.addPoint(line.p1);
+                self.lines += 1;
                 return;
             }
 
             const last_point = self.lastPoint();
             std.debug.assert(std.meta.eql(last_point, line.p0));
             self.addPoint(line.p1);
+            self.lines += 1;
         }
 
-        pub fn lastPoint(self: @This()) PointF32 {
+        fn lastPoint(self: @This()) PointF32 {
             return std.mem.bytesToValue(PointF32, self.segment_data[self.offset - @sizeOf(PointF32) .. self.offset]);
         }
 
-        pub fn addPoint(self: *@This(), point: PointF32) void {
+        fn addPoint(self: *@This(), point: PointF32) void {
             std.mem.bytesAsValue(PointF32, self.segment_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
         }
