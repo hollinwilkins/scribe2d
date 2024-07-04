@@ -166,6 +166,20 @@ pub const Style = packed struct {
     }
 };
 
+pub const BumpAllocator = struct {
+    offsets: Offsets = Offsets{},
+    offset: std.atomic.Value(u32),
+
+    pub fn bump(self: *@This(), n: u32) u32 {
+        const next_offset = self.offsets.start + self.offset.fetchAdd(n, .acq_rel);
+        if (next_offset >= self.offsets.end) {
+            @panic("Bump allocator exceeded bounds.");
+        }
+
+        return next_offset;
+    }
+};
+
 pub fn MonoidFunctions(comptime T: type, comptime M: type) type {
     return struct {
         pub fn expand(tags: []const T, expanded: []M) void {
@@ -257,7 +271,7 @@ pub const PathMonoid = extern struct {
     }
 };
 
-pub const Offsets = packed struct {
+pub const Offsets = struct {
     start: u32 = 0,
     end: u32 = 0,
 };
@@ -275,7 +289,7 @@ pub const SegmentData = struct {
 };
 
 pub const Subpath = packed struct {
-    segment_offset: u32 = 0,
+    segment_index: u32 = 0,
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU
@@ -397,14 +411,14 @@ pub const Encoder = struct {
 
     pub fn closeSubpath(self: *@This()) void {
         if (self.currentSubpath()) |subpath| {
-            subpath.segment_offset = @intCast(self.path_tags.items.len);
+            subpath.segment_index = @intCast(self.path_tags.items.len - 1);
         }
     }
 
     pub fn pushSubpath(self: *@This()) !void {
         self.closeSubpath();
         (try self.subpaths.addOne(self.allocator)).* = Subpath{
-            .segment_offset = @intCast(self.path_tags.items.len),
+            .segment_index = @intCast(self.path_tags.items.len),
         };
     }
 
@@ -714,6 +728,8 @@ pub const CpuRasterizer = struct {
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
+    const BumpAllocatorList = std.ArrayListUnmanaged(std.atomic.Value(u32));
+    const OffsetList = std.ArrayListUnmanaged(u32);
 
     allocator: Allocator,
     config: KernelConfig,
@@ -722,6 +738,8 @@ pub const CpuRasterizer = struct {
     flat_segment_estimates: SegmentOffsetList = SegmentOffsetList{},
     flat_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segment_data: Buffer = Buffer{},
+    subpath_bumps: BumpAllocatorList = BumpAllocatorList{},
+    boundary_fragment_offsets: OffsetList = OffsetList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
     merge_fragments: MergeFragmentList = MergeFragmentList{},
@@ -739,6 +757,8 @@ pub const CpuRasterizer = struct {
         self.flat_segment_estimates.deinit(self.allocator);
         self.flat_segment_offsets.deinit(self.allocator);
         self.flat_segment_data.deinit(self.allocator);
+        self.subpath_bumps.deinit(self.allocator);
+        self.boundary_fragment_offsets.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
         self.merge_fragments.deinit(self.allocator);
@@ -749,13 +769,11 @@ pub const CpuRasterizer = struct {
         self.flat_segment_estimates.items.len = 0;
         self.flat_segment_offsets.items.len = 0;
         self.flat_segment_data.items.len = 0;
+        self.subpath_bumps.items.len = 0;
+        self.boundary_fragment_offsets.items.len = 0;
         self.grid_intersections.items.len = 0;
         self.boundary_fragments.items.len = 0;
         self.merge_fragments.items.len = 0;
-    }
-
-    pub fn setEncoding(self: *@This(), encoding: Encoding) void {
-        self.encoding = encoding;
     }
 
     pub fn rasterize(self: *@This()) !void {
@@ -837,6 +855,11 @@ pub const CpuRasterizer = struct {
     fn kernelRasterize(self: *@This()) !void {
         const rasterizer = encoding_kernel.Rasterize;
         const last_segment_offsets = self.flat_segment_offsets.getLast();
+        const subpath_bumps = try self.subpath_bumps.addManyAsSlice(self.allocator, self.encoding.subpaths.len);
+        for (subpath_bumps) |*sb| {
+            sb.raw = 0;
+        }
+        const boundary_fragment_offsets = try self.boundary_fragment_offsets.addManyAsSlice(self.allocator, self.encoding.subpaths.len);
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
         const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
@@ -865,10 +888,21 @@ pub const CpuRasterizer = struct {
                 self.encoding.subpaths,
                 grid_intersections,
                 chunk,
+                subpath_bumps,
                 self.flat_segment_estimates.items,
                 self.flat_segment_offsets.items,
                 boundary_fragments,
             );
+        }
+
+        for (subpath_bumps, 0..) |bump, subpath_index| {
+            const first_subpath_offset = if (subpath_index == 0) 0 else self.encoding.subpaths[subpath_index - 1].segment_index;
+
+            const first_se = self.flat_segment_estimates.items[first_subpath_offset];
+            const first_so = self.flat_segment_offsets.items[first_subpath_offset];
+            const start_offset = first_so.fill.boundary_fragments - first_se.fill.boundary_fragments;
+            const end_offset = start_offset + bump.raw;
+            boundary_fragment_offsets[subpath_index] = end_offset;
         }
     }
 
@@ -924,11 +958,12 @@ pub const CpuRasterizer = struct {
 
         {
             std.debug.print("============ Flat Lines ============\n", .{});
-            var previous_offset: u32 = 0;
+            var first_segment_index: u32 = 0;
             for (self.encoding.subpaths) |subpath| {
-                const first_path_monoid = self.path_monoids.items[previous_offset];
-                const segment_estimates = self.flat_segment_estimates.items[previous_offset..subpath.segment_offset];
-                const segment_offsets = self.flat_segment_offsets.items[previous_offset..subpath.segment_offset];
+                const last_segment_index = subpath.segment_index;
+                const first_path_monoid = self.path_monoids.items[first_segment_index];
+                const segment_estimates = self.flat_segment_estimates.items[first_segment_index..last_segment_index + 1];
+                const segment_offsets = self.flat_segment_offsets.items[first_segment_index..last_segment_index + 1];
 
                 std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
                 for (segment_estimates, segment_offsets) |estimate, offset| {
@@ -942,18 +977,19 @@ pub const CpuRasterizer = struct {
                     }
                 }
 
-                previous_offset = subpath.segment_offset;
+                first_segment_index = subpath.segment_index;
             }
             std.debug.print("====================================\n", .{});
         }
 
         {
             std.debug.print("============ Grid Intersections ============\n", .{});
-            var previous_offset: u32 = 0;
+            var first_segment_index: u32 = 0;
             for (self.encoding.subpaths) |subpath| {
-                const first_path_monoid = self.path_monoids.items[previous_offset];
-                const segment_estimates = self.flat_segment_estimates.items[previous_offset..subpath.segment_offset];
-                const segment_offsets = self.flat_segment_offsets.items[previous_offset..subpath.segment_offset];
+                const last_segment_index = subpath.segment_index;
+                const first_path_monoid = self.path_monoids.items[first_segment_index];
+                const segment_estimates = self.flat_segment_estimates.items[first_segment_index..last_segment_index + 1];
+                const segment_offsets = self.flat_segment_offsets.items[first_segment_index..last_segment_index + 1];
 
                 std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
                 for (segment_estimates, segment_offsets) |estimate, offset| {
@@ -963,7 +999,7 @@ pub const CpuRasterizer = struct {
                     }
                 }
 
-                previous_offset = subpath.segment_offset;
+                first_segment_index = subpath.segment_index;
             }
             std.debug.print("============================================\n", .{});
         }
@@ -995,17 +1031,17 @@ test "encoding path monoids" {
     _ = try path_encoder.lineTo(core.PointF32.create(1.0, 1.0));
     try path_encoder.finish();
 
-    var path_encoder2 = encoder.pathEncoder(i16);
-    try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    _ = try path_encoder2.cubicTo(
-        core.PointI16.create(120, 120),
-        core.PointI16.create(70, 130),
-        core.PointI16.create(22, 22),
-    );
-    try path_encoder2.finish();
+    // var path_encoder2 = encoder.pathEncoder(i16);
+    // try path_encoder2.moveTo(core.PointI16.create(10, 10));
+    // _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
+    // _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
+    // _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
+    // _ = try path_encoder2.cubicTo(
+    //     core.PointI16.create(120, 120),
+    //     core.PointI16.create(70, 130),
+    //     core.PointI16.create(22, 22),
+    // );
+    // try path_encoder2.finish();
 
     const encoding = encoder.encode();
     var rasterizer = CpuRasterizer.init(
