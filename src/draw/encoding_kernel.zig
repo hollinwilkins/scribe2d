@@ -121,8 +121,11 @@ pub const Estimates = packed struct {
 
 pub const SegmentOffsets = packed struct {
     fill: Estimates = Estimates{},
+    fill_line_offset: u32 = 0,
     front_stroke: Estimates = Estimates{},
+    front_line_offset: u32 = 0,
     back_stroke: Estimates = Estimates{},
+    back_line_offset: u32 = 0,
 
     pub usingnamespace MonoidFunctions(SegmentOffsets, @This());
 
@@ -133,8 +136,11 @@ pub const SegmentOffsets = packed struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .fill = self.fill.combine(other.fill),
+            .fill_line_offset = self.fill_line_offset + other.fill_line_offset,
             .front_stroke = self.front_stroke.combine(other.front_stroke),
+            .front_line_offset = self.front_line_offset + other.front_line_offset,
             .back_stroke = self.back_stroke.combine(other.back_stroke),
+            .back_line_offset = self.back_line_offset + other.back_line_offset,
         };
     }
 };
@@ -438,12 +444,11 @@ pub const Estimate = struct {
             const base_stroke = so.fill.mulScalar(stroke_fudge);
             so.front_stroke = base_stroke.combine(cap).combine(join);
             so.back_stroke = so.front_stroke.combine(base_stroke);
+            so.front_line_offset = so.front_stroke.lineOffset();
+            so.back_line_offset = so.back_stroke.lineOffset();
         }
 
-        // first point + additional points for lines
-        // so.fill_line_end = @sizeOf(PointF32) + so.fill.lines * @sizeOf(PointF32);
-        // so.front_line_offset = @sizeOf(PointF32) + so.front_stroke.lines * @sizeOf(PointF32);
-        // so.back_line_offset = @sizeOf(PointF32) + so.back_stroke.lines * @sizeOf(PointF32);
+        so.fill_line_offset = so.fill.lineOffset();
 
         return so;
     }
@@ -694,13 +699,10 @@ pub const Flatten = struct {
         const transform = transforms[path_monoid.transform_index];
         const se = &flat_segment_estimates[segment_index];
         const so = &flat_segment_offsets[segment_index];
-        const end_offset = so.fill.lineOffset();
 
         var writer = Writer{
-            .segment_data = flat_segment_data[end_offset - se.fill.lineOffset() .. end_offset],
+            .segment_data = flat_segment_data[so.fill_line_offset - se.fill_line_offset .. so.fill_line_offset],
         };
-
-        std.debug.print("Write To: {} - {}\n", .{ end_offset - se.fill.lineOffset(), end_offset });
 
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
             std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
@@ -1165,14 +1167,21 @@ pub const Rasterize = struct {
     ) void {
         const se = &flat_segment_estimates[segment_index];
         const so = &flat_segment_offsets[segment_index];
-        const end_segment_offset = so.fill.lineOffset();
-        const end_intersection_offset = so.fill.intersections;
 
-        const intersections = grid_intersections[end_intersection_offset - se.fill.intersections .. end_intersection_offset];
+        std.debug.print("Segment({}): Diff({}), Lines({}), DiffOffset({}), LinesOffset({}), Range({})\n", .{
+            segment_index,
+            se.fill.lines,
+            so.fill.lines,
+            se.fill_line_offset,
+            so.fill_line_offset,
+            so.fill_line_offset - se.fill_line_offset,
+        });
+
+        const intersections = grid_intersections[so.fill.intersections - se.fill.intersections .. so.fill.intersections];
         var intersection_writer = IntersectionWriter{
             .slice = intersections,
         };
-        const line_segments = flat_segment_data[end_segment_offset - se.fill.lineOffset() .. end_segment_offset];
+        const line_segments = flat_segment_data[so.fill_line_offset - se.fill_line_offset .. so.fill_line_offset];
         var line_iter = LineIterator{
             .segment_data = line_segments,
         };
