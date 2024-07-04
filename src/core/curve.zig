@@ -10,6 +10,27 @@ pub fn Intersection(comptime T: type) type {
     return struct {
         t: f32,
         point: P,
+
+        pub fn fitToGrid(self: @This()) @This() {
+            const GRID_FIT_THRESHOLD: f32 = 1e-6;
+
+            var point = self.point;
+            const rounded_x = @round(self.point.x);
+            const rounded_y = @round(self.point.y);
+
+            if (@abs(rounded_x - self.point.x) < GRID_FIT_THRESHOLD) {
+                point.x = rounded_x;
+            }
+
+            if (@abs(rounded_y - self.point.y) < GRID_FIT_THRESHOLD) {
+                point.y = rounded_y;
+            }
+
+            return @This(){
+                .t = self.t,
+                .point = point,
+            };
+        }
     };
 }
 
@@ -17,6 +38,7 @@ pub const IntersectionF32 = Intersection(f32);
 
 pub fn Line(comptime T: type) type {
     const P = Point(T);
+    const I = Intersection(T);
 
     return extern struct {
         p0: P,
@@ -46,6 +68,56 @@ pub fn Line(comptime T: type) type {
             return @This(){
                 .p0 = self.p0.affineTransform(affine),
                 .p1 = self.p1.affineTransform(affine),
+            };
+        }
+
+        pub fn intersectHorizontalLine(self: @This(), other: @This()) ?I {
+            const delta_y = self.p1.y - self.p0.y;
+            if (delta_y == 0.0) {
+                return null;
+            }
+
+            const t = -(self.p0.y - other.p0.y) / delta_y;
+            if (t < 0.0 or t > 1.0) {
+                return null;
+            }
+
+            const point = self.apply(t);
+            if (point.x < other.p0.x or point.x > other.p1.x) {
+                return null;
+            }
+
+            return I{
+                .t = t,
+                .point = P{
+                    .x = point.x,
+                    .y = other.p0.y,
+                },
+            };
+        }
+
+        pub fn intersectVerticalLine(self: @This(), other: @This()) ?I {
+            const delta_x = self.p1.x - self.p0.x;
+            if (delta_x == 0.0) {
+                return null;
+            }
+
+            const t = -(self.p0.x - other.p0.x) / delta_x;
+            if (t < 0.0 or t > 1.0) {
+                return null;
+            }
+
+            const point = self.apply(t);
+            if (point.y < other.p0.y or point.y > other.p1.y) {
+                return null;
+            }
+
+            return I{
+                .t = t,
+                .point = P{
+                    .x = other.p0.x,
+                    .y = point.y,
+                },
             };
         }
     };

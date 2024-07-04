@@ -11,8 +11,11 @@ const SegmentData = encoding_module.SegmentData;
 const Style = encoding_module.Style;
 const Offsets = encoding_module.Offsets;
 const MonoidFunctions = encoding_module.MonoidFunctions;
+const Subpath = encoding_module.Subpath;
 const TransformF32 = core.TransformF32;
 const IntersectionF32 = core.IntersectionF32;
+const RectF32 = core.RectF32;
+const RectI32 = core.RectI32;
 const PointF32 = core.PointF32;
 const PointI32 = core.PointI32;
 const LineF32 = core.LineF32;
@@ -319,6 +322,22 @@ pub const GridIntersection = struct {
                 .y = @intFromFloat(intersection.point.y),
             },
         };
+    }
+};
+
+pub const LineIterator = struct {
+    segment_data: []const u8,
+    offset: u32 = 0,
+
+    pub fn next(self: *@This()) ?LineF32 {
+        const end_offset = self.offset + @sizeOf(PointF32);
+        if (end_offset >= self.segment_data.len) {
+            return null;
+        }
+
+        const line = std.mem.bytesToValue(LineF32, self.segment_data[self.offset..end_offset]);
+        self.offset += @sizeOf(PointF32);
+        return line;
     }
 };
 
@@ -678,8 +697,10 @@ pub const Flatten = struct {
         const end_offset = so.fill.lineOffset();
 
         var writer = Writer{
-            .segment_data = flat_segment_data[end_offset - se.fill.lineOffset()..end_offset],
+            .segment_data = flat_segment_data[end_offset - se.fill.lineOffset() .. end_offset],
         };
+
+        std.debug.print("Write To: {} - {}\n", .{ end_offset - se.fill.lineOffset(), end_offset });
 
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
             std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
@@ -703,8 +724,9 @@ pub const Flatten = struct {
         );
 
         // adjust lines to represent actual filled lines
+        const diff = se.fill.lines - writer.lines;
         se.fill.lines = writer.lines;
-        so.fill.lines -= writer.lines;
+        so.fill.lines -= diff;
     }
 
     fn flattenEuler(
@@ -1116,25 +1138,175 @@ pub const Flatten = struct {
 };
 
 pub const Rasterize = struct {
-    pub fn rasterize(
-        config: KernelConfig,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
+    pub fn intersect(
+        flat_segment_estimates: []const SegmentOffsets,
+        flat_segment_offsets: []const SegmentOffsets,
+        flat_segment_data: []const u8,
+        range: RangeU32,
+        grid_intersections: []GridIntersection,
+    ) void {
+        for (range.start..range.end) |segment_index| {
+            intersectSegment(
+                @intCast(segment_index),
+                flat_segment_estimates,
+                flat_segment_offsets,
+                flat_segment_data,
+                grid_intersections,
+            );
+        }
+    }
+
+    pub fn intersectSegment(
+        segment_index: u32,
+        flat_segment_estimates: []const SegmentOffsets,
         flat_segment_offsets: []const SegmentOffsets,
         flat_segment_data: []const u8,
         grid_intersections: []GridIntersection,
-        boundary_fragments: []BoundaryFragment,
-        merge_fragments: []MergeFragment,
-        spans: []Span,
     ) void {
-        _ = config;
-        _ = path_tags;
-        _ = path_monoids;
-        _ = flat_segment_offsets;
-        _ = flat_segment_data;
-        _ = grid_intersections;
-        _ = boundary_fragments;
-        _ = merge_fragments;
-        _ = spans;
+        const se = &flat_segment_estimates[segment_index];
+        const so = &flat_segment_offsets[segment_index];
+        const end_segment_offset = so.fill.lineOffset();
+        const end_intersection_offset = so.fill.intersections;
+
+        const intersections = grid_intersections[end_intersection_offset - se.fill.intersections .. end_intersection_offset];
+        var intersection_writer = IntersectionWriter{
+            .slice = intersections,
+        };
+        const line_segments = flat_segment_data[end_segment_offset - se.fill.lineOffset() .. end_segment_offset];
+        var line_iter = LineIterator{
+            .segment_data = line_segments,
+        };
+
+        while (line_iter.next()) |line| {
+            const start_intersection_index = intersection_writer.index;
+            const start_point: PointF32 = line.apply(0.0);
+            const end_point: PointF32 = line.apply(1.0);
+            const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+            const bounds: RectI32 = RectI32.create(PointI32{
+                .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+                .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+            }, PointI32{
+                .x = @intFromFloat(@floor(bounds_f32.max.x)),
+                .y = @intFromFloat(@floor(bounds_f32.max.y)),
+            });
+            const scan_bounds = RectF32.create(PointF32{
+                .x = @floatFromInt(bounds.min.x - 1),
+                .y = @floatFromInt(bounds.min.y - 1),
+            }, PointF32{
+                .x = @floatFromInt(bounds.max.x + 1),
+                .y = @floatFromInt(bounds.max.y + 1),
+            });
+
+            intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
+                .t = 0.0,
+                .point = start_point,
+            }).fitToGrid());
+
+            for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
+                const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
+                try scanX(grid_x, line, scan_bounds, &intersection_writer);
+            }
+
+            for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
+                const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
+                try scanY(grid_y, line, scan_bounds, &intersection_writer);
+            }
+
+            intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
+                .t = 1.0,
+                .point = end_point,
+            }).fitToGrid());
+
+            const end_intersection_index = intersection_writer.index;
+            const line_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
+
+            // need to sort by T for each curve, in order
+            std.mem.sort(
+                GridIntersection,
+                line_intersections,
+                @as(u32, 0),
+                gridIntersectionLessThan,
+            );
+        }
+    }
+
+    fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
+        if (left.intersection.t < right.intersection.t) {
+            return true;
+        }
+
+        return false;
+    }
+
+    pub fn Writer(comptime T: type) type {
+        return struct {
+            slice: []T,
+            index: usize = 0,
+
+            pub fn create(slice: []T) @This() {
+                return @This(){
+                    .slice = slice,
+                };
+            }
+
+            pub fn addOne(self: *@This()) *T {
+                const item = &self.slice[self.index];
+                self.index += 1;
+                return item;
+            }
+
+            pub fn toSlice(self: @This()) []T {
+                return self.slice[0..self.index];
+            }
+        };
+    }
+
+    const IntersectionWriter = Writer(GridIntersection);
+    const BoundaryFragmentWriter = Writer(BoundaryFragment);
+    const MergeFragmentWriter = Writer(MergeFragment);
+    const SpanWriter = Writer(Span);
+
+    fn scanX(
+        grid_x: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.min.y,
+            },
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.max.y,
+            },
+        );
+
+        if (line.intersectVerticalLine(scan_line)) |intersection| {
+            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+        }
+    }
+
+    fn scanY(
+        grid_y: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = scan_bounds.min.x,
+                .y = grid_y,
+            },
+            PointF32{
+                .x = scan_bounds.max.x,
+                .y = grid_y,
+            },
+        );
+
+        if (line.intersectHorizontalLine(scan_line)) |intersection| {
+            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+        }
     }
 };
