@@ -118,7 +118,7 @@ pub const Estimates = packed struct {
         if (self.lines == 0) {
             return 0;
         }
-        
+
         return @sizeOf(PointF32) + self.lines * @sizeOf(PointF32);
     }
 };
@@ -1147,18 +1147,18 @@ pub const Flatten = struct {
 
 pub const Rasterize = struct {
     pub fn intersect(
-        flat_segment_estimates: []const SegmentOffsets,
-        flat_segment_offsets: []const SegmentOffsets,
         flat_segment_data: []const u8,
         range: RangeU32,
+        flat_segment_estimates: []SegmentOffsets,
+        flat_segment_offsets: []SegmentOffsets,
         grid_intersections: []GridIntersection,
     ) void {
         for (range.start..range.end) |segment_index| {
             intersectSegment(
                 @intCast(segment_index),
+                flat_segment_data,
                 flat_segment_estimates,
                 flat_segment_offsets,
-                flat_segment_data,
                 grid_intersections,
             );
         }
@@ -1166,9 +1166,9 @@ pub const Rasterize = struct {
 
     pub fn intersectSegment(
         segment_index: u32,
-        flat_segment_estimates: []const SegmentOffsets,
-        flat_segment_offsets: []const SegmentOffsets,
         flat_segment_data: []const u8,
+        flat_segment_estimates: []SegmentOffsets,
+        flat_segment_offsets: []SegmentOffsets,
         grid_intersections: []GridIntersection,
     ) void {
         const se = &flat_segment_estimates[segment_index];
@@ -1243,6 +1243,9 @@ pub const Rasterize = struct {
                 gridIntersectionLessThan,
             );
         }
+
+        so.fill.intersections -= se.fill.intersections - intersection_writer.index;
+        se.fill.intersections = intersection_writer.index;
     }
 
     fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
@@ -1256,7 +1259,7 @@ pub const Rasterize = struct {
     pub fn Writer(comptime T: type) type {
         return struct {
             slice: []T,
-            index: usize = 0,
+            index: u16 = 0,
 
             pub fn create(slice: []T) @This() {
                 return @This(){
