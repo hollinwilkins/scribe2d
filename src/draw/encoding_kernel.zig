@@ -1264,15 +1264,16 @@ pub const Rasterize = struct {
     ) void {
         const path_monoid = path_monoids[segment_index];
         const subpath = subpaths[path_monoid.subpath_index];
-        const first_segment_index = if (path_monoid.subpath_index == 0) 0 else subpaths[path_monoid.subpath_index - 1].segment_index;
+        var previous_boundary_index: u16 = 0;
+        if (path_monoid.subpath_index > 0) {
+            const previous_last_segment_index = subpaths[path_monoid.subpath_index - 1].segment_index;
+            previous_boundary_index = flat_segment_offsets[previous_last_segment_index].fill.boundary_fragments;
+        }
         const last_segment_index = subpath.segment_index;
-        const first_so = flat_segment_offsets[first_segment_index];
         const last_so = flat_segment_offsets[last_segment_index];
-        std.debug.print("First: {}\n", .{first_so.fill});
-        std.debug.print("Last: {}\n", .{last_so.fill});
         var subpath_bump = BumpAllocator{
             .offsets = Offsets{
-                .start = first_so.fill.boundary_fragments,
+                .start = previous_boundary_index,
                 .end = last_so.fill.boundary_fragments,
             },
             .offset = subpath_bumps[path_monoid.subpath_index],
@@ -1280,7 +1281,6 @@ pub const Rasterize = struct {
         const se = &flat_segment_estimates[segment_index];
         const so = &flat_segment_offsets[segment_index];
         const segment_grid_intersections = grid_intersections[so.fill.intersections - se.fill.intersections .. so.fill.intersections];
-        std.debug.print("Offset({}), Size({})\n", .{ so.fill.boundary_fragments, se.fill.boundary_fragments });
 
         if (segment_grid_intersections.len == 0) {
             return;
@@ -1291,7 +1291,11 @@ pub const Rasterize = struct {
             const next_index = index + 1;
 
             if (next_index >= segment_grid_intersections.len) {
-                const next_segment_index = ((segment_index + 1 - first_segment_index) % (last_segment_index - first_segment_index + 1)) + first_segment_index;
+                var range: u32 = 0;
+                if (path_monoid.subpath_index > 0) {
+                    range -= subpaths[path_monoid.subpath_index].segment_index;
+                }
+                const next_segment_index = ((segment_index + 1 - range) % (last_segment_index - range + 1)) + range;
                 const next_se = &flat_segment_estimates[next_segment_index];
                 const next_so = &flat_segment_offsets[next_segment_index];
                 next_grid_intersection = grid_intersections[next_so.fill.intersections - next_se.fill.intersections];

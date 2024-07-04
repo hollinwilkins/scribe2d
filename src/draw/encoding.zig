@@ -859,7 +859,6 @@ pub const CpuRasterizer = struct {
         for (subpath_bumps) |*sb| {
             sb.raw = 0;
         }
-        const boundary_fragment_offsets = try self.boundary_fragment_offsets.addManyAsSlice(self.allocator, self.encoding.subpaths.len);
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
         const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
@@ -895,14 +894,12 @@ pub const CpuRasterizer = struct {
             );
         }
 
+        var previous_last_segment_index: u32 = 0;
         for (subpath_bumps, 0..) |bump, subpath_index| {
-            const first_subpath_offset = if (subpath_index == 0) 0 else self.encoding.subpaths[subpath_index - 1].segment_index;
-
-            const first_se = self.flat_segment_estimates.items[first_subpath_offset];
-            const first_so = self.flat_segment_offsets.items[first_subpath_offset];
-            const start_offset = first_so.fill.boundary_fragments - first_se.fill.boundary_fragments;
-            const end_offset = start_offset + bump.raw;
-            boundary_fragment_offsets[subpath_index] = end_offset;
+            const last_segment_index = self.encoding.subpaths[subpath_index].segment_index;
+            const start_boundary_fragment_offset = self.flat_segment_offsets.items[previous_last_segment_index].fill.boundary_fragments;
+            self.flat_segment_offsets.items[last_segment_index].fill.boundary_fragments = start_boundary_fragment_offset + @as(u16, @intCast(bump.raw));
+            previous_last_segment_index = last_segment_index;
         }
     }
 
@@ -997,6 +994,26 @@ pub const CpuRasterizer = struct {
                     for (grid_intersections) |grid_intersection| {
                         std.debug.print("{}\n", .{grid_intersection});
                     }
+                }
+
+                first_segment_index = subpath.segment_index;
+            }
+            std.debug.print("============================================\n", .{});
+        }
+
+        {
+            std.debug.print("============ Boundary Fragments ============\n", .{});
+            var first_segment_index: u32 = 0;
+            for (self.encoding.subpaths) |subpath| {
+                const last_segment_index = subpath.segment_index;
+                const last_path_monoid = self.path_monoids.items[last_segment_index];
+                const first_boundary_index = self.flat_segment_offsets.items[first_segment_index].fill.boundary_fragments;
+                const last_boundary_index = self.flat_segment_offsets.items[last_segment_index].fill.boundary_fragments;
+                const boundary_fragments = self.boundary_fragments.items[first_boundary_index..last_boundary_index];
+
+                std.debug.print("--- Subpath({},{}) ---\n", .{ last_path_monoid.path_index, last_path_monoid.subpath_index });
+                for (boundary_fragments) |boundary_fragment| {
+                    std.debug.print("{}\n", .{boundary_fragment});
                 }
 
                 first_segment_index = subpath.segment_index;
