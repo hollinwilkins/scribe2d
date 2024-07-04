@@ -270,10 +270,15 @@ pub const SegmentData = struct {
     }
 };
 
+pub const Subpath = packed struct {
+    segment_offsets: Offsets = Offsets{},
+};
+
 // Encodes all data needed for a single draw command to the GPU or CPU
 // This may need to be a single buffer with a Config
 pub const Encoding = struct {
     path_tags: []const PathTag,
+    subpaths: []const Subpath,
     transforms: []const TransformF32.Affine,
     styles: []const Style,
     segment_data: []const u8,
@@ -292,12 +297,14 @@ pub const Encoding = struct {
 // This encoding can get sent to kernels
 pub const Encoder = struct {
     const PathTagList = std.ArrayListUnmanaged(PathTag);
+    const SubpathList = std.ArrayListUnmanaged(Subpath);
     const AffineList = std.ArrayListUnmanaged(TransformF32.Affine);
     const StyleList = std.ArrayListUnmanaged(Style);
     const Buffer = std.ArrayListUnmanaged(u8);
 
     allocator: Allocator,
     path_tags: PathTagList = PathTagList{},
+    subpaths: SubpathList = SubpathList{},
     transforms: AffineList = AffineList{},
     styles: StyleList = StyleList{},
     segment_data: Buffer = Buffer{},
@@ -315,6 +322,7 @@ pub const Encoder = struct {
 
     pub fn deinit(self: *@This()) void {
         self.path_tags.deinit(self.allocator);
+        self.subpaths.deinit(self.allocator);
         self.transforms.deinit(self.allocator);
         self.styles.deinit(self.allocator);
         self.segment_data.deinit(self.allocator);
@@ -324,6 +332,7 @@ pub const Encoder = struct {
     pub fn encode(self: @This()) Encoding {
         return Encoding{
             .path_tags = self.path_tags.items,
+            .subpaths = self.subpaths.items,
             .transforms = self.transforms.items,
             .styles = self.styles.items,
             .segment_data = self.segment_data.items,
@@ -365,13 +374,37 @@ pub const Encoder = struct {
             tag2.index.path = 1;
         }
 
-
         if (self.staged_subpath) {
             self.staged_subpath = false;
+            try self.pushSubpath();
             tag2.index.subpath = 1;
         }
 
         (try self.path_tags.addOne(self.allocator)).* = tag2;
+    }
+
+    pub fn currentSubpath(self: *@This()) ?*Subpath {
+        if (self.subpaths.items.len > 0) {
+            return &self.subpaths.items[self.subpaths.items.len - 1];
+        }
+
+        return null;
+    }
+
+    pub fn closeSubpath(self: *@This()) void {
+        if (self.currentSubpath()) |subpath| {
+            subpath.segment_offsets.end = @intCast(self.path_tags.items.len);
+        }
+    }
+
+    pub fn pushSubpath(self: *@This()) !void {
+        self.closeSubpath();
+        (try self.subpaths.addOne(self.allocator)).* = Subpath{
+            .segment_offsets = Offsets{
+                .start = @intCast(self.path_tags.items.len),
+                .end = @intCast(self.path_tags.items.len),
+            },
+        };
     }
 
     pub fn currentTransform(self: *@This()) ?*TransformF32.Affine {
@@ -549,6 +582,7 @@ pub fn PathEncoder(comptime T: type) type {
             }
 
             self.encoder.staged_subpath = false;
+            self.encoder.closeSubpath();
         }
 
         pub fn moveTo(self: *@This(), p0: PPoint) !void {
@@ -830,6 +864,12 @@ pub const CpuRasterizer = struct {
             std.debug.print("{}\n", .{path_monoid});
         }
         std.debug.print("======================================\n", .{});
+
+        std.debug.print("============ Subpaths ============\n", .{});
+        for (self.encoding.subpaths, 0..) |subpath, index| {
+            std.debug.print("({}): {}\n", .{index, subpath});
+        }
+        std.debug.print("==================================\n", .{});
 
         std.debug.print("============ Path Segments ============\n", .{});
         for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
