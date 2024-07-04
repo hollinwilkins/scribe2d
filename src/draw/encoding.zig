@@ -47,8 +47,6 @@ pub const PathTag = packed struct {
     pub const Segment = packed struct {
         // what kind of segment is this
         kind: Kind,
-        // marks end of a subpath
-        subpath_end: bool = false,
         // draw caps if true
         cap: bool = false,
     };
@@ -58,6 +56,8 @@ pub const PathTag = packed struct {
         // set to 1 for the start of a new path
         // 1-based indexing
         path: u1 = 0,
+        // increment subpath by 1
+        subpath: u1 = 0,
         // increments transform index by 1 or 0
         // set to 1 for a new transform
         transform: u1 = 0,
@@ -224,6 +224,7 @@ pub const PathMonoid = extern struct {
         }
         return @This(){
             .path_index = @intCast(index.path),
+            .subpath_index = @intCast(index.subpath),
             .segment_index = 1,
             .segment_offset = path_offset + segment_offset,
             .transform_index = @intCast(index.transform),
@@ -234,6 +235,7 @@ pub const PathMonoid = extern struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .path_index = self.path_index + other.path_index,
+            .subpath_index = self.subpath_index + other.subpath_index,
             .segment_index = self.segment_index + other.segment_index,
             .segment_offset = self.segment_offset + other.segment_offset,
             .transform_index = self.transform_index + other.transform_index,
@@ -301,6 +303,7 @@ pub const Encoder = struct {
     segment_data: Buffer = Buffer{},
     draw_data: Buffer = Buffer{},
     staged_path: bool = false,
+    staged_subpath: bool = false,
     staged_transform: bool = false,
     staged_style: bool = false,
 
@@ -346,6 +349,7 @@ pub const Encoder = struct {
             try self.encodeTransform(TransformF32.Affine.IDENTITY);
         }
 
+        // TODO: all staged_ can be one staged property packed w/ bools
         if (self.staged_transform) {
             self.staged_transform = false;
             tag2.index.transform = 1;
@@ -359,6 +363,12 @@ pub const Encoder = struct {
         if (self.staged_path) {
             self.staged_path = false;
             tag2.index.path = 1;
+        }
+
+
+        if (self.staged_subpath) {
+            self.staged_subpath = false;
+            tag2.index.subpath = 1;
         }
 
         (try self.path_tags.addOne(self.allocator)).* = tag2;
@@ -537,6 +547,8 @@ pub fn PathEncoder(comptime T: type) type {
                     }
                 }
             }
+
+            self.encoder.staged_subpath = false;
         }
 
         pub fn moveTo(self: *@This(), p0: PPoint) !void {
@@ -544,6 +556,7 @@ pub fn PathEncoder(comptime T: type) type {
                 .start => {
                     // add this move_to as a point to the end of the segments buffer
                     (try self.encoder.extendPath(PPoint, null)).* = p0;
+                    self.encoder.staged_subpath = true;
                     self.state = .move_to;
                 },
                 .move_to => {

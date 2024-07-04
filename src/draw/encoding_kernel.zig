@@ -456,8 +456,8 @@ pub const Estimate = struct {
 
     pub fn estimateCap(config: KernelConfig, path_tag: PathTag, stroke: Style.Stroke, scaled_width: f32) Estimates {
         if (path_tag.segment.cap) {
-            const is_end_cap = path_tag.segment.subpath_end;
-            const cap = if (is_end_cap) stroke.end_cap else stroke.start_cap;
+            const is_start_cap = path_tag.index.subpath == 1;
+            const cap = if (is_start_cap) stroke.start_cap else stroke.end_cap;
 
             switch (cap) {
                 .butt => {
