@@ -115,6 +115,10 @@ pub const Estimates = packed struct {
     }
 
     pub fn lineOffset(self: @This()) u32 {
+        if (self.lines == 0) {
+            return 0;
+        }
+        
         return @sizeOf(PointF32) + self.lines * @sizeOf(PointF32);
     }
 };
@@ -420,7 +424,7 @@ pub const Estimate = struct {
                 so.fill = estimateQuadraticBezier(qb);
             },
             .quadratic_bezier_i16 => {
-                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).cast(f32).affineTransform(transform);
+                const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
                 so.fill = estimateQuadraticBezier(qb);
             },
             .cubic_bezier_f32 => {
@@ -729,6 +733,8 @@ pub const Flatten = struct {
         const diff = se.fill.lines - writer.lines;
         se.fill.lines = writer.lines;
         so.fill.lines -= diff;
+        se.fill_line_offset = se.fill.lineOffset();
+        so.fill_line_offset -= diff * @sizeOf(PointF32);
     }
 
     fn flattenEuler(
