@@ -99,11 +99,24 @@ pub const KernelConfig = struct {
 pub const Estimates = packed struct {
     lines: u16 = 0,
     intersections: u16 = 0,
+    boundary_fragments: u16 = 0,
+    merge_fragments: u16 = 0,
+
+    pub fn create(lines: u16, intersections: u16) @This() {
+        return @This(){
+            .lines = lines,
+            .intersections = intersections,
+            .boundary_fragments = intersections,
+            .merge_fragments = intersections,
+        };
+    }
 
     pub fn mulScalar(self: @This(), scalar: f32) @This() {
         return @This(){
             .lines = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.lines)) * scalar)),
             .intersections = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersections)) * scalar)),
+            .boundary_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.boundary_fragments)) * scalar)),
+            .merge_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.merge_fragments)) * scalar)),
         };
     }
 
@@ -111,6 +124,8 @@ pub const Estimates = packed struct {
         return @This(){
             .lines = self.lines + other.lines,
             .intersections = self.intersections + other.intersections,
+            .boundary_fragments = self.boundary_fragments + other.boundary_fragments,
+            .merge_fragments = self.merge_fragments + other.merge_fragments,
         };
     }
 
@@ -315,11 +330,6 @@ pub const MergeFragment = struct {
     }
 };
 
-pub const Span = struct {
-    y: i32 = 0,
-    x_range: RangeI32 = RangeI32{},
-};
-
 pub const GridIntersection = struct {
     intersection: IntersectionF32,
     pixel: PointI32,
@@ -460,24 +470,15 @@ pub const Estimate = struct {
     pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Estimates {
         switch (stroke.join) {
             .bevel => {
-                return Estimates{
-                    .lines = 1,
-                    .intersections = estimateLineWidthIntersections(scaled_width),
-                };
+                return Estimates.create(1, estimateLineWidthIntersections(scaled_width));
             },
             .miter => {
                 const MITER_FUDGE: u16 = 2;
-                return Estimates{
-                    .lines = 2,
-                    .intersections = estimateLineWidthIntersections(scaled_width) * 2 * MITER_FUDGE,
-                };
+                return Estimates.create(2, estimateLineWidthIntersections(scaled_width) * 2 * MITER_FUDGE);
             },
             .round => {
                 const arc_estimate = estimateRoundArc(config, scaled_width);
-                return Estimates{
-                    .lines = arc_estimate.lines,
-                    .intersections = estimateLineWidthIntersections(arc_estimate.length),
-                };
+                return Estimates.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
             },
         }
     }
@@ -489,23 +490,14 @@ pub const Estimate = struct {
 
             switch (cap) {
                 .butt => {
-                    return Estimates{
-                        .lines = 1,
-                        .intersections = estimateLineWidthIntersections(scaled_width),
-                    };
+                    return Estimates.create(1, estimateLineWidthIntersections(scaled_width));
                 },
                 .square => {
-                    return Estimates{
-                        .lines = 3,
-                        .intersections = estimateLineWidthIntersections(scaled_width) * 2,
-                    };
+                    return Estimates.create(3, estimateLineWidthIntersections(scaled_width) * 2);
                 },
                 .round => {
                     const arc_estimate = estimateRoundArc(config, scaled_width);
-                    return Estimates{
-                        .lines = arc_estimate.lines,
-                        .intersections = estimateLineWidthIntersections(arc_estimate.length),
-                    };
+                    return Estimates.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
                 },
             }
         }
@@ -514,10 +506,7 @@ pub const Estimate = struct {
     }
 
     pub fn estimateLineWidth(scaled_width: f32) Estimates {
-        return Estimates{
-            .lines = 1,
-            .intersections = estimateLineWidthIntersections(scaled_width),
-        };
+        return Estimates.create(1, estimateLineWidthIntersections(scaled_width));
     }
 
     pub fn estimateLineWidthIntersections(scaled_width: f32) u16 {
@@ -535,20 +524,14 @@ pub const Estimate = struct {
         var intersections: u16 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
         intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
 
-        return Estimates{
-            .lines = 1,
-            .intersections = intersections,
-        };
+        return Estimates.create(1, intersections);
     }
 
     pub fn estimateArc(config: KernelConfig, arc: ArcF32) Estimates {
         const width = arc.p0.sub(arc.p1).length() + arc.p2.sub(arc.p1).length();
         const arc_estimate = estimateRoundArc(config, width);
 
-        return Estimates{
-            .lines = arc_estimate.lines,
-            .intersections = estimateLineWidthIntersections(arc_estimate.length),
-        };
+        return Estimates.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
     }
 
     pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Estimates {
@@ -566,10 +549,7 @@ pub const Estimate = struct {
             lines,
         );
 
-        return Estimates{
-            .lines = lines,
-            .intersections = intersections,
-        };
+        return Estimates.create(lines, intersections);
     }
 
     pub fn estimateCubicBezier(cubic_bezier: CubicBezierF32) Estimates {
@@ -588,10 +568,7 @@ pub const Estimate = struct {
             lines,
         );
 
-        return Estimates{
-            .lines = lines,
-            .intersections = intersections,
-        };
+        return Estimates.create(lines, intersections);
     }
 
     pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u16) u16 {
@@ -1146,6 +1123,8 @@ pub const Flatten = struct {
 };
 
 pub const Rasterize = struct {
+    const GRID_POINT_TOLERANCE: f32 = 1e-6;
+
     pub fn intersect(
         flat_segment_data: []const u8,
         range: RangeU32,
@@ -1173,15 +1152,6 @@ pub const Rasterize = struct {
     ) void {
         const se = &flat_segment_estimates[segment_index];
         const so = &flat_segment_offsets[segment_index];
-
-        std.debug.print("Segment({}): Diff({}), Lines({}), DiffOffset({}), LinesOffset({}), Range({})\n", .{
-            segment_index,
-            se.fill.lines,
-            so.fill.lines,
-            se.fill_line_offset,
-            so.fill_line_offset,
-            so.fill_line_offset - se.fill_line_offset,
-        });
 
         const intersections = grid_intersections[so.fill.intersections - se.fill.intersections .. so.fill.intersections];
         var intersection_writer = IntersectionWriter{
@@ -1256,6 +1226,79 @@ pub const Rasterize = struct {
         return false;
     }
 
+    pub fn boundary(
+        path_monoids: []const PathMonoid,
+        subpaths: []const Subpath,
+        grid_intersections: []const GridIntersection,
+        range: RangeU32,
+        flat_segment_estimates: []SegmentOffsets,
+        flat_segment_offsets: []SegmentOffsets,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        for (range.start..range.end) |segment_index| {
+            boundarySegment(
+                @intCast(segment_index),
+                path_monoids,
+                subpaths,
+                grid_intersections,
+                flat_segment_estimates,
+                flat_segment_offsets,
+                boundary_fragments,
+            );
+        }
+    }
+
+    pub fn boundarySegment(
+        segment_index: u32,
+        path_monoids: []const PathMonoid,
+        subpaths: []const Subpath,
+        grid_intersections: []const GridIntersection,
+        flat_segment_estimates: []SegmentOffsets,
+        flat_segment_offsets: []SegmentOffsets,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        const path_monoid = path_monoids[segment_index];
+        const subpath = subpaths[path_monoid.subpath_index];
+        const previous_subpath_offset = if (path_monoid.subpath_index == 0) 0 else subpaths[path_monoid.subpath_index - 1].segment_offset;
+        const se = &flat_segment_estimates[segment_index];
+        const so = &flat_segment_offsets[segment_index];
+        const segment_grid_intersections = grid_intersections[so.fill.intersections - se.fill.intersections .. so.fill.intersections];
+        std.debug.print("Offset({}), Size({})\n", .{so.fill.boundary_fragments, se.fill.boundary_fragments});
+        const segment_boundary_fragments = boundary_fragments[so.fill.boundary_fragments - se.fill.boundary_fragments .. so.fill.boundary_fragments];
+
+        var boundary_fragment_writer = BoundaryFragmentWriter.create(segment_boundary_fragments);
+
+        if (segment_grid_intersections.len == 0) {
+            return;
+        }
+
+        for (segment_grid_intersections, 0..) |*grid_intersection, index| {
+            var next_grid_intersection: GridIntersection = undefined;
+            const next_index = index + 1;
+
+            if (next_index >= segment_grid_intersections.len) {
+                const next_segment_index = ((segment_index + 1 - previous_subpath_offset) % (subpath.segment_offset - previous_subpath_offset)) + previous_subpath_offset;
+                const next_se = &flat_segment_estimates[next_segment_index];
+                const next_so = &flat_segment_offsets[next_segment_index];
+                next_grid_intersection = grid_intersections[next_so.fill.intersections - next_se.fill.intersections];
+            } else {
+                next_grid_intersection = segment_grid_intersections[next_index];
+            }
+
+            if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
+                // skip if exactly the same point
+                continue;
+            }
+
+            {
+                boundary_fragment_writer.addOne().* = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, &next_grid_intersection });
+            }
+        }
+
+        so.fill.boundary_fragments -= se.fill.boundary_fragments - boundary_fragment_writer.index;
+        se.fill.boundary_fragments = boundary_fragment_writer.index;
+    }
+
     pub fn Writer(comptime T: type) type {
         return struct {
             slice: []T,
@@ -1282,7 +1325,6 @@ pub const Rasterize = struct {
     const IntersectionWriter = Writer(GridIntersection);
     const BoundaryFragmentWriter = Writer(BoundaryFragment);
     const MergeFragmentWriter = Writer(MergeFragment);
-    const SpanWriter = Writer(Span);
 
     fn scanX(
         grid_x: f32,

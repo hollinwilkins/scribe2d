@@ -25,7 +25,6 @@ const SegmentOffsets = encoding_kernel.SegmentOffsets;
 const GridIntersection = encoding_kernel.GridIntersection;
 const BoundaryFragment = encoding_kernel.BoundaryFragment;
 const MergeFragment = encoding_kernel.MergeFragment;
-const Span = encoding_kernel.Span;
 
 pub const PathTag = packed struct {
     comptime {
@@ -246,6 +245,7 @@ pub const PathMonoid = extern struct {
     pub fn fixExpansion(expanded: []@This()) void {
         for (expanded) |*monoid| {
             monoid.path_index -= 1;
+            monoid.subpath_index -= 1;
             monoid.segment_index -= 1;
             monoid.transform_index -= 1;
             monoid.style_index -= 1;
@@ -714,7 +714,6 @@ pub const CpuRasterizer = struct {
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
-    const SpanList = std.ArrayListUnmanaged(Span);
 
     allocator: Allocator,
     config: KernelConfig,
@@ -726,7 +725,6 @@ pub const CpuRasterizer = struct {
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
     merge_fragments: MergeFragmentList = MergeFragmentList{},
-    spans: SpanList = SpanList{},
 
     pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
         return @This(){
@@ -744,7 +742,6 @@ pub const CpuRasterizer = struct {
         self.grid_intersections.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
         self.merge_fragments.deinit(self.allocator);
-        self.spans.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
@@ -755,7 +752,6 @@ pub const CpuRasterizer = struct {
         self.grid_intersections.items.len = 0;
         self.boundary_fragments.items.len = 0;
         self.merge_fragments.items.len = 0;
-        self.spans.items.len = 0;
     }
 
     pub fn setEncoding(self: *@This(), encoding: Encoding) void {
@@ -844,17 +840,14 @@ pub const CpuRasterizer = struct {
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
         const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
-        const spans = try self.spans.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections / 2 + 1);
-        _ = boundary_fragments;
         _ = merge_fragments;
-        _ = spans;
 
         const range = RangeU32{
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
         };
-        var chunk_iter = range.chunkIterator(self.config.chunk_size);
 
+        var chunk_iter = range.chunkIterator(self.config.chunk_size);
         while (chunk_iter.next()) |chunk| {
             rasterizer.intersect(
                 self.flat_segment_data.items,
@@ -862,6 +855,19 @@ pub const CpuRasterizer = struct {
                 self.flat_segment_estimates.items,
                 self.flat_segment_offsets.items,
                 grid_intersections,
+            );
+        }
+
+        chunk_iter = range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.boundary(
+                self.path_monoids.items,
+                self.encoding.subpaths,
+                grid_intersections,
+                chunk,
+                self.flat_segment_estimates.items,
+                self.flat_segment_offsets.items,
+                boundary_fragments,
             );
         }
     }
