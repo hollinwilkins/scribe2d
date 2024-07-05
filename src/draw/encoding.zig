@@ -171,7 +171,7 @@ pub const Style = packed struct {
 pub const BumpAllocator = struct {
     start: u32 = 0,
     end: u32 = 0,
-    offset: std.atomic.Value(u32),
+    offset: *std.atomic.Value(u32),
 
     pub fn bump(self: *@This(), n: u32) u32 {
         const next_offset = self.start + self.offset.fetchAdd(n, .acq_rel);
@@ -1000,7 +1000,10 @@ pub const CpuRasterizer = struct {
                     start_intersection_offset = so.fill.intersection.capacity;
                 }
 
-                std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
+                std.debug.print("--- Subpath({},{}) ---\n", .{
+                    first_path_monoid.path_index,
+                    first_path_monoid.subpath_index,
+                });
                 // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
                 for (segment_offsets) |offsets| {
                     const end_intersection_offset = offsets.fill.intersection.capacity;
@@ -1026,7 +1029,11 @@ pub const CpuRasterizer = struct {
                 const end_boundary_offset = subpath.fill.boundary_fragment.end;
                 const boundary_fragments = self.boundary_fragments.items[start_boundary_offset..end_boundary_offset];
 
-                std.debug.print("--- Subpath({},{}) ---\n", .{ path_monoid.path_index, path_monoid.subpath_index });
+                std.debug.print("--- Subpath({},{},{}) ---\n", .{
+                    path_monoid.path_index,
+                    path_monoid.subpath_index,
+                    subpath.fill.boundary_fragment.end,
+                });
                 for (boundary_fragments) |boundary_fragment| {
                     std.debug.print("{}\n", .{boundary_fragment});
                 }

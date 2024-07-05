@@ -1353,7 +1353,7 @@ pub const Rasterize = struct {
         var subpath_bump = BumpAllocator{
             .start = start_boundary_offset,
             .end = end_boundary_offset,
-            .offset = subpath_bumps[path_monoid.subpath_index],
+            .offset = &subpath_bumps[path_monoid.subpath_index],
         };
         const segment_grid_intersections = grid_intersections[start_intersection_offset..end_intersection_offset];
 
