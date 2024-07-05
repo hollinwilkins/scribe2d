@@ -270,12 +270,15 @@ pub const PathMonoid = extern struct {
         return self.segment_offset - @sizeOf(T);
     }
 
+    // TODO: roll this into the expand function
     pub fn expandSubpaths(path_tags: []const PathTag, path_monoids: []const PathMonoid, subpaths: []Subpath) void {
         for (path_tags, path_monoids, 0..) |path_tag, path_monoid, segment_index| {
-            if (path_tag.index.subpath == 1) {
-                subpaths[path_monoid.subpath_index].first_segment_index = @intCast(segment_index);
+            if (path_tag.index.subpath == 1 and path_monoid.subpath_index > 1) {
+                subpaths[path_monoid.subpath_index - 1].last_segment_offset = @intCast(segment_index);
             }
         }
+
+        subpaths[subpaths.len - 1].last_segment_offset = @intCast(path_tags.len);
     }
 };
 
@@ -297,7 +300,7 @@ pub const SegmentData = struct {
 };
 
 pub const Subpath = packed struct {
-    first_segment_index: u32 = 0,
+    last_segment_offset: u32 = 0,
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU
