@@ -857,12 +857,13 @@ pub const CpuRasterizer = struct {
     fn kernelRasterize(self: *@This()) !void {
         const rasterizer = encoding_kernel.Rasterize;
         const last_segment_offsets = self.flat_segment_offsets.getLast();
+        const last_subpath = self.subpaths.getLast();
         const subpath_bumps = try self.subpath_bumps.addManyAsSlice(self.allocator, self.subpaths.items.len);
         for (subpath_bumps) |*sb| {
             sb.raw = 0;
         }
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersection.capacity);
-        // const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersection.capacity);
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_subpath.fill.boundary_fragment.capacity);
         // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
         // _ = boundary_fragments;
         // _ = merge_fragments;
@@ -882,27 +883,22 @@ pub const CpuRasterizer = struct {
             );
         }
 
-        // chunk_iter = range.chunkIterator(self.config.chunk_size);
-        // while (chunk_iter.next()) |chunk| {
-        //     rasterizer.boundary(
-        //         self.path_monoids.items,
-        //         self.encoding.subpaths,
-        //         grid_intersections,
-        //         chunk,
-        //         subpath_bumps,
-        //         self.flat_segment_estimates.items,
-        //         self.flat_segment_offsets.items,
-        //         boundary_fragments,
-        //     );
-        // }
+        chunk_iter = range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.boundary(
+                self.path_monoids.items,
+                self.subpaths.items,
+                grid_intersections,
+                chunk,
+                subpath_bumps,
+                self.flat_segment_offsets.items,
+                boundary_fragments,
+            );
+        }
 
-        // var previous_last_segment_index: u32 = 0;
-        // for (subpath_bumps, 0..) |bump, subpath_index| {
-        //     const last_segment_index = self.encoding.subpaths[subpath_index].segment_index;
-        //     const start_boundary_fragment_offset = self.flat_segment_offsets.items[previous_last_segment_index].fill.boundary_fragments;
-        //     self.flat_segment_offsets.items[last_segment_index].fill.boundary_fragments = start_boundary_fragment_offset + @as(u16, @intCast(bump.raw));
-        //     previous_last_segment_index = last_segment_index;
-        // }
+        for (self.subpaths.items, subpath_bumps) |*subpath, bump| {
+            subpath.fill.boundary_fragment.end = subpath.fill.boundary_fragment.end - bump.raw;
+        }
     }
 
     pub fn debugPrint(self: @This()) void {
