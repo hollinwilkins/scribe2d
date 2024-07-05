@@ -816,6 +816,7 @@ pub const CpuRasterizer = struct {
         // TODO: expand SegmentEstimate into SegmentOffsets
         const flat_segment_offsets = try self.flat_segment_offsets.addManyAsSlice(self.allocator, flat_segment_estimates.len);
         SegmentOffsets.expand(flat_segment_estimates, flat_segment_offsets);
+        SegmentOffsets.expandSubpaths(self.encoding.path_tags, self.path_monoids.items, self.flat_segment_offsets.items, self.subpaths.items);
     }
 
     fn flatten(self: *@This()) !void {

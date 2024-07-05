@@ -144,7 +144,7 @@ pub const OffsetRange = packed struct {
     capacity: u32 = 0,
 
     pub fn combine(self: @This(), other: @This()) @This() {
-        return @This() {
+        return @This(){
             .end = self.end + other.end,
             .capacity = self.capacity + other.capacity,
         };
@@ -154,10 +154,12 @@ pub const OffsetRange = packed struct {
 pub const Offsets = packed struct {
     line: OffsetRange = OffsetRange{},
     intersection: OffsetRange = OffsetRange{},
+    boundary_fragment: OffsetRange = OffsetRange{},
+    merge_fragment: OffsetRange = OffsetRange{},
 
     pub fn create(estimates: Estimates) @This() {
         const line_offset = estimates.lineOffset();
-        return @This() {
+        return @This(){
             .line = OffsetRange{
                 .end = line_offset,
                 .capacity = line_offset,
@@ -166,6 +168,14 @@ pub const Offsets = packed struct {
                 .end = estimates.intersections,
                 .capacity = estimates.intersections,
             },
+            .boundary_fragment = OffsetRange{
+                .end = estimates.boundary_fragments,
+                .capacity = estimates.boundary_fragments,
+            },
+            .merge_fragment = OffsetRange{
+                .end = estimates.merge_fragments,
+                .capacity = estimates.merge_fragments,
+            },
         };
     }
 
@@ -173,6 +183,8 @@ pub const Offsets = packed struct {
         return @This(){
             .line = self.line.combine(other.line),
             .intersection = self.intersection.combine(other.intersection),
+            .boundary_fragment = self.boundary_fragment.combine(other.boundary_fragment),
+            .merge_fragment = self.merge_fragment.combine(other.merge_fragment),
         };
     }
 };
@@ -212,6 +224,26 @@ pub const SegmentOffsets = packed struct {
             .front_stroke = self.front_stroke.combine(other.front_stroke),
             .back_stroke = self.back_stroke.combine(other.back_stroke),
         };
+    }
+
+    pub fn expandSubpaths(
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        segment_offsets: []const SegmentOffsets,
+        subpaths: []Subpath,
+    ) void {
+        for (path_tags, path_monoids, segment_offsets) |path_tag, path_monoid, offsets| {
+            if (path_tag.index.subpath == 1) {
+                if (path_monoid.subpath_index > 0) {
+                    subpaths[path_monoid.subpath_index - 1].boundary_fragment_offset = offsets.fill.boundary_fragment;
+                    subpaths[path_monoid.subpath_index - 1].merge_fragment_offset = offsets.fill.merge_fragment;
+                }
+            }
+        }
+
+        const last_offsets = segment_offsets[segment_offsets.len - 1];
+        subpaths[subpaths.len - 1].boundary_fragment_offset = last_offsets.fill.boundary_fragment;
+        subpaths[subpaths.len - 1].merge_fragment_offset = last_offsets.fill.merge_fragment;
     }
 };
 
