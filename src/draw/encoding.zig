@@ -297,10 +297,16 @@ pub const SegmentData = struct {
     }
 };
 
+pub const SubpathOffsets = packed struct {
+    boundary_fragment: OffsetRange = OffsetRange{},
+    merge_fragment: OffsetRange = OffsetRange{},
+};
+
 pub const Subpath = packed struct {
     last_segment_offset: u32 = 0,
-    boundary_fragment_offset: OffsetRange = OffsetRange{},
-    merge_fragment_offset: OffsetRange = OffsetRange{},
+    fill: SubpathOffsets = SubpathOffsets{},
+    front_stroke: SubpathOffsets = SubpathOffsets{},
+    back_stroke: SubpathOffsets = SubpathOffsets{},
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU

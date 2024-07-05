@@ -235,15 +235,25 @@ pub const SegmentOffsets = packed struct {
         for (path_tags, path_monoids, segment_offsets) |path_tag, path_monoid, offsets| {
             if (path_tag.index.subpath == 1) {
                 if (path_monoid.subpath_index > 0) {
-                    subpaths[path_monoid.subpath_index - 1].boundary_fragment_offset = offsets.fill.boundary_fragment;
-                    subpaths[path_monoid.subpath_index - 1].merge_fragment_offset = offsets.fill.merge_fragment;
+                    const subpath = &subpaths[path_monoid.subpath_index - 1];
+                    subpath.fill.boundary_fragment = offsets.fill.boundary_fragment;
+                    subpath.fill.merge_fragment = offsets.fill.merge_fragment;
+                    subpath.front_stroke.boundary_fragment = offsets.front_stroke.boundary_fragment;
+                    subpath.front_stroke.merge_fragment = offsets.front_stroke.merge_fragment;
+                    subpath.back_stroke.boundary_fragment = offsets.back_stroke.boundary_fragment;
+                    subpath.back_stroke.merge_fragment = offsets.back_stroke.merge_fragment;
                 }
             }
         }
 
         const last_offsets = segment_offsets[segment_offsets.len - 1];
-        subpaths[subpaths.len - 1].boundary_fragment_offset = last_offsets.fill.boundary_fragment;
-        subpaths[subpaths.len - 1].merge_fragment_offset = last_offsets.fill.merge_fragment;
+        const subpath = &subpaths[subpaths.len - 1];
+        subpath.fill.boundary_fragment = last_offsets.fill.boundary_fragment;
+        subpath.fill.merge_fragment = last_offsets.fill.merge_fragment;
+        subpath.front_stroke.boundary_fragment = last_offsets.front_stroke.boundary_fragment;
+        subpath.front_stroke.merge_fragment = last_offsets.front_stroke.merge_fragment;
+        subpath.back_stroke.boundary_fragment = last_offsets.back_stroke.boundary_fragment;
+        subpath.back_stroke.merge_fragment = last_offsets.back_stroke.merge_fragment;
     }
 };
 
