@@ -139,27 +139,40 @@ pub const Estimates = packed struct {
     }
 };
 
+pub const OffsetRange = packed struct {
+    end: u32 = 0,
+    capacity: u32 = 0,
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This() {
+            .end = self.end + other.end,
+            .capacity = self.capacity + other.capacity,
+        };
+    }
+};
+
 pub const Offsets = packed struct {
-    line_offset: u32 = 0,
-    intersection_offset: u32 = 0,
-    boundary_fragment_offset: u32 = 0,
-    merge_fragment_offset: u32 = 0,
+    line: OffsetRange = OffsetRange{},
+    intersection: OffsetRange = OffsetRange{},
 
     pub fn create(estimates: Estimates) @This() {
+        const line_offset = estimates.lineOffset();
         return @This() {
-            .line_offset = estimates.lineOffset(),
-            .intersection_offset = estimates.intersections,
-            .boundary_fragment_offset = estimates.boundary_fragments,
-            .merge_fragment_offset = estimates.merge_fragments,
+            .line = OffsetRange{
+                .end = line_offset,
+                .capacity = line_offset,
+            },
+            .intersection = OffsetRange{
+                .end = estimates.intersections,
+                .capacity = estimates.intersections,
+            },
         };
     }
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .line_offset = self.line_offset + other.line_offset,
-            .intersection_offset = self.intersection_offset + other.intersection_offset,
-            .boundary_fragment_offset = self.boundary_fragment_offset + other.boundary_fragment_offset,
-            .merge_fragment_offset = self.merge_fragment_offset + other.merge_fragment_offset,
+            .line = self.line.combine(other.line),
+            .intersection = self.intersection.combine(other.intersection),
         };
     }
 };
@@ -672,7 +685,6 @@ pub const Flatten = struct {
         range: RangeU32,
         // outputs
         // true if path is used, false to ignore
-        flat_segment_estimates: []SegmentOffsets,
         flat_segment_offsets: []SegmentOffsets,
         flat_segment_data: []u8,
     ) void {
@@ -688,7 +700,6 @@ pub const Flatten = struct {
                     path_monoids,
                     transforms,
                     segment_data,
-                    flat_segment_estimates,
                     flat_segment_offsets,
                     flat_segment_data,
                 );
@@ -705,18 +716,22 @@ pub const Flatten = struct {
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
-        flat_segment_estimates: []SegmentOffsets,
         flat_segment_offsets: []SegmentOffsets,
         flat_segment_data: []u8,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
         const transform = transforms[path_monoid.transform_index];
-        const se = &flat_segment_estimates[segment_index];
-        const so = &flat_segment_offsets[segment_index];
+        const segment_offsets = &flat_segment_offsets[segment_index];
+        const previous_segment_offsets = if (segment_index > 0) flat_segment_offsets[segment_index - 1] else null;
+        var start_line_offset: u32 = 0;
+        if (previous_segment_offsets) |so| {
+            start_line_offset = so.fill.line.capacity;
+        }
+        const end_line_offset = segment_offsets.fill.line.capacity;
 
         var writer = Writer{
-            .segment_data = flat_segment_data[so.fill_line_offset - se.fill_line_offset .. so.fill_line_offset],
+            .segment_data = flat_segment_data[start_line_offset..end_line_offset],
         };
 
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
@@ -741,11 +756,7 @@ pub const Flatten = struct {
         );
 
         // adjust lines to represent actual filled lines
-        const diff = se.fill.lines - writer.lines;
-        se.fill.lines = writer.lines;
-        so.fill.lines -= diff;
-        se.fill_line_offset = se.fill.lineOffset();
-        so.fill_line_offset -= diff * @sizeOf(PointF32);
+        segment_offsets.fill.line.end = start_line_offset + writer.lines;
     }
 
     fn flattenEuler(
@@ -1139,7 +1150,6 @@ pub const Rasterize = struct {
     pub fn intersect(
         flat_segment_data: []const u8,
         range: RangeU32,
-        flat_segment_estimates: []SegmentOffsets,
         flat_segment_offsets: []SegmentOffsets,
         grid_intersections: []GridIntersection,
     ) void {
@@ -1147,7 +1157,6 @@ pub const Rasterize = struct {
             intersectSegment(
                 @intCast(segment_index),
                 flat_segment_data,
-                flat_segment_estimates,
                 flat_segment_offsets,
                 grid_intersections,
             );
@@ -1157,18 +1166,25 @@ pub const Rasterize = struct {
     pub fn intersectSegment(
         segment_index: u32,
         flat_segment_data: []const u8,
-        flat_segment_estimates: []SegmentOffsets,
         flat_segment_offsets: []SegmentOffsets,
         grid_intersections: []GridIntersection,
     ) void {
-        const se = &flat_segment_estimates[segment_index];
-        const so = &flat_segment_offsets[segment_index];
+        const segment_offsets = &flat_segment_offsets[segment_index];
+        const previous_segment_offsets = if (segment_index > 0) flat_segment_offsets[segment_index - 1] else null;
+        var start_intersection_offset: u32 = 0;
+        var start_line_offset: u32 = 0;
+        if (previous_segment_offsets) |so| {
+            start_intersection_offset = so.fill.intersection.capacity;
+            start_line_offset = so.fill.line.capacity;
+        }
+        const end_intersection_offset = segment_offsets.fill.intersection.capacity;
+        const end_line_offset = segment_offsets.fill.line.end;
 
-        const intersections = grid_intersections[so.fill.intersections - se.fill.intersections .. so.fill.intersections];
+        const intersections = grid_intersections[start_intersection_offset..end_intersection_offset];
         var intersection_writer = IntersectionWriter{
             .slice = intersections,
         };
-        const line_segments = flat_segment_data[so.fill_line_offset - se.fill_line_offset .. so.fill_line_offset];
+        const line_segments = flat_segment_data[start_line_offset..end_line_offset];
         var line_iter = LineIterator{
             .segment_data = line_segments,
         };
@@ -1225,8 +1241,7 @@ pub const Rasterize = struct {
             );
         }
 
-        so.fill.intersections -= se.fill.intersections - intersection_writer.index;
-        se.fill.intersections = intersection_writer.index;
+        segment_offsets.fill.intersection.end = segment_offsets.fill.intersection.end - intersection_writer.index;
     }
 
     fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {

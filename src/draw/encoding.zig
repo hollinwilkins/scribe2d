@@ -23,6 +23,7 @@ const CubicBezierI16 = core.CubicBezierI16;
 const KernelConfig = encoding_kernel.KernelConfig;
 const SegmentEstimates = encoding_kernel.SegmentEstimates;
 const SegmentOffsets = encoding_kernel.SegmentOffsets;
+const OffsetRange = encoding_kernel.OffsetRange;
 const GridIntersection = encoding_kernel.GridIntersection;
 const BoundaryFragment = encoding_kernel.BoundaryFragment;
 const MergeFragment = encoding_kernel.MergeFragment;
@@ -298,6 +299,8 @@ pub const SegmentData = struct {
 
 pub const Subpath = packed struct {
     last_segment_offset: u32 = 0,
+    boundary_fragment_offset: OffsetRange = OffsetRange{},
+    merge_fragment_offset: OffsetRange = OffsetRange{},
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU
@@ -820,7 +823,7 @@ pub const CpuRasterizer = struct {
         const last_segment_offsets = self.flat_segment_offsets.getLast();
         const flat_segment_data = try self.flat_segment_data.addManyAsSlice(
             self.allocator,
-            last_segment_offsets.fill.line_offset,
+            last_segment_offsets.fill.line.capacity,
         );
 
         const range = RangeU32{
@@ -838,7 +841,6 @@ pub const CpuRasterizer = struct {
                 self.encoding.transforms,
                 self.encoding.segment_data,
                 chunk,
-                self.flat_segment_estimates.items,
                 self.flat_segment_offsets.items,
                 flat_segment_data,
             );
@@ -852,11 +854,11 @@ pub const CpuRasterizer = struct {
         for (subpath_bumps) |*sb| {
             sb.raw = 0;
         }
-        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
-        const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
-        _ = boundary_fragments;
-        _ = merge_fragments;
+        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersection.capacity);
+        // const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersection.capacity);
+        // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
+        // _ = boundary_fragments;
+        // _ = merge_fragments;
 
         const range = RangeU32{
             .start = 0,
@@ -868,7 +870,6 @@ pub const CpuRasterizer = struct {
             rasterizer.intersect(
                 self.flat_segment_data.items,
                 chunk,
-                self.flat_segment_estimates.items,
                 self.flat_segment_offsets.items,
                 grid_intersections,
             );
