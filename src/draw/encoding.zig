@@ -21,6 +21,7 @@ const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
 const KernelConfig = encoding_kernel.KernelConfig;
+const SegmentEstimates = encoding_kernel.SegmentEstimates;
 const SegmentOffsets = encoding_kernel.SegmentOffsets;
 const GridIntersection = encoding_kernel.GridIntersection;
 const BoundaryFragment = encoding_kernel.BoundaryFragment;
@@ -167,12 +168,13 @@ pub const Style = packed struct {
 };
 
 pub const BumpAllocator = struct {
-    offsets: Offsets = Offsets{},
+    start: u32 = 0,
+    end: u32 = 0,
     offset: std.atomic.Value(u32),
 
     pub fn bump(self: *@This(), n: u32) u32 {
-        const next_offset = self.offsets.start + self.offset.fetchAdd(n, .acq_rel);
-        if (next_offset >= self.offsets.end) {
+        const next_offset = self.start + self.offset.fetchAdd(n, .acq_rel);
+        if (next_offset >= self.end) {
             @panic("Bump allocator exceeded bounds.");
         }
 
@@ -280,11 +282,6 @@ pub const PathMonoid = extern struct {
 
         subpaths[subpaths.len - 1].last_segment_offset = @intCast(path_tags.len);
     }
-};
-
-pub const Offsets = struct {
-    start: u32 = 0,
-    end: u32 = 0,
 };
 
 pub const SegmentData = struct {
@@ -707,6 +704,7 @@ pub fn PathEncoder(comptime T: type) type {
 pub const CpuRasterizer = struct {
     const PathTagList = std.ArrayListUnmanaged(PathTag);
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
+    const SegmentEstimateList = std.ArrayListUnmanaged(SegmentEstimates);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffsets);
     const LineList = std.ArrayListUnmanaged(LineF32);
     const BoolList = std.ArrayListUnmanaged(bool);
@@ -722,7 +720,7 @@ pub const CpuRasterizer = struct {
     config: KernelConfig,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
-    flat_segment_estimates: SegmentOffsetList = SegmentOffsetList{},
+    flat_segment_estimates: SegmentEstimateList = SegmentEstimateList{},
     flat_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segment_data: Buffer = Buffer{},
     subpaths: SubpathList = SubpathList{},
@@ -822,7 +820,7 @@ pub const CpuRasterizer = struct {
         const last_segment_offsets = self.flat_segment_offsets.getLast();
         const flat_segment_data = try self.flat_segment_data.addManyAsSlice(
             self.allocator,
-            last_segment_offsets.fill_line_offset,
+            last_segment_offsets.fill.line_offset,
         );
 
         const range = RangeU32{
