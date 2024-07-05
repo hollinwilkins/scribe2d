@@ -987,47 +987,54 @@ pub const CpuRasterizer = struct {
             std.debug.print("====================================\n", .{});
         }
 
-        // {
-        //     std.debug.print("============ Grid Intersections ============\n", .{});
-        //     var first_segment_index: u32 = 0;
-        //     for (self.encoding.subpaths) |subpath| {
-        //         const last_segment_index = subpath.segment_index;
-        //         const first_path_monoid = self.path_monoids.items[first_segment_index];
-        //         const segment_estimates = self.flat_segment_estimates.items[first_segment_index..last_segment_index + 1];
-        //         const segment_offsets = self.flat_segment_offsets.items[first_segment_index..last_segment_index + 1];
+        {
+            std.debug.print("============ Grid Intersections ============\n", .{});
+            var start_segment_offset: u32 = 0;
+            for (self.subpaths.items) |subpath| {
+                const last_segment_offset = subpath.last_segment_offset;
+                const first_path_monoid = self.path_monoids.items[start_segment_offset];
+                const segment_offsets = self.flat_segment_offsets.items[start_segment_offset..last_segment_offset];
+                var start_intersection_offset: u32 = 0;
+                const previous_segment_offsets = if (start_segment_offset > 0) self.flat_segment_offsets.items[start_segment_offset - 1] else null;
+                if (previous_segment_offsets) |so| {
+                    start_intersection_offset = so.fill.intersection.capacity;
+                }
 
-        //         std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
-        //         for (segment_estimates, segment_offsets) |estimate, offset| {
-        //             const grid_intersections = self.grid_intersections.items[offset.fill.intersections - estimate.fill.intersections .. offset.fill.intersections];
-        //             for (grid_intersections) |grid_intersection| {
-        //                 std.debug.print("{}\n", .{grid_intersection});
-        //             }
-        //         }
+                std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
+                // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
+                for (segment_offsets) |offsets| {
+                    const end_intersection_offset = offsets.fill.intersection.capacity;
+                    const grid_intersections = self.grid_intersections.items[start_intersection_offset..end_intersection_offset];
 
-        //         first_segment_index = subpath.segment_index;
-        //     }
-        //     std.debug.print("============================================\n", .{});
-        // }
+                    for (grid_intersections) |intersection| {
+                        std.debug.print("{}\n", .{intersection});
+                    }
 
-        // {
-        //     std.debug.print("============ Boundary Fragments ============\n", .{});
-        //     var first_segment_index: u32 = 0;
-        //     for (self.encoding.subpaths) |subpath| {
-        //         const last_segment_index = subpath.segment_index;
-        //         const last_path_monoid = self.path_monoids.items[last_segment_index];
-        //         const first_boundary_index = self.flat_segment_offsets.items[first_segment_index].fill.boundary_fragments;
-        //         const last_boundary_index = self.flat_segment_offsets.items[last_segment_index].fill.boundary_fragments;
-        //         const boundary_fragments = self.boundary_fragments.items[first_boundary_index..last_boundary_index];
+                    start_intersection_offset = offsets.fill.intersection.capacity;
+                }
 
-        //         std.debug.print("--- Subpath({},{}) ---\n", .{ last_path_monoid.path_index, last_path_monoid.subpath_index });
-        //         for (boundary_fragments) |boundary_fragment| {
-        //             std.debug.print("{}\n", .{boundary_fragment});
-        //         }
+                start_segment_offset = subpath.last_segment_offset;
+            }
+            std.debug.print("===========================================\n", .{});
+        }
 
-        //         first_segment_index = subpath.segment_index;
-        //     }
-        //     std.debug.print("============================================\n", .{});
-        // }
+        {
+            std.debug.print("============ Boundary Fragments ============\n", .{});
+            var start_boundary_offset: u32 = 0;
+            for (self.subpaths.items) |subpath| {
+                const path_monoid = self.path_monoids.items[subpath.last_segment_offset - 1];
+                const end_boundary_offset = subpath.fill.boundary_fragment.end;
+                const boundary_fragments = self.boundary_fragments.items[start_boundary_offset..end_boundary_offset];
+
+                std.debug.print("--- Subpath({},{}) ---\n", .{ path_monoid.path_index, path_monoid.subpath_index });
+                for (boundary_fragments) |boundary_fragment| {
+                    std.debug.print("{}\n", .{boundary_fragment});
+                }
+
+                start_boundary_offset = subpath.fill.boundary_fragment.capacity;
+            }
+            std.debug.print("============================================\n", .{});
+        }
     }
 };
 
