@@ -1385,8 +1385,8 @@ pub const Rasterize = struct {
             }
 
             {
-                const boundary_fragment_offset = subpath_bump.bump(1);
-                boundary_fragments[boundary_fragment_offset] = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, &next_grid_intersection });
+                const boundary_fragment_index = subpath_bump.bump(1);
+                boundary_fragments[boundary_fragment_index] = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, &next_grid_intersection });
             }
         }
     }

@@ -1029,13 +1029,16 @@ pub const CpuRasterizer = struct {
                 const end_boundary_offset = subpath.fill.boundary_fragment.end;
                 const boundary_fragments = self.boundary_fragments.items[start_boundary_offset..end_boundary_offset];
 
-                std.debug.print("--- Subpath({},{},{}) ---\n", .{
+                std.debug.print("--- Subpath({},{}) ---\n", .{
                     path_monoid.path_index,
                     path_monoid.subpath_index,
-                    subpath.fill.boundary_fragment.end,
                 });
                 for (boundary_fragments) |boundary_fragment| {
-                    std.debug.print("{}\n", .{boundary_fragment});
+                    std.debug.print("Pixel({}), Intersection1({}), Intersection2({})\n", .{
+                        boundary_fragment.pixel,
+                        boundary_fragment.intersections[0],
+                        boundary_fragment.intersections[1],
+                    });
                 }
 
                 start_boundary_offset = subpath.fill.boundary_fragment.capacity;
