@@ -232,10 +232,11 @@ pub const SegmentOffsets = packed struct {
         segment_offsets: []const SegmentOffsets,
         subpaths: []Subpath,
     ) void {
-        for (path_tags, path_monoids, segment_offsets) |path_tag, path_monoid, offsets| {
+        for (path_tags, path_monoids, segment_offsets, 0..) |path_tag, path_monoid, offsets, segment_index| {
             if (path_tag.index.subpath == 1) {
                 if (path_monoid.subpath_index > 0) {
                     const subpath = &subpaths[path_monoid.subpath_index - 1];
+                    subpath.last_segment_offset = @intCast(segment_index);
                     subpath.fill.boundary_fragment = offsets.fill.boundary_fragment;
                     subpath.fill.merge_fragment = offsets.fill.merge_fragment;
                     subpath.front_stroke.boundary_fragment = offsets.front_stroke.boundary_fragment;
@@ -248,6 +249,7 @@ pub const SegmentOffsets = packed struct {
 
         const last_offsets = segment_offsets[segment_offsets.len - 1];
         const subpath = &subpaths[subpaths.len - 1];
+        subpath.last_segment_offset = @intCast(path_monoids.len);
         subpath.fill.boundary_fragment = last_offsets.fill.boundary_fragment;
         subpath.fill.merge_fragment = last_offsets.fill.merge_fragment;
         subpath.front_stroke.boundary_fragment = last_offsets.front_stroke.boundary_fragment;
@@ -1335,6 +1337,7 @@ pub const Rasterize = struct {
     ) void {
         const path_monoid = path_monoids[segment_index];
         const subpath = subpaths[path_monoid.subpath_index];
+        std.debug.print("SUUUU: {}\n", .{subpath.last_segment_offset});
         const previous_subpath = if (path_monoid.subpath_index > 0) subpaths[path_monoid.subpath_index - 1] else null;
         var start_boundary_offset: u32 = 0;
         var start_segment_offset: u32 = 0;
@@ -1367,7 +1370,6 @@ pub const Rasterize = struct {
 
             if (next_index >= segment_grid_intersections.len) {
                 const next_segment_index = (segment_index + 1 - start_segment_offset) % (end_segment_offset - start_segment_offset) + start_segment_offset;
-                // const next_segment_index = ((start_segment_offset + 1 - range) % (end_segment_offset - range + 1)) + range;
                 const previous_next_segment_offsets = if (next_segment_index > 0) flat_segment_offsets[next_segment_index - 1] else null;
                 var start_next_intersection_offset: u32 = 0;
                 if (previous_next_segment_offsets) |so| {

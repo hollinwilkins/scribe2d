@@ -1073,17 +1073,17 @@ test "encoding path monoids" {
     _ = try path_encoder.lineTo(core.PointF32.create(1.0, 1.0));
     try path_encoder.finish();
 
-    // var path_encoder2 = encoder.pathEncoder(i16);
-    // try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    // _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    // _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    // _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    // _ = try path_encoder2.cubicTo(
-    //     core.PointI16.create(120, 120),
-    //     core.PointI16.create(70, 130),
-    //     core.PointI16.create(22, 22),
-    // );
-    // try path_encoder2.finish();
+    var path_encoder2 = encoder.pathEncoder(i16);
+    try path_encoder2.moveTo(core.PointI16.create(10, 10));
+    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
+    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
+    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
+    _ = try path_encoder2.cubicTo(
+        core.PointI16.create(120, 120),
+        core.PointI16.create(70, 130),
+        core.PointI16.create(22, 22),
+    );
+    try path_encoder2.finish();
 
     const encoding = encoder.encode();
     var rasterizer = CpuRasterizer.init(
