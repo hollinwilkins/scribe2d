@@ -896,8 +896,10 @@ pub const CpuRasterizer = struct {
             );
         }
 
+        var start_boundary_fragment: u32 = 0;
         for (self.subpaths.items, subpath_bumps) |*subpath, bump| {
-            subpath.fill.boundary_fragment.end = subpath.fill.boundary_fragment.end - bump.raw;
+            subpath.fill.boundary_fragment.end = start_boundary_fragment + bump.raw;
+            start_boundary_fragment = subpath.fill.boundary_fragment.capacity;
         }
     }
 
@@ -951,31 +953,39 @@ pub const CpuRasterizer = struct {
         }
         std.debug.print("======================================\n", .{});
 
-        // {
-        //     std.debug.print("============ Flat Lines ============\n", .{});
-        //     var first_segment_index: u32 = 0;
-        //     for (self.subpaths.items) |subpath| {
-        //         const last_segment_index = subpath.segment_index;
-        //         const first_path_monoid = self.path_monoids.items[first_segment_index];
-        //         const segment_estimates = self.flat_segment_estimates.items[first_segment_index..last_segment_index + 1];
-        //         const segment_offsets = self.flat_segment_offsets.items[first_segment_index..last_segment_index + 1];
+        {
+            std.debug.print("============ Flat Lines ============\n", .{});
+            var first_segment_offset: u32 = 0;
+            for (self.subpaths.items) |subpath| {
+                const last_segment_offset = subpath.last_segment_offset;
+                const first_path_monoid = self.path_monoids.items[first_segment_offset];
+                const segment_offsets = self.flat_segment_offsets.items[first_segment_offset..last_segment_offset];
+                var start_line_offset: u32 = 0;
+                const previous_segment_offsets = if (first_segment_offset > 0) self.flat_segment_offsets.items[first_segment_offset - 1] else null;
+                if (previous_segment_offsets) |so| {
+                    start_line_offset = so.fill.line.capacity;
+                }
 
-        //         std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
-        //         for (segment_estimates, segment_offsets) |estimate, offset| {
-        //             const line_data = self.flat_segment_data.items[offset.fill_line_offset - estimate.fill_line_offset .. offset.fill_line_offset];
-        //             var line_iter = encoding_kernel.LineIterator{
-        //                 .segment_data = line_data,
-        //             };
+                std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
+                // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
+                for (segment_offsets) |offsets| {
+                    const end_line_offset = offsets.fill.line.capacity;
+                    const line_data = self.flat_segment_data.items[start_line_offset..end_line_offset];
+                    var line_iter = encoding_kernel.LineIterator{
+                        .segment_data = line_data,
+                    };
 
-        //             while (line_iter.next()) |line| {
-        //                 std.debug.print("{}\n", .{line});
-        //             }
-        //         }
+                    while (line_iter.next()) |line| {
+                        std.debug.print("{}\n", .{line});
+                    }
 
-        //         first_segment_index = subpath.segment_index;
-        //     }
-        //     std.debug.print("====================================\n", .{});
-        // }
+                    start_line_offset = offsets.fill.line.capacity;
+                }
+
+                first_segment_offset = subpath.last_segment_offset;
+            }
+            std.debug.print("====================================\n", .{});
+        }
 
         // {
         //     std.debug.print("============ Grid Intersections ============\n", .{});

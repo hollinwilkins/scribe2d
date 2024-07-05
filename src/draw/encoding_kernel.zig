@@ -798,7 +798,7 @@ pub const Flatten = struct {
         );
 
         // adjust lines to represent actual filled lines
-        segment_offsets.fill.line.end = start_line_offset + writer.lines;
+        segment_offsets.fill.line.end = start_line_offset + writer.lineOffset();
     }
 
     fn flattenEuler(
@@ -1183,6 +1183,14 @@ pub const Flatten = struct {
             std.mem.bytesAsValue(PointF32, self.segment_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
         }
+
+        pub fn lineOffset(self: @This()) u32 {
+            if (self.lines == 0) {
+                return 0;
+            }
+
+            return @sizeOf(PointF32) + self.lines * @sizeOf(PointF32);
+        }
     };
 };
 
@@ -1283,7 +1291,7 @@ pub const Rasterize = struct {
             );
         }
 
-        segment_offsets.fill.intersection.end = segment_offsets.fill.intersection.end - intersection_writer.index;
+        segment_offsets.fill.intersection.end = start_intersection_offset + intersection_writer.index;
     }
 
     fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
