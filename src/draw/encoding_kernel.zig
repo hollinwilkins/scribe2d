@@ -1071,29 +1071,6 @@ pub const Flatten = struct {
         }
     }
 
-    // fn readNeighborSegment(
-    //     config: KernelConfig,
-    //     curves: []const Curve,
-    //     points: []const PointF32,
-    //     curve_range: RangeU32,
-    //     index: u32,
-    // ) NeighborSegment {
-    //     const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
-    //     const curve = curves[index_shifted];
-    //     const cubic_points = getCubicPoints(curve, points[curve.point_offsets.start..curve.point_offsets.end]);
-    //     const tangent = cubicStartTangent(
-    //         config,
-    //         cubic_points.point0,
-    //         cubic_points.point1,
-    //         cubic_points.point2,
-    //         cubic_points.point3,
-    //     );
-
-    //     return NeighborSegment{
-    //         .tangent = tangent,
-    //     };
-    // }
-
     const Writer = struct {
         segment_data: []u8,
         offset: u32 = 0,
@@ -1228,92 +1205,92 @@ pub const Rasterize = struct {
         return false;
     }
 
-    pub fn boundary(
-        path_monoids: []const PathMonoid,
-        subpaths: []const Subpath,
-        grid_intersections: []const GridIntersection,
-        range: RangeU32,
-        subpath_bumps: []std.atomic.Value(u32),
-        flat_segment_estimates: []SegmentOffsets,
-        flat_segment_offsets: []SegmentOffsets,
-        boundary_fragments: []BoundaryFragment,
-    ) void {
-        for (range.start..range.end) |segment_index| {
-            boundarySegment(
-                @intCast(segment_index),
-                path_monoids,
-                subpaths,
-                grid_intersections,
-                subpath_bumps,
-                flat_segment_estimates,
-                flat_segment_offsets,
-                boundary_fragments,
-            );
-        }
-    }
+    // pub fn boundary(
+    //     path_monoids: []const PathMonoid,
+    //     subpaths: []const Subpath,
+    //     grid_intersections: []const GridIntersection,
+    //     range: RangeU32,
+    //     subpath_bumps: []std.atomic.Value(u32),
+    //     flat_segment_estimates: []SegmentOffsets,
+    //     flat_segment_offsets: []SegmentOffsets,
+    //     boundary_fragments: []BoundaryFragment,
+    // ) void {
+    //     for (range.start..range.end) |segment_index| {
+    //         boundarySegment(
+    //             @intCast(segment_index),
+    //             path_monoids,
+    //             subpaths,
+    //             grid_intersections,
+    //             subpath_bumps,
+    //             flat_segment_estimates,
+    //             flat_segment_offsets,
+    //             boundary_fragments,
+    //         );
+    //     }
+    // }
 
-    pub fn boundarySegment(
-        segment_index: u32,
-        path_monoids: []const PathMonoid,
-        subpaths: []const Subpath,
-        grid_intersections: []const GridIntersection,
-        subpath_bumps: []std.atomic.Value(u32),
-        flat_segment_estimates: []SegmentOffsets,
-        flat_segment_offsets: []SegmentOffsets,
-        boundary_fragments: []BoundaryFragment,
-    ) void {
-        const path_monoid = path_monoids[segment_index];
-        const subpath = subpaths[path_monoid.subpath_index];
-        var previous_boundary_index: u16 = 0;
-        if (path_monoid.subpath_index > 0) {
-            const previous_last_segment_index = subpaths[path_monoid.subpath_index - 1].segment_index;
-            previous_boundary_index = flat_segment_offsets[previous_last_segment_index].fill.boundary_fragments;
-        }
-        const last_segment_index = subpath.segment_index;
-        const last_so = flat_segment_offsets[last_segment_index];
-        var subpath_bump = BumpAllocator{
-            .offsets = Offsets{
-                .start = previous_boundary_index,
-                .end = last_so.fill.boundary_fragments,
-            },
-            .offset = subpath_bumps[path_monoid.subpath_index],
-        };
-        const se = &flat_segment_estimates[segment_index];
-        const so = &flat_segment_offsets[segment_index];
-        const segment_grid_intersections = grid_intersections[so.fill.intersections - se.fill.intersections .. so.fill.intersections];
+    // pub fn boundarySegment(
+    //     segment_index: u32,
+    //     path_monoids: []const PathMonoid,
+    //     subpaths: []const Subpath,
+    //     grid_intersections: []const GridIntersection,
+    //     subpath_bumps: []std.atomic.Value(u32),
+    //     flat_segment_estimates: []SegmentOffsets,
+    //     flat_segment_offsets: []SegmentOffsets,
+    //     boundary_fragments: []BoundaryFragment,
+    // ) void {
+    //     const path_monoid = path_monoids[segment_index];
+    //     const subpath = subpaths[path_monoid.subpath_index];
+    //     var previous_boundary_index: u16 = 0;
+    //     if (path_monoid.subpath_index > 0) {
+    //         const previous_last_segment_index = subpaths[path_monoid.subpath_index - 1].first_segment_index;
+    //         previous_boundary_index = flat_segment_offsets[previous_last_segment_index].fill.boundary_fragments;
+    //     }
+    //     const last_segment_index = subpath.first_segment_index;
+    //     const last_so = flat_segment_offsets[last_segment_index];
+    //     var subpath_bump = BumpAllocator{
+    //         .offsets = Offsets{
+    //             .start = previous_boundary_index,
+    //             .end = last_so.fill.boundary_fragments,
+    //         },
+    //         .offset = subpath_bumps[path_monoid.subpath_index],
+    //     };
+    //     const se = &flat_segment_estimates[segment_index];
+    //     const so = &flat_segment_offsets[segment_index];
+    //     const segment_grid_intersections = grid_intersections[so.fill.intersections - se.fill.intersections .. so.fill.intersections];
 
-        if (segment_grid_intersections.len == 0) {
-            return;
-        }
+    //     if (segment_grid_intersections.len == 0) {
+    //         return;
+    //     }
 
-        for (segment_grid_intersections, 0..) |*grid_intersection, index| {
-            var next_grid_intersection: GridIntersection = undefined;
-            const next_index = index + 1;
+    //     for (segment_grid_intersections, 0..) |*grid_intersection, index| {
+    //         var next_grid_intersection: GridIntersection = undefined;
+    //         const next_index = index + 1;
 
-            if (next_index >= segment_grid_intersections.len) {
-                var range: u32 = 0;
-                if (path_monoid.subpath_index > 0) {
-                    range -= subpaths[path_monoid.subpath_index].segment_index;
-                }
-                const next_segment_index = ((segment_index + 1 - range) % (last_segment_index - range + 1)) + range;
-                const next_se = &flat_segment_estimates[next_segment_index];
-                const next_so = &flat_segment_offsets[next_segment_index];
-                next_grid_intersection = grid_intersections[next_so.fill.intersections - next_se.fill.intersections];
-            } else {
-                next_grid_intersection = segment_grid_intersections[next_index];
-            }
+    //         if (next_index >= segment_grid_intersections.len) {
+    //             var range: u32 = 0;
+    //             if (path_monoid.subpath_index > 0) {
+    //                 range -= subpaths[path_monoid.subpath_index].first_segment_index;
+    //             }
+    //             const next_segment_index = ((segment_index + 1 - range) % (last_segment_index - range + 1)) + range;
+    //             const next_se = &flat_segment_estimates[next_segment_index];
+    //             const next_so = &flat_segment_offsets[next_segment_index];
+    //             next_grid_intersection = grid_intersections[next_so.fill.intersections - next_se.fill.intersections];
+    //         } else {
+    //             next_grid_intersection = segment_grid_intersections[next_index];
+    //         }
 
-            if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
-                // skip if exactly the same point
-                continue;
-            }
+    //         if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
+    //             // skip if exactly the same point
+    //             continue;
+    //         }
 
-            {
-                const boundary_fragment_offset = subpath_bump.bump(1);
-                boundary_fragments[boundary_fragment_offset] = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, &next_grid_intersection });
-            }
-        }
-    }
+    //         {
+    //             const boundary_fragment_offset = subpath_bump.bump(1);
+    //             boundary_fragments[boundary_fragment_offset] = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, &next_grid_intersection });
+    //         }
+    //     }
+    // }
 
     pub fn Writer(comptime T: type) type {
         return struct {
