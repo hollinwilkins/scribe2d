@@ -1308,9 +1308,9 @@ pub const Rasterize = struct {
         path_monoids: []const PathMonoid,
         subpaths: []const Subpath,
         grid_intersections: []const GridIntersection,
+        flat_segment_offsets: []const SegmentOffsets,
         range: RangeU32,
         subpath_bumps: []std.atomic.Value(u32),
-        flat_segment_offsets: []SegmentOffsets,
         boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |segment_index| {
@@ -1319,8 +1319,8 @@ pub const Rasterize = struct {
                 path_monoids,
                 subpaths,
                 grid_intersections,
-                subpath_bumps,
                 flat_segment_offsets,
+                subpath_bumps,
                 boundary_fragments,
             );
         }
@@ -1331,8 +1331,8 @@ pub const Rasterize = struct {
         path_monoids: []const PathMonoid,
         subpaths: []const Subpath,
         grid_intersections: []const GridIntersection,
+        flat_segment_offsets: []const SegmentOffsets,
         subpath_bumps: []std.atomic.Value(u32),
-        flat_segment_offsets: []SegmentOffsets,
         boundary_fragments: []BoundaryFragment,
     ) void {
         const path_monoid = path_monoids[segment_index];
@@ -1392,6 +1392,40 @@ pub const Rasterize = struct {
             }
         }
     }
+
+    // pub fn merge(
+    //     path_monoids: []const PathMonoid,
+    //     subpaths: []const Subpath,
+    //     boundary_fragments: []const BoundaryFragment,
+    //     range: RangeU32,
+    //     subpath_bumps: []std.atomic.Value(u32),
+    //     flat_segment_offsets: []SegmentOffsets,
+    //     merge_fragments: []MergeFragment,
+    // ) void {
+    //     for (range.start..range.end) |segment_index| {
+    //         mergeSegment(
+    //             @intCast(segment_index),
+    //             path_monoids,
+    //             subpaths,
+    //             grid_intersections,
+    //             subpath_bumps,
+    //             flat_segment_offsets,
+    //             boundary_fragments,
+    //         );
+    //     }
+    // }
+
+    // pub fn mergeSegment(
+    //     path_monoids: []const PathMonoid,
+    //     subpaths: []const Subpath,
+    //     grid_intersections: []const GridIntersection,
+    //     range: RangeU32,
+    //     subpath_bumps: []std.atomic.Value(u32),
+    //     flat_segment_offsets: []SegmentOffsets,
+    //     boundary_fragments: []BoundaryFragment,
+    // ) void {
+
+    // }
 
     pub fn Writer(comptime T: type) type {
         return struct {
