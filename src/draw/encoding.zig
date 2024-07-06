@@ -2,12 +2,13 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const msaa_module = @import("./msaa.zig");
 const texture_module = @import("./texture.zig");
-const encoding_kernel = @import("./encoding_kernel.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
+const IntersectionF32 = core.IntersectionF32;
 const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
+const PointI32 = core.PointI32;
 const Point = core.Point;
 const Line = core.Line;
 const Arc = core.Arc;
@@ -29,13 +30,6 @@ const Colors = texture_module.Colors;
 const ColorF32 = texture_module.ColorF32;
 const ColorU8 = texture_module.ColorU8;
 const ColorBlend = texture_module.ColorBlend;
-const KernelConfig = encoding_kernel.KernelConfig;
-const SegmentEstimates = encoding_kernel.SegmentEstimates;
-const SegmentOffsets = encoding_kernel.SegmentOffsets;
-const OffsetRange = encoding_kernel.OffsetRange;
-const GridIntersection = encoding_kernel.GridIntersection;
-const BoundaryFragment = encoding_kernel.BoundaryFragment;
-const MergeFragment = encoding_kernel.MergeFragment;
 
 pub const PathTag = packed struct {
     comptime {
@@ -281,23 +275,6 @@ pub const SegmentData = struct {
     pub fn getSegmentOffset(self: @This(), comptime T: type, offset: u32) T {
         return std.mem.bytesToValue(T, self.segment_data[offset .. offset + @sizeOf(T)]);
     }
-};
-
-pub const PathOffsets = packed struct {
-    boundary_fragment: OffsetRange = OffsetRange{},
-    merge_fragment: OffsetRange = OffsetRange{},
-};
-
-pub const Path = packed struct {
-    index: u32 = 0,
-    fill: PathOffsets = PathOffsets{},
-    front_stroke: PathOffsets = PathOffsets{},
-    back_stroke: PathOffsets = PathOffsets{},
-};
-
-pub const Subpath = packed struct {
-    index: u32 = 0,
-    last_segment_offset: u32 = 0,
 };
 
 // Encodes all data needed for a single draw command to the GPU or CPU
@@ -701,575 +678,395 @@ pub fn PathEncoder(comptime T: type) type {
     };
 }
 
-pub const CpuRasterizer = struct {
-    const PathTagList = std.ArrayListUnmanaged(PathTag);
-    const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
-    const SegmentEstimateList = std.ArrayListUnmanaged(SegmentEstimates);
-    const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffsets);
-    const LineList = std.ArrayListUnmanaged(LineF32);
-    const BoolList = std.ArrayListUnmanaged(bool);
-    const Buffer = std.ArrayListUnmanaged(u8);
-    const PathList = std.ArrayListUnmanaged(Path);
-    const SubpathList = std.ArrayListUnmanaged(Subpath);
-    const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
-    const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
-    const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
-    const BumpAllocatorList = std.ArrayListUnmanaged(std.atomic.Value(u32));
-    const OffsetList = std.ArrayListUnmanaged(u32);
+pub const FlatPathTag = packed struct {
+    fill_path: u1 = 0,
+    stroke_path: u1 = 0,
+    fill_subpath: u1 = 0,
+    stroke_subpath: u2 = 0,
+};
 
-    allocator: Allocator,
-    half_planes: HalfPlanesU16,
-    config: KernelConfig,
-    encoding: Encoding,
-    path_monoids: PathMonoidList = PathMonoidList{},
-    flat_segment_estimates: SegmentEstimateList = SegmentEstimateList{},
-    flat_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
-    flat_segment_data: Buffer = Buffer{},
-    paths: PathList = PathList{},
-    subpaths: SubpathList = SubpathList{},
-    path_bumps: BumpAllocatorList = BumpAllocatorList{},
-    boundary_fragment_offsets: OffsetList = OffsetList{},
-    grid_intersections: GridIntersectionList = GridIntersectionList{},
-    boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
-    merge_fragments: MergeFragmentList = MergeFragmentList{},
+pub const FlatPath = struct {
+    pub const Kind = enum(u1) {
+        fill,
+        stroke,
+    };
 
-    pub fn init(
-        allocator: Allocator,
-        half_planes: HalfPlanesU16,
-        config: KernelConfig,
-        encoding: Encoding,
-    ) @This() {
+    kind: Kind,
+    path_index: u32 = 0,
+    flat_segment_offset: u32 = 0,
+};
+
+pub const FlatSubpath = struct {
+    subpath_index: u32 = 0,
+    flat_segment_offset: u32 = 0,
+};
+
+pub const FlatSegment = struct {
+    line_end: u32 = 0,
+    line_capacity: u32 = 0,
+};
+
+pub const Estimates = packed struct {
+    lines: u32 = 0,
+    intersections: u32 = 0,
+    boundary_fragments: u32 = 0,
+    merge_fragments: u32 = 0,
+
+    pub fn create(lines: u32, intersections: u32) @This() {
+        std.debug.assert(intersections > 4);
         return @This(){
-            .allocator = allocator,
-            .half_planes = half_planes,
-            .config = config,
-            .encoding = encoding,
+            .lines = lines,
+            .intersections = intersections,
+            .boundary_fragments = intersections,
+            .merge_fragments = intersections,
         };
     }
 
-    pub fn deinit(self: *@This()) void {
-        self.path_monoids.deinit(self.allocator);
-        self.flat_segment_estimates.deinit(self.allocator);
-        self.flat_segment_offsets.deinit(self.allocator);
-        self.flat_segment_data.deinit(self.allocator);
-        self.paths.deinit(self.allocator);
-        self.subpaths.deinit(self.allocator);
-        self.path_bumps.deinit(self.allocator);
-        self.boundary_fragment_offsets.deinit(self.allocator);
-        self.grid_intersections.deinit(self.allocator);
-        self.boundary_fragments.deinit(self.allocator);
-        self.merge_fragments.deinit(self.allocator);
-    }
-
-    pub fn reset(self: *@This()) void {
-        self.path_monoids.items.len = 0;
-        self.flat_segment_estimates.items.len = 0;
-        self.flat_segment_offsets.items.len = 0;
-        self.flat_segment_data.items.len = 0;
-        self.paths.items.len = 0;
-        self.subpaths.items.len = 0;
-        self.path_bumps.items.len = 0;
-        self.boundary_fragment_offsets.items.len = 0;
-        self.grid_intersections.items.len = 0;
-        self.boundary_fragments.items.len = 0;
-        self.merge_fragments.items.len = 0;
-    }
-
-    pub fn rasterize(self: *@This(), texture: *Texture) !void {
-        // reset the rasterizer
-        self.reset();
-        // expand path monoids
-        try self.expandPathMonoids();
-        // estimate FlatEncoder memory requirements
-        try self.estimateSegments();
-        // allocate the FlatEncoder
-        // use the FlatEncoder to flatten the encoding
-        try self.flatten();
-        // calculate scanline encoding
-        try self.kernelRasterize();
-        // write scanline encoding to texture
-        self.flushTexture(texture);
-    }
-
-    fn expandPathMonoids(self: *@This()) !void {
-        const path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
-        PathMonoid.expand(self.encoding.path_tags, path_monoids);
-    }
-
-    fn estimateSegments(self: *@This()) !void {
-        const estimator = encoding_kernel.Estimate;
-        const flat_segment_estimates = try self.flat_segment_estimates.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
-        const range = RangeU32{
-            .start = 0,
-            .end = @intCast(self.path_monoids.items.len),
+    pub fn mulScalar(self: @This(), scalar: f32) @This() {
+        return @This(){
+            .lines = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.lines)) * scalar)),
+            .intersections = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersections)) * scalar)),
+            .boundary_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.boundary_fragments)) * scalar)),
+            .merge_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.merge_fragments)) * scalar)),
         };
-        var chunk_iter = range.chunkIterator(self.config.chunk_size);
-
-        while (chunk_iter.next()) |chunk| {
-            estimator.estimateSegments(
-                self.config,
-                self.encoding.path_tags,
-                self.path_monoids.items,
-                self.encoding.styles,
-                self.encoding.transforms,
-                self.encoding.segment_data,
-                chunk,
-                flat_segment_estimates,
-            );
-        }
-
-        // TODO: expand SegmentEstimate into SegmentOffsets
-        const flat_segment_offsets = try self.flat_segment_offsets.addManyAsSlice(self.allocator, flat_segment_estimates.len);
-        SegmentOffsets.expand(flat_segment_estimates, flat_segment_offsets);
-
-        const paths_n = self.path_monoids.getLast().path_index + 1;
-        const paths = try self.paths.addManyAsSlice(self.allocator, paths_n);
-        const subpath_n = self.path_monoids.getLast().subpath_index + 1;
-        const subpaths = try self.subpaths.addManyAsSlice(self.allocator, subpath_n);
-        SegmentOffsets.expandPaths(
-            self.encoding.path_tags,
-            self.path_monoids.items,
-            self.flat_segment_offsets.items,
-            paths,
-            subpaths,
-        );
     }
 
-    fn flatten(self: *@This()) !void {
-        const flattener = encoding_kernel.Flatten;
-        const last_segment_offsets = self.flat_segment_offsets.getLast();
-        const flat_segment_data = try self.flat_segment_data.addManyAsSlice(
-            self.allocator,
-            last_segment_offsets.fill.line.capacity,
-        );
-
-        const range = RangeU32{
-            .start = 0,
-            .end = @intCast(self.path_monoids.items.len),
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .lines = self.lines + other.lines,
+            .intersections = self.intersections + other.intersections,
+            .boundary_fragments = self.boundary_fragments + other.boundary_fragments,
+            .merge_fragments = self.merge_fragments + other.merge_fragments,
         };
-        var chunk_iter = range.chunkIterator(self.config.chunk_size);
-
-        while (chunk_iter.next()) |chunk| {
-            flattener.flatten(
-                self.config,
-                self.encoding.path_tags,
-                self.path_monoids.items,
-                self.encoding.styles,
-                self.encoding.transforms,
-                self.encoding.segment_data,
-                chunk,
-                self.flat_segment_offsets.items,
-                flat_segment_data,
-            );
-        }
     }
 
-    fn kernelRasterize(self: *@This()) !void {
-        const rasterizer = encoding_kernel.Rasterize;
-        const last_segment_offsets = self.flat_segment_offsets.getLast();
-        const last_path = self.paths.getLast();
-        const path_bumps = try self.path_bumps.addManyAsSlice(self.allocator, self.paths.items.len);
-        for (path_bumps) |*sb| {
-            sb.raw = 0;
-        }
-        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersection.capacity);
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_path.fill.boundary_fragment.capacity);
-        const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_path.fill.merge_fragment.capacity);
-
-        const range = RangeU32{
-            .start = 0,
-            .end = @intCast(self.path_monoids.items.len),
-        };
-        const path_range = RangeU32{
-            .start = 0,
-            .end = @intCast(self.paths.items.len),
-        };
-
-        var chunk_iter = range.chunkIterator(self.config.chunk_size);
-        while (chunk_iter.next()) |chunk| {
-            rasterizer.intersect(
-                self.flat_segment_data.items,
-                chunk,
-                self.flat_segment_offsets.items,
-                grid_intersections,
-            );
+    pub fn lineOffset(self: @This()) u32 {
+        if (self.lines == 0) {
+            return 0;
         }
 
-        chunk_iter = range.chunkIterator(self.config.chunk_size);
-        while (chunk_iter.next()) |chunk| {
-            rasterizer.boundary(
-                self.half_planes,
-                self.path_monoids.items,
-                self.paths.items,
-                self.subpaths.items,
-                grid_intersections,
-                self.flat_segment_offsets.items,
-                chunk,
-                path_bumps,
-                boundary_fragments,
-            );
-        }
-
-        var start_boundary_fragment: u32 = 0;
-        for (self.paths.items, path_bumps) |*path, bump| {
-            path.fill.boundary_fragment.end = start_boundary_fragment + bump.raw;
-            std.mem.sort(
-                BoundaryFragment,
-                self.boundary_fragments.items[start_boundary_fragment..path.fill.boundary_fragment.end],
-                @as(u32, 0),
-                boundaryFragmentLessThan,
-            );
-            start_boundary_fragment = path.fill.boundary_fragment.capacity;
-        }
-
-        for (self.path_bumps.items) |*bump| {
-            bump.raw = 0;
-        }
-
-        chunk_iter = path_range.chunkIterator(self.config.chunk_size);
-        while (chunk_iter.next()) |chunk| {
-            rasterizer.merge(
-                self.paths.items,
-                self.boundary_fragments.items,
-                chunk,
-                self.path_bumps.items,
-                merge_fragments,
-            );
-        }
-
-        var start_merge_fragment: u32 = 0;
-        for (self.paths.items, path_bumps) |*path, bump| {
-            path.fill.merge_fragment.end = start_merge_fragment + bump.raw;
-            start_merge_fragment = path.fill.merge_fragment.capacity;
-        }
-
-        chunk_iter = path_range.chunkIterator(self.config.chunk_size);
-        while (chunk_iter.next()) |chunk| {
-            rasterizer.mask(
-                self.config,
-                self.paths.items,
-                self.boundary_fragments.items,
-                chunk,
-                self.merge_fragments.items,
-            );
-        }
-    }
-
-    fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
-        if (left.pixel.y < right.pixel.y) {
-            return true;
-        } else if (left.pixel.y > right.pixel.y) {
-            return false;
-        } else if (left.pixel.x < right.pixel.x) {
-            return true;
-        } else if (left.pixel.x > right.pixel.x) {
-            return false;
-        }
-
-        return false;
-    }
-
-    fn flushTexture(self: @This(), texture: *Texture) void {
-        const blend = ColorBlend.Alpha;
-
-        for (self.paths.items) |path| {
-            var start_merge_offset: u32 = 0;
-            const previous_path = if (path.index > 0) self.paths.items[path.index - 1] else null;
-            if (previous_path) |p| {
-                start_merge_offset = p.fill.merge_fragment.capacity;
-            }
-            const end_merge_offset = path.fill.merge_fragment.end;
-
-            const path_merge_fragments = self.merge_fragments.items[start_merge_offset..end_merge_offset];
-            for (path_merge_fragments) |fragment| {
-                const intensity = fragment.getIntensity();
-                const pixel = fragment.pixel;
-                if (pixel.x < 0 or pixel.y < 0) {
-                    continue;
-                }
-
-                const texture_pixel = PointU32{
-                    .x = @intCast(pixel.x),
-                    .y = @intCast(pixel.y),
-                };
-                const fragment_color = ColorF32{
-                    .r = 0.0,
-                    .g = 0.0,
-                    .b = 0.0,
-                    .a = intensity,
-                };
-                const texture_color = texture.getPixelUnsafe(texture_pixel);
-                const blend_color = blend.blend(fragment_color, texture_color);
-                texture.setPixelUnsafe(texture_pixel, blend_color);
-            }
-        }
-    }
-
-    pub fn debugPrint(self: @This(), texture: Texture) void {
-        std.debug.print("============ Path Monoids ============\n", .{});
-        for (self.path_monoids.items) |path_monoid| {
-            std.debug.print("{}\n", .{path_monoid});
-        }
-        std.debug.print("======================================\n", .{});
-
-        std.debug.print("============ Subpaths ============\n", .{});
-        for (self.subpaths.items, 0..) |subpath, index| {
-            std.debug.print("({}): {}\n", .{ index, subpath });
-        }
-        std.debug.print("==================================\n", .{});
-
-        std.debug.print("============ Path Segments ============\n", .{});
-        for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
-            switch (path_tag.segment.kind) {
-                .line_f32 => std.debug.print("LineF32: {}\n", .{
-                    self.encoding.getSegment(core.LineF32, path_monoid),
-                }),
-                .arc_f32 => std.debug.print("ArcF32: {}\n", .{
-                    self.encoding.getSegment(core.ArcF32, path_monoid),
-                }),
-                .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
-                }),
-                .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierF32, path_monoid),
-                }),
-                .line_i16 => std.debug.print("LineI16: {}\n", .{
-                    self.encoding.getSegment(core.LineI16, path_monoid),
-                }),
-                .arc_i16 => std.debug.print("ArcI16: {}\n", .{
-                    self.encoding.getSegment(core.ArcI16, path_monoid),
-                }),
-                .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
-                }),
-                .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierI16, path_monoid),
-                }),
-            }
-
-            const estimate = self.flat_segment_estimates.items[segment_index];
-            std.debug.print("Estimate: {}\n", .{estimate});
-            const offset = self.flat_segment_offsets.items[segment_index];
-            std.debug.print("Offset: {}\n", .{offset});
-            std.debug.print("----------\n", .{});
-        }
-        std.debug.print("======================================\n", .{});
-
-        {
-            std.debug.print("============ Flat Lines ============\n", .{});
-            var first_segment_offset: u32 = 0;
-            for (self.subpaths.items) |subpath| {
-                const last_segment_offset = subpath.last_segment_offset;
-                const first_path_monoid = self.path_monoids.items[first_segment_offset];
-                const segment_offsets = self.flat_segment_offsets.items[first_segment_offset..last_segment_offset];
-                var start_line_offset: u32 = 0;
-                const previous_segment_offsets = if (first_segment_offset > 0) self.flat_segment_offsets.items[first_segment_offset - 1] else null;
-                if (previous_segment_offsets) |so| {
-                    start_line_offset = so.fill.line.capacity;
-                }
-
-                std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
-                // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
-                for (segment_offsets) |offsets| {
-                    const end_line_offset = offsets.fill.line.capacity;
-                    const line_data = self.flat_segment_data.items[start_line_offset..end_line_offset];
-                    var line_iter = encoding_kernel.LineIterator{
-                        .segment_data = line_data,
-                    };
-
-                    while (line_iter.next()) |line| {
-                        std.debug.print("{}\n", .{line});
-                    }
-
-                    start_line_offset = offsets.fill.line.capacity;
-                }
-
-                first_segment_offset = subpath.last_segment_offset;
-            }
-            std.debug.print("====================================\n", .{});
-        }
-
-        {
-            std.debug.print("============ Grid Intersections ============\n", .{});
-            var start_segment_offset: u32 = 0;
-            for (self.subpaths.items) |subpath| {
-                const last_segment_offset = subpath.last_segment_offset;
-                const first_path_monoid = self.path_monoids.items[start_segment_offset];
-                const segment_offsets = self.flat_segment_offsets.items[start_segment_offset..last_segment_offset];
-                var start_intersection_offset: u32 = 0;
-                const previous_segment_offsets = if (start_segment_offset > 0) self.flat_segment_offsets.items[start_segment_offset - 1] else null;
-                if (previous_segment_offsets) |so| {
-                    start_intersection_offset = so.fill.intersection.capacity;
-                }
-
-                std.debug.print("--- Subpath({},{}) ---\n", .{
-                    first_path_monoid.path_index,
-                    first_path_monoid.subpath_index,
-                });
-                // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
-                for (segment_offsets) |offsets| {
-                    const end_intersection_offset = offsets.fill.intersection.capacity;
-                    const grid_intersections = self.grid_intersections.items[start_intersection_offset..end_intersection_offset];
-
-                    for (grid_intersections) |intersection| {
-                        std.debug.print("{}\n", .{intersection});
-                    }
-
-                    start_intersection_offset = offsets.fill.intersection.capacity;
-                }
-
-                start_segment_offset = subpath.last_segment_offset;
-            }
-            std.debug.print("===========================================\n", .{});
-        }
-
-        {
-            std.debug.print("============ Boundary Fragments ============\n", .{});
-            var start_boundary_offset: u32 = 0;
-            for (self.paths.items) |path| {
-                const end_boundary_offset = path.fill.boundary_fragment.end;
-                const boundary_fragments = self.boundary_fragments.items[start_boundary_offset..end_boundary_offset];
-
-                std.debug.print("--- Path({}) ---\n", .{
-                    path.index,
-                });
-                for (boundary_fragments) |boundary_fragment| {
-                    std.debug.print("Pixel({}), Intersection1({}), Intersection2({})\n", .{
-                        boundary_fragment.pixel,
-                        boundary_fragment.intersections[0],
-                        boundary_fragment.intersections[1],
-                    });
-                }
-
-                start_boundary_offset = path.fill.boundary_fragment.capacity;
-            }
-            std.debug.print("============================================\n", .{});
-        }
-
-        {
-            std.debug.print("============ Merge Fragments ============\n", .{});
-            var start_merge_offset: u32 = 0;
-            for (self.paths.items) |path| {
-                const end_merge_offset = path.fill.merge_fragment.end;
-                const merge_fragments = self.merge_fragments.items[start_merge_offset..end_merge_offset];
-
-                std.debug.print("--- Path({}) ---\n", .{
-                    path.index,
-                });
-                for (merge_fragments) |merge_fragment| {
-                    std.debug.print("Pixel({}), StencilMask({b:0>16})\n", .{ merge_fragment.pixel, merge_fragment.stencil_mask });
-                }
-
-                start_merge_offset = path.fill.merge_fragment.capacity;
-            }
-            std.debug.print("=======================================\n", .{});
-        }
-
-        {
-            std.debug.print("\n============== Boundary Texture\n\n", .{});
-            for (0..texture.dimensions.height) |y| {
-                std.debug.print("{:0>4}: ", .{y});
-                for (0..texture.dimensions.width) |x| {
-                    const pixel = texture.getPixelUnsafe(core.PointU32{
-                        .x = @intCast(x),
-                        .y = @intCast(y),
-                    });
-
-                    if (pixel.r < 1.0) {
-                        std.debug.print("#", .{});
-                    } else {
-                        std.debug.print(";", .{});
-                    }
-                }
-
-                std.debug.print("\n", .{});
-            }
-
-            std.debug.print("==============\n", .{});
-        }
+        return @sizeOf(PointF32) + self.lines * @sizeOf(PointF32);
     }
 };
 
-test "encoding path monoids" {
-    var encoder = Encoder.init(std.testing.allocator);
-    defer encoder.deinit();
+pub const OffsetRange = packed struct {
+    end: u32 = 0,
+    capacity: u32 = 0,
 
-    try encoder.encodeColor(ColorU8{
-        .r = 255,
-        .g = 255,
-        .b = 0,
-        .a = 255,
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .end = self.end + other.end,
+            .capacity = self.capacity + other.capacity,
+        };
+    }
+};
+
+pub const Offsets = packed struct {
+    line: OffsetRange = OffsetRange{},
+    intersection: OffsetRange = OffsetRange{},
+    boundary_fragment: OffsetRange = OffsetRange{},
+    merge_fragment: OffsetRange = OffsetRange{},
+
+    pub fn create(estimates: Estimates) @This() {
+        const line_offset = estimates.lineOffset();
+        return @This(){
+            .line = OffsetRange{
+                .end = line_offset,
+                .capacity = line_offset,
+            },
+            .intersection = OffsetRange{
+                .end = estimates.intersections,
+                .capacity = estimates.intersections,
+            },
+            .boundary_fragment = OffsetRange{
+                .end = estimates.boundary_fragments,
+                .capacity = estimates.boundary_fragments,
+            },
+            .merge_fragment = OffsetRange{
+                .end = estimates.merge_fragments,
+                .capacity = estimates.merge_fragments,
+            },
+        };
+    }
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .line = self.line.combine(other.line),
+            .intersection = self.intersection.combine(other.intersection),
+            .boundary_fragment = self.boundary_fragment.combine(other.boundary_fragment),
+            .merge_fragment = self.merge_fragment.combine(other.merge_fragment),
+        };
+    }
+};
+
+pub const SegmentEstimates = packed struct {
+    fill: Estimates = Estimates{},
+    front_stroke: Estimates = Estimates{},
+    back_stroke: Estimates = Estimates{},
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .fill = self.fill.combine(other.fill),
+            .front_stroke = self.front_stroke.combine(other.front_stroke),
+            .back_stroke = self.back_stroke.combine(other.back_stroke),
+        };
+    }
+};
+
+pub const SegmentOffsets = packed struct {
+    fill: Offsets = Offsets{},
+    front_stroke: Offsets = Offsets{},
+    back_stroke: Offsets = Offsets{},
+
+    pub usingnamespace MonoidFunctions(SegmentEstimates, @This());
+
+    pub fn createTag(estimates: SegmentEstimates) @This() {
+        return @This(){
+            .fill = Offsets.create(estimates.fill),
+            .front_stroke = Offsets.create(estimates.front_stroke),
+            .back_stroke = Offsets.create(estimates.back_stroke),
+        };
+    }
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .fill = self.fill.combine(other.fill),
+            .front_stroke = self.front_stroke.combine(other.front_stroke),
+            .back_stroke = self.back_stroke.combine(other.back_stroke),
+        };
+    }
+
+    // pub fn expandPaths(
+    //     path_tags: []const PathTag,
+    //     path_monoids: []const PathMonoid,
+    //     segment_offsets: []const SegmentOffsets,
+    //     paths: []Path,
+    //     subpaths: []Subpath,
+    // ) void {
+    //     for (path_tags, path_monoids, segment_offsets, 0..) |path_tag, path_monoid, offsets, segment_index| {
+    //         if (path_tag.index.path == 1) {
+    //             if (path_monoid.path_index > 0) {
+    //                 const path = &paths[path_monoid.path_index - 1];
+    //                 path.index = path_monoid.path_index - 1;
+    //                 path.fill.boundary_fragment = offsets.fill.boundary_fragment;
+    //                 path.fill.merge_fragment = offsets.fill.merge_fragment;
+    //                 path.front_stroke.boundary_fragment = offsets.front_stroke.boundary_fragment;
+    //                 path.front_stroke.merge_fragment = offsets.front_stroke.merge_fragment;
+    //                 path.back_stroke.boundary_fragment = offsets.back_stroke.boundary_fragment;
+    //                 path.back_stroke.merge_fragment = offsets.back_stroke.merge_fragment;
+    //             }
+    //         }
+
+    //         if (path_tag.index.subpath == 1) {
+    //             if (path_monoid.subpath_index > 0) {
+    //                 const subpath = &subpaths[path_monoid.subpath_index - 1];
+    //                 subpath.index = path_monoid.subpath_index - 1;
+    //                 subpath.last_segment_offset = @intCast(segment_index);
+    //             }
+    //         }
+    //     }
+
+    //     const last_path_monoid = path_monoids[segment_offsets.len - 1];
+    //     const last_offsets = segment_offsets[segment_offsets.len - 1];
+    //     const path = &paths[paths.len - 1];
+    //     const subpath = &subpaths[subpaths.len - 1];
+    //     path.index = last_path_monoid.path_index;
+    //     path.fill.boundary_fragment = last_offsets.fill.boundary_fragment;
+    //     path.fill.merge_fragment = last_offsets.fill.merge_fragment;
+    //     path.front_stroke.boundary_fragment = last_offsets.front_stroke.boundary_fragment;
+    //     path.front_stroke.merge_fragment = last_offsets.front_stroke.merge_fragment;
+    //     path.back_stroke.boundary_fragment = last_offsets.back_stroke.boundary_fragment;
+    //     path.back_stroke.merge_fragment = last_offsets.back_stroke.merge_fragment;
+    //     subpath.index = @intCast(last_path_monoid.subpath_index);
+    //     subpath.last_segment_offset = @intCast(path_monoids.len);
+    // }
+};
+
+pub const Masks = struct {
+    vertical_mask0: u16 = 0,
+    vertical_sign0: f32 = 0.0,
+    vertical_mask1: u16 = 0,
+    vertical_sign1: f32 = 0.0,
+    horizontal_mask: u16 = 0,
+    horizontal_sign: f32 = 0.0,
+
+    pub fn debugPrint(self: @This()) void {
+        std.debug.print("-----------\n", .{});
+        std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask0});
+        std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask1});
+        std.debug.print(" H: {b:0>16}\n", .{self.horizontal_mask});
+        std.debug.print("-----------\n", .{});
+    }
+};
+
+pub const BoundaryFragment = struct {
+    pub const MAIN_RAY: LineF32 = LineF32.create(PointF32{
+        .x = 0.0,
+        .y = 0.5,
+    }, PointF32{
+        .x = 1.0,
+        .y = 0.5,
     });
-    var style = Style{};
-    style.setFill(Style.Fill{
-        .brush = .color,
-    });
-    style.setStroke(Style.Stroke{});
-    try encoder.encodeStyle(style);
 
-    var path_encoder = encoder.pathEncoder(f32);
-    try path_encoder.moveTo(core.PointF32.create(10.0, 10.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(20.0, 20.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(40.0, 20.0));
-    //_ = try path_encoder.arcTo(core.PointF32.create(3.0, 3.0), core.PointF32.create(4.0, 2.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(10.0, 10.0));
-    try path_encoder.finish();
+    pixel: PointI32,
+    masks: Masks,
+    intersections: [2]IntersectionF32,
 
-    var path_encoder2 = encoder.pathEncoder(i16);
-    try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    _ = try path_encoder2.cubicTo(
-        core.PointI16.create(120, 120),
-        core.PointI16.create(70, 130),
-        core.PointI16.create(22, 22),
-    );
-    try path_encoder2.finish();
+    pub fn create(half_planes: HalfPlanesU16, grid_intersections: [2]*const GridIntersection) @This() {
+        const pixel = grid_intersections[0].pixel.min(grid_intersections[1].pixel);
 
-    var half_planes = try HalfPlanesU16.init(std.testing.allocator);
-    defer half_planes.deinit();
+        // can move diagonally, but cannot move by more than 1 pixel in both directions
+        std.debug.assert(@abs(pixel.sub(grid_intersections[0].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[0].pixel).y) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[1].pixel).x) <= 1);
+        std.debug.assert(@abs(pixel.sub(grid_intersections[1].pixel).y) <= 1);
 
-    const encoding = encoder.encode();
-    var rasterizer = CpuRasterizer.init(
-        std.testing.allocator,
-        half_planes,
-        encoding_kernel.KernelConfig.DEFAULT,
-        encoding,
-    );
-    defer rasterizer.deinit();
+        const intersections: [2]IntersectionF32 = [2]IntersectionF32{
+            IntersectionF32{
+                // retain t
+                .t = grid_intersections[0].intersection.t,
+                // float component of the intersection points, range [0.0, 1.0]
+                .point = PointF32{
+                    .x = std.math.clamp(@abs(grid_intersections[0].intersection.point.x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[0].intersection.point.y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
+                },
+            },
+            IntersectionF32{
+                // retain t
+                .t = grid_intersections[1].intersection.t,
+                // float component of the intersection points, range [0.0, 1.0]
+                .point = PointF32{
+                    .x = std.math.clamp(@abs(grid_intersections[1].intersection.point.x - @as(f32, @floatFromInt(pixel.x))), 0.0, 1.0),
+                    .y = std.math.clamp(@abs(grid_intersections[1].intersection.point.y - @as(f32, @floatFromInt(pixel.y))), 0.0, 1.0),
+                },
+            },
+        };
 
-    var texture = try Texture.init(std.testing.allocator, core.DimensionsU32{
-        .width = 50,
-        .height = 50,
-    }, texture_module.TextureFormat.RgbaU8);
-    defer texture.deinit();
-    texture.clear(Colors.WHITE);
+        std.debug.assert(intersections[0].point.x <= 1.0);
+        std.debug.assert(intersections[0].point.y <= 1.0);
+        std.debug.assert(intersections[1].point.x <= 1.0);
+        std.debug.assert(intersections[1].point.y <= 1.0);
+        return @This(){
+            .pixel = pixel,
+            .masks = calculateMasks(half_planes, intersections),
+            .intersections = intersections,
+        };
+    }
 
-    try rasterizer.rasterize(&texture);
+    pub fn calculateMasks(half_planes: HalfPlanesU16, intersections: [2]IntersectionF32) Masks {
+        var masks = Masks{};
+        if (intersections[0].point.x == 0.0 and intersections[1].point.x != 0.0) {
+            const vertical_mask = half_planes.getVerticalMask(intersections[0].point.y);
 
-    // rasterizer.debugPrint(texture);
-    // const path_monoids = rasterizer.path_monoids.items;
+            if (intersections[0].point.y < 0.5) {
+                masks.vertical_mask0 = ~vertical_mask;
+                masks.vertical_sign0 = -1;
+            } else if (intersections[0].point.y > 0.5) {
+                masks.vertical_mask0 = vertical_mask;
+                masks.vertical_sign0 = 1;
+            } else {
+                // need two masks and two signs...
+                masks.vertical_mask0 = vertical_mask; // > 0.5
+                masks.vertical_sign0 = 0.5;
+                masks.vertical_mask1 = ~vertical_mask; // < 0.5
+                masks.vertical_sign1 = -0.5;
+            }
+        } else if (intersections[1].point.x == 0.0 and intersections[0].point.x != 0.0) {
+            const vertical_mask = half_planes.getVerticalMask(intersections[1].point.y);
 
-    // try std.testing.expectEqualDeep(
-    //     core.LineF32.create(core.PointF32.create(1.0, 1.0), core.PointF32.create(2.0, 2.0)),
-    //     encoding.getSegment(core.LineF32, path_monoids[0]),
-    // );
-    // try std.testing.expectEqualDeep(
-    //     core.ArcF32.create(
-    //         core.PointF32.create(2.0, 2.0),
-    //         core.PointF32.create(3.0, 3.0),
-    //         core.PointF32.create(4.0, 2.0),
-    //     ),
-    //     encoding.getSegment(core.ArcF32, path_monoids[1]),
-    // );
-    // try std.testing.expectEqualDeep(
-    //     core.LineF32.create(core.PointF32.create(4.0, 2.0), core.PointF32.create(1.0, 1.0)),
-    //     encoding.getSegment(core.LineF32, path_monoids[2]),
-    // );
+            if (intersections[1].point.y < 0.5) {
+                masks.vertical_mask0 = ~vertical_mask;
+                masks.vertical_sign0 = 1;
+            } else if (intersections[1].point.y > 0.5) {
+                masks.vertical_mask0 = vertical_mask;
+                masks.vertical_sign0 = -1;
+            } else {
+                // need two masks and two signs...
+                masks.vertical_mask0 = vertical_mask; // > 0.5
+                masks.vertical_sign0 = -0.5;
+                masks.vertical_mask1 = ~vertical_mask; // < 0.5
+                masks.vertical_sign1 = 0.5;
+            }
+        }
 
-    // try std.testing.expectEqualDeep(
-    //     core.LineI16.create(core.PointI16.create(10, 10), core.PointI16.create(20, 20)),
-    //     encoding.getSegment(core.LineI16, path_monoids[3]),
-    // );
-}
+        if (intersections[0].point.y > intersections[1].point.y) {
+            // crossing top to bottom
+            masks.horizontal_sign = 1;
+        } else if (intersections[0].point.y < intersections[1].point.y) {
+            masks.horizontal_sign = -1;
+        }
+
+        if (intersections[0].t > intersections[1].t) {
+            masks.horizontal_sign *= -1;
+            masks.vertical_sign0 *= -1;
+            masks.vertical_sign1 *= -1;
+        }
+
+        masks.horizontal_mask = half_planes.getHorizontalMask(intersections[0].point, intersections[1].point);
+        return masks;
+    }
+
+    pub fn calculateMainRayWinding(self: @This()) f32 {
+        const line = LineF32.create(self.intersections[0].point, self.intersections[1].point);
+        if (line.intersectHorizontalLine(MAIN_RAY) != null) {
+            // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
+
+            var winding: f32 = 0.0;
+
+            if (self.intersections[0].point.y > self.intersections[1].point.y) {
+                winding = 1.0;
+            } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+                winding = -1.0;
+            }
+
+            if (self.intersections[0].point.y == 0.5 or self.intersections[1].point.y == 0.5) {
+                winding *= 0.5;
+            }
+
+            return winding;
+        }
+
+        return 0.0;
+    }
+};
+
+pub const MergeFragment = struct {
+    pixel: PointI32,
+    stencil_mask: u16 = 0,
+    boundary_offset: u32 = 0,
+
+    pub fn getIntensity(self: @This()) f32 {
+        return @as(f32, @floatFromInt(@popCount(self.stencil_mask))) / 16.0;
+    }
+};
+
+pub const GridIntersection = struct {
+    intersection: IntersectionF32,
+    pixel: PointI32,
+
+    pub fn create(intersection: IntersectionF32) @This() {
+        return @This(){
+            .intersection = intersection,
+            .pixel = PointI32{
+                .x = @intFromFloat(intersection.point.x),
+                .y = @intFromFloat(intersection.point.y),
+            },
+        };
+    }
+};
+
+pub const LineIterator = struct {
+    segment_data: []const u8,
+    offset: u32 = 0,
+
+    pub fn next(self: *@This()) ?LineF32 {
+        const end_offset = self.offset + @sizeOf(PointF32);
+        if (end_offset >= self.segment_data.len) {
+            return null;
+        }
+
+        const line = std.mem.bytesToValue(LineF32, self.segment_data[self.offset..end_offset]);
+        self.offset += @sizeOf(PointF32);
+        return line;
+    }
+};
