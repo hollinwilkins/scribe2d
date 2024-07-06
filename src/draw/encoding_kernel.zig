@@ -308,7 +308,7 @@ pub const BoundaryFragment = struct {
     masks: Masks,
     intersections: [2]IntersectionF32,
 
-    pub fn create(grid_intersections: [2]*const GridIntersection) @This() {
+    pub fn create(half_planes: HalfPlanesU16, grid_intersections: [2]*const GridIntersection) @This() {
         const pixel = grid_intersections[0].pixel.min(grid_intersections[1].pixel);
 
         // can move diagonally, but cannot move by more than 1 pixel in both directions
@@ -344,12 +344,12 @@ pub const BoundaryFragment = struct {
         std.debug.assert(intersections[1].point.y <= 1.0);
         return @This(){
             .pixel = pixel,
-            .masks = calculateMasks(intersections),
+            .masks = calculateMasks( half_planes, intersections),
             .intersections = intersections,
         };
     }
 
-    pub fn calculateMasks(intersections: [2]IntersectionF32, half_planes: *const HalfPlanesU16) Masks {
+    pub fn calculateMasks(half_planes: HalfPlanesU16, intersections: [2]IntersectionF32) Masks {
         var masks = Masks{};
         if (intersections[0].point.x == 0.0 and intersections[1].point.x != 0.0) {
             const vertical_mask = half_planes.getVerticalMask(intersections[0].point.y);
@@ -398,8 +398,7 @@ pub const BoundaryFragment = struct {
             masks.vertical_sign1 *= -1;
         }
 
-        const line = LineF32.create(intersections[0].point, intersections[1].point);
-        masks.horizontal_mask = half_planes.getHorizontalMask(line);
+        masks.horizontal_mask = half_planes.getHorizontalMask(intersections[0].point, intersections[1].point);
         return masks;
     }
 
@@ -430,7 +429,7 @@ pub const MergeFragment = struct {
     pixel: PointI32,
     main_ray_winding: f32 = 0.0,
     stencil_mask: u16 = 0,
-    boundary_offsets: RangeU32 = RangeU32{},
+    boundary_offset: u32 = 0,
 
     pub fn getIntensity(self: @This()) f32 {
         return @as(f32, @floatFromInt(@popCount(self.stencil_mask))) / 16.0;
@@ -1317,6 +1316,7 @@ pub const Rasterize = struct {
     }
 
     pub fn boundary(
+        half_planes: HalfPlanesU16,
         path_monoids: []const PathMonoid,
         paths: []const Path,
         subpaths: []const Subpath,
@@ -1329,6 +1329,7 @@ pub const Rasterize = struct {
         for (range.start..range.end) |segment_index| {
             boundarySegment(
                 @intCast(segment_index),
+                half_planes,
                 path_monoids,
                 paths,
                 subpaths,
@@ -1342,6 +1343,7 @@ pub const Rasterize = struct {
 
     pub fn boundarySegment(
         segment_index: u32,
+        half_planes: HalfPlanesU16,
         path_monoids: []const PathMonoid,
         paths: []const Path,
         subpaths: []const Subpath,
@@ -1409,7 +1411,13 @@ pub const Rasterize = struct {
 
             {
                 const boundary_fragment_index = path_bump.bump(1);
-                boundary_fragments[boundary_fragment_index] = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, &next_grid_intersection });
+                boundary_fragments[boundary_fragment_index] = BoundaryFragment.create(
+                    half_planes,
+                    [_]*const GridIntersection{
+                        grid_intersection,
+                        &next_grid_intersection,
+                    },
+                );
             }
         }
     }
@@ -1422,7 +1430,7 @@ pub const Rasterize = struct {
         merge_fragments: []MergeFragment,
     ) void {
         for (range.start..range.end) |path_index| {
-            mergeSegment(
+            mergePath(
                 @intCast(path_index),
                 paths,
                 boundary_fragments,
@@ -1432,7 +1440,7 @@ pub const Rasterize = struct {
         }
     }
 
-    pub fn mergeSegment(
+    pub fn mergePath(
         path_index: u32,
         paths: []const Path,
         boundary_fragments: []const BoundaryFragment,
@@ -1441,12 +1449,37 @@ pub const Rasterize = struct {
     ) void {
         const path = paths[path_index];
         var start_boundary_offset: u32 = 0;
+        var start_merge_offset: u32 = 0;
         const previous_path = if (path_index > 0) paths[path_index - 1] else null;
         if (previous_path) |p| {
             start_boundary_offset = p.fill.boundary_fragment.capacity;
+            start_merge_offset = p.fill.merge_fragment.capacity;
         }
-        const end_boundary_offset = path.fill.boundary_fragment.capacity;
+        const end_boundary_offset = path.fill.boundary_fragment.end;
+        const end_merge_offset = path.fill.merge_fragment.capacity;
+        const bump = BumpAllocator{
+            .start = start_merge_offset,
+            .end = end_merge_offset,
+            .offset = &path_bumps[path_index],
+        };
+        const path_boundary_fragments = boundary_fragments[start_boundary_offset..end_boundary_offset];
 
+        var merge_fragment = &merge_fragments[bump.bump(1)];
+        merge_fragment.* = MergeFragment{
+            .pixel = boundary_fragments[start_boundary_offset].pixel,
+        };
+        for (path_boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
+            if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
+                merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(boundary_fragment_index));
+
+                merge_fragment = &merge_fragments[bump.bump(1)];
+                merge_fragment.* = MergeFragment{
+                    .pixel = boundary_fragment.pixel,
+                };
+            }
+        }
+
+        merge_fragment.boundary_offset = end_boundary_offset;
     }
 
     pub fn Writer(comptime T: type) type {

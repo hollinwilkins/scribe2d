@@ -1,8 +1,10 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
+const msaa_module = @import("./msaa.zig");
 const encoding_kernel = @import("./encoding_kernel.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 const TransformF32 = core.TransformF32;
 const RangeU32 = core.RangeU32;
 const Point = core.Point;
@@ -721,6 +723,7 @@ pub const CpuRasterizer = struct {
     const OffsetList = std.ArrayListUnmanaged(u32);
 
     allocator: Allocator,
+    half_planes: HalfPlanesU16,
     config: KernelConfig,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
@@ -735,9 +738,15 @@ pub const CpuRasterizer = struct {
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
     merge_fragments: MergeFragmentList = MergeFragmentList{},
 
-    pub fn init(allocator: Allocator, config: KernelConfig, encoding: Encoding) @This() {
+    pub fn init(
+        allocator: Allocator,
+        half_planes: HalfPlanesU16,
+        config: KernelConfig,
+        encoding: Encoding,
+    ) @This() {
         return @This(){
             .allocator = allocator,
+            .half_planes = half_planes,
             .config = config,
             .encoding = encoding,
         };
@@ -890,6 +899,7 @@ pub const CpuRasterizer = struct {
         chunk_iter = range.chunkIterator(self.config.chunk_size);
         while (chunk_iter.next()) |chunk| {
             rasterizer.boundary(
+                self.half_planes,
                 self.path_monoids.items,
                 self.paths.items,
                 self.subpaths.items,
@@ -1108,9 +1118,13 @@ test "encoding path monoids" {
     );
     try path_encoder2.finish();
 
+    var half_planes = try HalfPlanesU16.init(std.testing.allocator);
+    defer half_planes.deinit();
+
     const encoding = encoder.encode();
     var rasterizer = CpuRasterizer.init(
         std.testing.allocator,
+        half_planes,
         encoding_kernel.KernelConfig.DEFAULT,
         encoding,
     );
