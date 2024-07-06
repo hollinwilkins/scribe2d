@@ -877,13 +877,15 @@ pub const CpuRasterizer = struct {
         }
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersection.capacity);
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_path.fill.boundary_fragment.capacity);
-        // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offsets.fill.intersections);
-        // _ = boundary_fragments;
-        // _ = merge_fragments;
+        const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_path.fill.merge_fragment.capacity);
 
         const range = RangeU32{
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
+        };
+        const path_range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.paths.items.len),
         };
 
         var chunk_iter = range.chunkIterator(self.config.chunk_size);
@@ -921,6 +923,27 @@ pub const CpuRasterizer = struct {
                 boundaryFragmentLessThan,
             );
             start_boundary_fragment = path.fill.boundary_fragment.capacity;
+        }
+
+        for (self.path_bumps.items) |*bump| {
+            bump.raw = 0;
+        }
+
+        chunk_iter = path_range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.merge(
+                self.paths.items,
+                self.boundary_fragments.items,
+                chunk,
+                self.path_bumps.items,
+                merge_fragments,
+            );
+        }
+
+        var start_merge_fragment: u32 = 0;
+        for (self.paths.items, path_bumps) |*path, bump| {
+            path.fill.merge_fragment.end = start_merge_fragment + bump.raw;
+            start_merge_fragment = path.fill.merge_fragment.capacity;
         }
     }
 

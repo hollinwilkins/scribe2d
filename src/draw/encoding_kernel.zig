@@ -1457,7 +1457,7 @@ pub const Rasterize = struct {
         }
         const end_boundary_offset = path.fill.boundary_fragment.end;
         const end_merge_offset = path.fill.merge_fragment.capacity;
-        const bump = BumpAllocator{
+        var bump = BumpAllocator{
             .start = start_merge_offset,
             .end = end_merge_offset,
             .offset = &path_bumps[path_index],
