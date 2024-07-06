@@ -899,8 +899,28 @@ pub const CpuRasterizer = struct {
         var start_boundary_fragment: u32 = 0;
         for (self.subpaths.items, subpath_bumps) |*subpath, bump| {
             subpath.fill.boundary_fragment.end = start_boundary_fragment + bump.raw;
+            std.mem.sort(
+                BoundaryFragment,
+                self.boundary_fragments.items[start_boundary_fragment..subpath.fill.boundary_fragment.end],
+                @as(u32, 0),
+                boundaryFragmentLessThan,
+            );
             start_boundary_fragment = subpath.fill.boundary_fragment.capacity;
         }
+    }
+
+    fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
+        if (left.pixel.y < right.pixel.y) {
+            return true;
+        } else if (left.pixel.y > right.pixel.y) {
+            return false;
+        } else if (left.pixel.x < right.pixel.x) {
+            return true;
+        } else if (left.pixel.x > right.pixel.x) {
+            return false;
+        }
+
+        return false;
     }
 
     pub fn debugPrint(self: @This()) void {
