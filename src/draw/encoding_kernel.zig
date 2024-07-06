@@ -344,7 +344,7 @@ pub const BoundaryFragment = struct {
         std.debug.assert(intersections[1].point.y <= 1.0);
         return @This(){
             .pixel = pixel,
-            .masks = calculateMasks( half_planes, intersections),
+            .masks = calculateMasks(half_planes, intersections),
             .intersections = intersections,
         };
     }
@@ -403,7 +403,8 @@ pub const BoundaryFragment = struct {
     }
 
     pub fn calculateMainRayWinding(self: @This()) f32 {
-        if (self.getLine().intersectHorizontalLine(MAIN_RAY) != null) {
+        const line = LineF32.create(self.intersections[0].point, self.intersections[1].point);
+        if (line.intersectHorizontalLine(MAIN_RAY) != null) {
             // curve fragment line cannot be horizontal, so intersection1.y != intersection2.y
 
             var winding: f32 = 0.0;
@@ -427,7 +428,6 @@ pub const BoundaryFragment = struct {
 
 pub const MergeFragment = struct {
     pixel: PointI32,
-    main_ray_winding: f32 = 0.0,
     stencil_mask: u16 = 0,
     boundary_offset: u32 = 0,
 
@@ -1480,6 +1480,90 @@ pub const Rasterize = struct {
         }
 
         merge_fragment.boundary_offset = end_boundary_offset;
+    }
+
+    pub fn mask(
+        config: KernelConfig,
+        paths: []const Path,
+        boundary_fragments: []const BoundaryFragment,
+        range: RangeU32,
+        merge_fragments: []MergeFragment,
+    ) void {
+        for (range.start..range.end) |path_index| {
+            const path = paths[path_index];
+            var start_merge_offset: u32 = 0;
+            const previous_path = if (path_index > 0) paths[path_index - 1] else null;
+            if (previous_path) |p| {
+                start_merge_offset = p.fill.merge_fragment.capacity;
+            }
+            const end_merge_offset = path.fill.merge_fragment.end;
+            const path_merge_fragments = merge_fragments[start_merge_offset..end_merge_offset];
+            const merge_range = RangeU32{
+                .start = 0,
+                .end = end_merge_offset - start_merge_offset,
+            };
+
+            var chunk_iter = merge_range.chunkIterator(config.chunk_size);
+
+            while (chunk_iter.next()) |chunk| {
+                maskPath(
+                    chunk,
+                    boundary_fragments,
+                    path_merge_fragments,
+                );
+            }
+        }
+    }
+
+    pub fn maskPath(
+        range: RangeU32,
+        boundary_fragments: []const BoundaryFragment,
+        merge_fragments: []MergeFragment,
+    ) void {
+        for (range.start..range.end) |merge_fragment_index| {
+            maskFragment(
+                @intCast(merge_fragment_index),
+                boundary_fragments,
+                merge_fragments,
+            );
+        }
+    }
+
+    pub fn maskFragment(
+        merge_fragment_index: u32,
+        boundary_fragments: []const BoundaryFragment,
+        merge_fragments: []MergeFragment,
+    ) void {
+        const merge_fragment = &merge_fragments[merge_fragment_index];
+        var start_boundary_fragment_offset: u32 = 0;
+        const previous_merge_fragment = if (merge_fragment_index > 0) merge_fragments[merge_fragment_index - 1] else null;
+        if (previous_merge_fragment) |f| {
+            start_boundary_fragment_offset = f.boundary_offset;
+        }
+        const end_boundary_fragment_offset = merge_fragment.boundary_offset;
+        const merge_boundary_fragments = boundary_fragments[start_boundary_fragment_offset..end_boundary_fragment_offset];
+
+        // calculate main ray winding
+        var main_ray_winding: f32 = 0.0;
+        for (merge_boundary_fragments) |boundary_fragment| {
+            main_ray_winding += boundary_fragment.calculateMainRayWinding();
+        }
+
+        // calculate stencil mask
+        for (0..16) |index| {
+            const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+            var bit_winding: f32 = main_ray_winding;
+
+            for (merge_boundary_fragments) |boundary_fragment| {
+                const masks = boundary_fragment.masks;
+                const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
+                const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
+                const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
+                bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
+            }
+
+            merge_fragment.stencil_mask = merge_fragment.stencil_mask | (@as(u16, @intFromBool(bit_winding != 0.0)) * bit_index);
+        }
     }
 
     pub fn Writer(comptime T: type) type {

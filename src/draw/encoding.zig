@@ -945,6 +945,17 @@ pub const CpuRasterizer = struct {
             path.fill.merge_fragment.end = start_merge_fragment + bump.raw;
             start_merge_fragment = path.fill.merge_fragment.capacity;
         }
+
+        chunk_iter = path_range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.mask(
+                self.config,
+                self.paths.items,
+                self.boundary_fragments.items,
+                chunk,
+                self.merge_fragments.items,
+            );
+        }
     }
 
     fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
