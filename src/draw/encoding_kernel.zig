@@ -10,6 +10,7 @@ const PathMonoid = encoding_module.PathMonoid;
 const SegmentData = encoding_module.SegmentData;
 const Style = encoding_module.Style;
 const MonoidFunctions = encoding_module.MonoidFunctions;
+const Path = encoding_module.Path;
 const Subpath = encoding_module.Subpath;
 const BumpAllocator = encoding_module.BumpAllocator;
 const TransformF32 = core.TransformF32;
@@ -226,36 +227,49 @@ pub const SegmentOffsets = packed struct {
         };
     }
 
-    pub fn expandSubpaths(
+    pub fn expandPaths(
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         segment_offsets: []const SegmentOffsets,
+        paths: []Path,
         subpaths: []Subpath,
     ) void {
         for (path_tags, path_monoids, segment_offsets, 0..) |path_tag, path_monoid, offsets, segment_index| {
+            if (path_tag.index.path == 1) {
+                if (path_monoid.path_index > 0) {
+                    const path = &paths[path_monoid.path_index - 1];
+                    path.index = path_monoid.path_index - 1;
+                    path.fill.boundary_fragment = offsets.fill.boundary_fragment;
+                    path.fill.merge_fragment = offsets.fill.merge_fragment;
+                    path.front_stroke.boundary_fragment = offsets.front_stroke.boundary_fragment;
+                    path.front_stroke.merge_fragment = offsets.front_stroke.merge_fragment;
+                    path.back_stroke.boundary_fragment = offsets.back_stroke.boundary_fragment;
+                    path.back_stroke.merge_fragment = offsets.back_stroke.merge_fragment;
+                }
+            }
+
             if (path_tag.index.subpath == 1) {
                 if (path_monoid.subpath_index > 0) {
                     const subpath = &subpaths[path_monoid.subpath_index - 1];
+                    subpath.index = path_monoid.subpath_index - 1;
                     subpath.last_segment_offset = @intCast(segment_index);
-                    subpath.fill.boundary_fragment = offsets.fill.boundary_fragment;
-                    subpath.fill.merge_fragment = offsets.fill.merge_fragment;
-                    subpath.front_stroke.boundary_fragment = offsets.front_stroke.boundary_fragment;
-                    subpath.front_stroke.merge_fragment = offsets.front_stroke.merge_fragment;
-                    subpath.back_stroke.boundary_fragment = offsets.back_stroke.boundary_fragment;
-                    subpath.back_stroke.merge_fragment = offsets.back_stroke.merge_fragment;
                 }
             }
         }
 
+        const last_path_monoid = path_monoids[segment_offsets.len - 1];
         const last_offsets = segment_offsets[segment_offsets.len - 1];
+        const path = &paths[paths.len - 1];
         const subpath = &subpaths[subpaths.len - 1];
+        path.index = last_path_monoid.path_index;
+        path.fill.boundary_fragment = last_offsets.fill.boundary_fragment;
+        path.fill.merge_fragment = last_offsets.fill.merge_fragment;
+        path.front_stroke.boundary_fragment = last_offsets.front_stroke.boundary_fragment;
+        path.front_stroke.merge_fragment = last_offsets.front_stroke.merge_fragment;
+        path.back_stroke.boundary_fragment = last_offsets.back_stroke.boundary_fragment;
+        path.back_stroke.merge_fragment = last_offsets.back_stroke.merge_fragment;
+        subpath.index = @intCast(last_path_monoid.subpath_index);
         subpath.last_segment_offset = @intCast(path_monoids.len);
-        subpath.fill.boundary_fragment = last_offsets.fill.boundary_fragment;
-        subpath.fill.merge_fragment = last_offsets.fill.merge_fragment;
-        subpath.front_stroke.boundary_fragment = last_offsets.front_stroke.boundary_fragment;
-        subpath.front_stroke.merge_fragment = last_offsets.front_stroke.merge_fragment;
-        subpath.back_stroke.boundary_fragment = last_offsets.back_stroke.boundary_fragment;
-        subpath.back_stroke.merge_fragment = last_offsets.back_stroke.merge_fragment;
     }
 };
 
@@ -1306,21 +1320,23 @@ pub const Rasterize = struct {
 
     pub fn boundary(
         path_monoids: []const PathMonoid,
+        paths: []const Path,
         subpaths: []const Subpath,
         grid_intersections: []const GridIntersection,
         flat_segment_offsets: []const SegmentOffsets,
         range: RangeU32,
-        subpath_bumps: []std.atomic.Value(u32),
+        path_bumps: []std.atomic.Value(u32),
         boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |segment_index| {
             boundarySegment(
                 @intCast(segment_index),
                 path_monoids,
+                paths,
                 subpaths,
                 grid_intersections,
                 flat_segment_offsets,
-                subpath_bumps,
+                path_bumps,
                 boundary_fragments,
             );
         }
@@ -1329,23 +1345,29 @@ pub const Rasterize = struct {
     pub fn boundarySegment(
         segment_index: u32,
         path_monoids: []const PathMonoid,
+        paths: []const Path,
         subpaths: []const Subpath,
         grid_intersections: []const GridIntersection,
         flat_segment_offsets: []const SegmentOffsets,
-        subpath_bumps: []std.atomic.Value(u32),
+        path_bumps: []std.atomic.Value(u32),
         boundary_fragments: []BoundaryFragment,
     ) void {
         const path_monoid = path_monoids[segment_index];
+        const path = paths[path_monoid.path_index];
         const subpath = subpaths[path_monoid.subpath_index];
-        std.debug.print("SUUUU: {}\n", .{subpath.last_segment_offset});
-        const previous_subpath = if (path_monoid.subpath_index > 0) subpaths[path_monoid.subpath_index - 1] else null;
+
         var start_boundary_offset: u32 = 0;
+        const previous_path = if (path_monoid.path_index > 0) paths[path_monoid.path_index - 1] else null;
+        if (previous_path) |p| {
+            start_boundary_offset = p.fill.boundary_fragment.capacity;
+        }
+        const end_boundary_offset = path.fill.boundary_fragment.capacity;
+
+        const previous_subpath = if (path_monoid.subpath_index > 0) subpaths[path_monoid.subpath_index - 1] else null;
         var start_segment_offset: u32 = 0;
         if (previous_subpath) |s| {
-            start_boundary_offset = s.fill.boundary_fragment.capacity;
             start_segment_offset = s.last_segment_offset;
         }
-        const end_boundary_offset = subpath.fill.boundary_fragment.capacity;
         const end_segment_offset = subpath.last_segment_offset;
         const previous_segment_offsets = if (segment_index > 0) flat_segment_offsets[segment_index - 1] else null;
         var start_intersection_offset: u32 = 0;
@@ -1353,10 +1375,11 @@ pub const Rasterize = struct {
             start_intersection_offset = so.fill.intersection.capacity;
         }
         const end_intersection_offset = flat_segment_offsets[segment_index].fill.intersection.end;
-        var subpath_bump = BumpAllocator{
+
+        var path_bump = BumpAllocator{
             .start = start_boundary_offset,
             .end = end_boundary_offset,
-            .offset = &subpath_bumps[path_monoid.subpath_index],
+            .offset = &path_bumps[path_monoid.path_index],
         };
         const segment_grid_intersections = grid_intersections[start_intersection_offset..end_intersection_offset];
 
@@ -1387,7 +1410,7 @@ pub const Rasterize = struct {
             }
 
             {
-                const boundary_fragment_index = subpath_bump.bump(1);
+                const boundary_fragment_index = path_bump.bump(1);
                 boundary_fragments[boundary_fragment_index] = BoundaryFragment.create([_]*const GridIntersection{ grid_intersection, &next_grid_intersection });
             }
         }
@@ -1399,7 +1422,6 @@ pub const Rasterize = struct {
     //     boundary_fragments: []const BoundaryFragment,
     //     range: RangeU32,
     //     subpath_bumps: []std.atomic.Value(u32),
-    //     flat_segment_offsets: []SegmentOffsets,
     //     merge_fragments: []MergeFragment,
     // ) void {
     //     for (range.start..range.end) |segment_index| {
@@ -1409,7 +1431,6 @@ pub const Rasterize = struct {
     //             subpaths,
     //             grid_intersections,
     //             subpath_bumps,
-    //             flat_segment_offsets,
     //             boundary_fragments,
     //         );
     //     }
@@ -1418,8 +1439,7 @@ pub const Rasterize = struct {
     // pub fn mergeSegment(
     //     path_monoids: []const PathMonoid,
     //     subpaths: []const Subpath,
-    //     grid_intersections: []const GridIntersection,
-    //     range: RangeU32,
+    //     boundary_fragments: []const BoundaryFragment,
     //     subpath_bumps: []std.atomic.Value(u32),
     //     flat_segment_offsets: []SegmentOffsets,
     //     boundary_fragments: []BoundaryFragment,
