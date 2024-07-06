@@ -5,26 +5,34 @@ const Allocator = mem.Allocator;
 const DimensionsU32 = core.DimensionsU32;
 const PointU32 = core.PointU32;
 
-pub const Color = extern struct {
-    pub const BLACK: Color = Color{.r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0};
-    pub const RED: Color = Color{.r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0};
-    pub const GREEN: Color = Color{.r = 0.0, .g = 1.0, .b = 0.0, .a = 1.0};
-    pub const BLUE: Color = Color{.r = 0.0, .g = 0.0, .b = 1.0, .a = 1.0};
-
-    r: f32 = 0.0,
-    g: f32 = 0.0,
-    b: f32 = 0.0,
-    a: f32 = 0.0,
-
-    pub fn lerp(self: @This(), other: @This(), t: f32) @This() {
-        return @This(){
-            .r = self.r + (other.r - self.r) * t,
-            .g = self.r + (other.g - self.g) * t,
-            .b = self.r + (other.b - self.b) * t,
-            .a = self.r + (other.a - self.a) * t,
-        };
-    }
+pub const Colors = struct {
+    pub const WHITE: ColorF32 = ColorF32{ .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 };
+    pub const BLACK: ColorF32 = ColorF32{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 };
+    pub const RED: ColorF32 = ColorF32{ .r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0 };
+    pub const GREEN: ColorF32 = ColorF32{ .r = 0.0, .g = 1.0, .b = 0.0, .a = 1.0 };
+    pub const BLUE: ColorF32 = ColorF32{ .r = 0.0, .g = 0.0, .b = 1.0, .a = 1.0 };
 };
+
+pub fn Color(comptime T: type) type {
+    return struct {
+        r: T = 0,
+        g: T = 0,
+        b: T = 0,
+        a: T = 0,
+
+        pub fn lerp(self: @This(), other: @This(), t: f32) @This() {
+            return @This(){
+                .r = self.r + (other.r - self.r) * t,
+                .g = self.r + (other.g - self.g) * t,
+                .b = self.r + (other.b - self.b) * t,
+                .a = self.r + (other.a - self.a) * t,
+            };
+        }
+    };
+}
+
+pub const ColorF32 = Color(f32);
+pub const ColorU8 = Color(u8);
 
 pub const ColorFormat = enum(u8) {
     rgba,
@@ -38,17 +46,17 @@ pub const ColorCodec = struct {
     ctx: *const anyopaque,
     vtable: *const VTable,
 
-    pub fn toRgba(self: *const @This(), color: Color) Color {
+    pub fn toRgba(self: *const @This(), color: ColorF32) ColorF32 {
         return self.vtable.toRgba(self.ctx, color);
     }
 
-    pub fn fromRgba(self: *const @This(), color: Color) Color {
+    pub fn fromRgba(self: *const @This(), color: ColorF32) ColorF32 {
         return self.vtable.fromRgba(self.ctx, color);
     }
 
     pub const VTable = struct {
-        toRgba: *const fn (ctx: *const anyopaque, color: Color) Color,
-        fromRgba: *const fn (ctx: *const anyopaque, color: Color) Color,
+        toRgba: *const fn (ctx: *const anyopaque, color: ColorF32) ColorF32,
+        fromRgba: *const fn (ctx: *const anyopaque, color: ColorF32) ColorF32,
     };
 };
 
@@ -59,27 +67,27 @@ pub const RgbaColorCodec = struct {
         .toRgba = ColorCodecFunctions.toRgba,
     };
 
-    pub fn toRgba(color: Color) Color {
+    pub fn toRgba(color: ColorF32) ColorF32 {
         return color;
     }
 
-    pub fn fromRgba(color: Color) Color {
+    pub fn fromRgba(color: ColorF32) ColorF32 {
         return color;
     }
 
     pub fn colorCodec(self: *const @This()) ColorCodec {
-        return ColorCodec {
+        return ColorCodec{
             .ctx = @ptrCast(self),
             .vtable = ColorCodecVTable,
         };
     }
 
     const ColorCodecFunctions = struct {
-        pub fn toRgba(_: *const anyopaque, color: Color) Color {
+        pub fn toRgba(_: *const anyopaque, color: ColorF32) ColorF32 {
             return color;
         }
 
-        pub fn fromRgba(_: *const anyopaque, color: Color) Color {
+        pub fn fromRgba(_: *const anyopaque, color: ColorF32) ColorF32 {
             return color;
         }
     };
@@ -104,7 +112,7 @@ pub const SrgbaColorCodec = struct {
         };
     }
 
-    pub fn toRgba(self: *const @This(), color: Color) Color {
+    pub fn toRgba(self: *const @This(), color: ColorF32) ColorF32 {
         return Color{
             .r = self.toLinear(color.r),
             .g = self.toLinear(color.g),
@@ -113,7 +121,7 @@ pub const SrgbaColorCodec = struct {
         };
     }
 
-    pub fn fromRgba(self: *const @This(), color: Color) Color {
+    pub fn fromRgba(self: *const @This(), color: ColorF32) ColorF32 {
         return Color{
             .r = self.fromLinear(color.r),
             .g = self.fromLinear(color.g),
@@ -138,12 +146,12 @@ pub const SrgbaColorCodec = struct {
     }
 
     const ColorCodecFunctions = struct {
-        pub fn toRgba(ctx: *const anyopaque, color: Color) Color {
+        pub fn toRgba(ctx: *const anyopaque, color: ColorF32) ColorF32 {
             const cc: *const SrgbaColorCodec = @ptrCast(@alignCast(ctx));
             return cc.toRgba(color);
         }
 
-        pub fn fromRgba(ctx: *const anyopaque, color: Color) Color {
+        pub fn fromRgba(ctx: *const anyopaque, color: ColorF32) ColorF32 {
             const cc: *const SrgbaColorCodec = @ptrCast(@alignCast(ctx));
             return cc.fromRgba(color);
         }
@@ -157,19 +165,18 @@ pub const TextureCodec = struct {
     ctx: *const anyopaque,
     vtable: *const VTable,
 
-    pub fn write(self: *const @This(), color: Color, bytes: []u8) void {
+    pub fn write(self: *const @This(), color: ColorF32, bytes: []u8) void {
         self.vtable.write(self.ctx, color, bytes);
     }
 
-    pub fn read(self: *const @This(), bytes: []const u8) Color {
+    pub fn read(self: *const @This(), bytes: []const u8) ColorF32 {
         return self.vtable.read(self.ctx, bytes);
     }
 
     pub const VTable = struct {
-        write: *const fn (ctx: *const anyopaque, color: Color, bytes: []u8) void,
-        read: *const fn (ctx: *const anyopaque, bytes: []const u8) Color,
+        write: *const fn (ctx: *const anyopaque, color: ColorF32, bytes: []u8) void,
+        read: *const fn (ctx: *const anyopaque, bytes: []const u8) ColorF32,
     };
-
 };
 
 pub const RgbaU8TextureCodec = struct {
@@ -180,7 +187,7 @@ pub const RgbaU8TextureCodec = struct {
         .write = TextureCodecFunctions.write,
     };
 
-    pub fn write(color: Color, bytes: []u8) void {
+    pub fn write(color: ColorF32, bytes: []u8) void {
         std.debug.assert(bytes.len == COLOR_BYTES);
 
         bytes[0] = @intFromFloat(color.r * @as(f32, @floatFromInt(std.math.maxInt(u8))));
@@ -189,10 +196,10 @@ pub const RgbaU8TextureCodec = struct {
         bytes[3] = @intFromFloat(color.a * @as(f32, @floatFromInt(std.math.maxInt(u8))));
     }
 
-    pub fn read(bytes: []const u8) Color {
+    pub fn read(bytes: []const u8) ColorF32 {
         std.debug.assert(bytes.len == COLOR_BYTES);
 
-        return Color {
+        return ColorF32{
             .r = @as(f32, @floatFromInt(bytes[0])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
             .g = @as(f32, @floatFromInt(bytes[1])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
             .b = @as(f32, @floatFromInt(bytes[2])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
@@ -208,11 +215,11 @@ pub const RgbaU8TextureCodec = struct {
     }
 
     const TextureCodecFunctions = struct {
-        fn write(_: *const anyopaque, color: Color, bytes: []u8) void {
+        fn write(_: *const anyopaque, color: ColorF32, bytes: []u8) void {
             RgbaU8TextureCodec.write(color, bytes);
         }
 
-        fn read(_: *const anyopaque, bytes: []const u8) Color {
+        fn read(_: *const anyopaque, bytes: []const u8) ColorF32 {
             return RgbaU8TextureCodec.read(bytes);
         }
     };
@@ -226,7 +233,7 @@ pub const RgbU8TextureCodec = struct {
         .write = TextureCodecFunctions.write,
     };
 
-    pub fn write(color: Color, bytes: []u8) void {
+    pub fn write(color: ColorF32, bytes: []u8) void {
         std.debug.assert(bytes.len == COLOR_BYTES);
 
         bytes[0] = @intFromFloat(color.r * @as(f32, @floatFromInt(std.math.maxInt(u8))));
@@ -234,10 +241,10 @@ pub const RgbU8TextureCodec = struct {
         bytes[2] = @intFromFloat(color.b * @as(f32, @floatFromInt(std.math.maxInt(u8))));
     }
 
-    pub fn read(bytes: []const u8) Color {
+    pub fn read(bytes: []const u8) ColorF32 {
         std.debug.assert(bytes.len == COLOR_BYTES);
 
-        return Color {
+        return ColorF32{
             .r = @as(f32, @floatFromInt(bytes[0])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
             .g = @as(f32, @floatFromInt(bytes[1])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
             .b = @as(f32, @floatFromInt(bytes[2])) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
@@ -253,11 +260,11 @@ pub const RgbU8TextureCodec = struct {
     }
 
     const TextureCodecFunctions = struct {
-        fn write(_: *const anyopaque, color: Color, bytes: []u8) void {
+        fn write(_: *const anyopaque, color: ColorF32, bytes: []u8) void {
             RgbU8TextureCodec.write(color, bytes);
         }
 
-        fn read(_: *const anyopaque, bytes: []const u8) Color {
+        fn read(_: *const anyopaque, bytes: []const u8) ColorF32 {
             return RgbU8TextureCodec.read(bytes);
         }
     };
@@ -270,12 +277,12 @@ pub const ColorBlend = struct {
     ctx: *const anyopaque,
     vtable: *const VTable,
 
-    pub fn blend(self: ColorBlend, color1: Color, color2: Color) Color {
+    pub fn blend(self: ColorBlend, color1: ColorF32, color2: ColorF32) ColorF32 {
         return self.vtable.blend(self.ctx, color1, color2);
     }
 
     pub const VTable = struct {
-        blend: *const fn (ctx: *const anyopaque, color1: Color, color2: Color) Color,
+        blend: *const fn (ctx: *const anyopaque, color1: ColorF32, color2: ColorF32) ColorF32,
     };
 };
 
@@ -285,7 +292,7 @@ pub const ReplaceColorBlend = struct {
         .blend = ColorBlendFunctions.blend,
     };
 
-    pub fn blend(color1: Color, _: Color) Color {
+    pub fn blend(color1: ColorF32, _: ColorF32) ColorF32 {
         return color1;
     }
 
@@ -297,7 +304,7 @@ pub const ReplaceColorBlend = struct {
     }
 
     const ColorBlendFunctions = struct {
-        fn blend(_: *const anyopaque, color1: Color, color2: Color) Color {
+        fn blend(_: *const anyopaque, color1: ColorF32, color2: ColorF32) ColorF32 {
             return ReplaceColorBlend.blend(color1, color2);
         }
     };
@@ -309,13 +316,13 @@ pub const AlphaColorBlend = struct {
         .blend = ColorBlendFunctions.blend,
     };
 
-    pub fn blend(color1: Color, color2: Color) Color {
+    pub fn blend(color1: ColorF32, color2: ColorF32) ColorF32 {
         const alpha = (1.0 - color1.a) * color2.a + color1.a;
         const r = ((1.0 - color1.a) * color2.a * color2.r + color1.a * color1.r) / alpha;
         const g = ((1.0 - color1.a) * color2.a * color2.g + color1.a * color1.g) / alpha;
         const b = ((1.0 - color1.a) * color2.a * color2.b + color1.a * color1.b) / alpha;
 
-        return Color{
+        return ColorF32{
             .r = r,
             .g = g,
             .b = b,
@@ -331,29 +338,29 @@ pub const AlphaColorBlend = struct {
     }
 
     const ColorBlendFunctions = struct {
-        fn blend(_: *const anyopaque, color1: Color, color2: Color) Color {
+        fn blend(_: *const anyopaque, color1: ColorF32, color2: ColorF32) ColorF32 {
             return AlphaColorBlend.blend(color1, color2);
         }
     };
 };
 
 pub const TextureFormat = struct {
-    pub const RgbU8: *const @This() = &@This() {
+    pub const RgbU8: *const @This() = &@This(){
         .color_bytes = 3,
         .codec = TextureCodec.RgbU8,
         .color_codec = ColorCodec.Rgba,
     };
-    pub const SrgbU8: *const @This() = &@This() {
+    pub const SrgbU8: *const @This() = &@This(){
         .color_bytes = 3,
         .codec = TextureCodec.RgbU8,
         .color_codec = ColorCodec.Srgba,
     };
-    pub const RgbaU8: *const @This() = &@This() {
+    pub const RgbaU8: *const @This() = &@This(){
         .color_bytes = 4,
         .codec = TextureCodec.RgbaU8,
         .color_codec = ColorCodec.Rgba,
     };
-    pub const SrgbaU8: *const @This() = &@This() {
+    pub const SrgbaU8: *const @This() = &@This(){
         .color_bytes = 4,
         .codec = TextureCodec.RgbaU8,
         .color_codec = ColorCodec.Srgba,
@@ -363,12 +370,12 @@ pub const TextureFormat = struct {
     codec: TextureCodec,
     color_codec: ColorCodec,
 
-    pub fn write(self: @This(), color: Color, bytes: []u8) void {
+    pub fn write(self: @This(), color: ColorF32, bytes: []u8) void {
         const rgba_color = self.color_codec.toRgba(color);
         self.codec.write(rgba_color, bytes);
     }
 
-    pub fn read(self: @This(), bytes: []const u8) Color {
+    pub fn read(self: @This(), bytes: []const u8) ColorF32 {
         const color = self.codec.read(bytes);
         return self.color_codec.fromRgba(color);
     }
@@ -381,7 +388,7 @@ pub const Texture = struct {
     bytes: []u8,
 
     pub fn init(allocator: Allocator, dimensions: DimensionsU32, format: *const TextureFormat) !@This() {
-        return @This() {
+        return @This(){
             .allocator = allocator,
             .dimensions = dimensions,
             .format = format,
@@ -401,7 +408,7 @@ pub const Texture = struct {
         };
     }
 
-    pub fn clear(self: *@This(), color: Color) void {
+    pub fn clear(self: *@This(), color: ColorF32) void {
         var unmanaged = self.toUnmanaged();
         unmanaged.clear(color);
     }
@@ -414,20 +421,20 @@ pub const Texture = struct {
         return self.bytes;
     }
 
-    pub fn getPixel(self: @This(), point: PointU32) ?Color {
+    pub fn getPixel(self: @This(), point: PointU32) ?ColorF32 {
         return self.toUnmanaged().getPixel(point);
     }
 
-    pub fn getPixelUnsafe(self: @This(), point: PointU32) Color {
+    pub fn getPixelUnsafe(self: @This(), point: PointU32) ColorF32 {
         return self.toUnmanaged().getPixelUnsafe(point);
     }
 
-    pub fn setPixel(self: *@This(), point: PointU32, color: Color) bool {
+    pub fn setPixel(self: *@This(), point: PointU32, color: ColorF32) bool {
         var unmanaged = self.toUnmanaged();
         return unmanaged.setPixel(point, color);
     }
 
-    pub fn setPixelUnsafe(self: *@This(), point: PointU32, color: Color) bool {
+    pub fn setPixelUnsafe(self: *@This(), point: PointU32, color: ColorF32) void {
         var unmanaged = self.toUnmanaged();
         return unmanaged.setPixelUnsafe(point, color);
     }
@@ -442,7 +449,7 @@ pub const TextureUnmanaged = struct {
         allocator.free(self.bytes);
     }
 
-    pub fn clear(self: *@This(), color: Color) void {
+    pub fn clear(self: *@This(), color: ColorF32) void {
         for (0..self.dimensions.height) |y| {
             for (0..self.dimensions.width) |x| {
                 const is_set = self.setPixel(PointU32{
@@ -462,7 +469,7 @@ pub const TextureUnmanaged = struct {
         return self.bytes;
     }
 
-    pub fn getPixel(self: @This(), point: PointU32) ?Color {
+    pub fn getPixel(self: @This(), point: PointU32) ?ColorF32 {
         if (point.x < self.dimensions.width and point.y < self.dimensions.height) {
             return self.getPixelUnsafe(point);
         }
@@ -470,12 +477,12 @@ pub const TextureUnmanaged = struct {
         return null;
     }
 
-    pub fn getPixelUnsafe(self: @This(), point: PointU32) Color {
+    pub fn getPixelUnsafe(self: @This(), point: PointU32) ColorF32 {
         const index = (point.x * self.format.color_bytes) + (self.dimensions.width * self.format.color_bytes * point.y);
-        return self.format.read(self.bytes[index..index + self.format.color_bytes]);
+        return self.format.read(self.bytes[index .. index + self.format.color_bytes]);
     }
 
-    pub fn setPixel(self: *@This(), point: PointU32, color: Color) bool {
+    pub fn setPixel(self: *@This(), point: PointU32, color: ColorF32) bool {
         if (point.x < self.dimensions.width and point.y < self.dimensions.height) {
             self.setPixelUnsafe(point, color);
             return true;
@@ -484,8 +491,8 @@ pub const TextureUnmanaged = struct {
         return false;
     }
 
-    pub fn setPixelUnsafe(self: *@This(), point: PointU32, color: Color) void {
+    pub fn setPixelUnsafe(self: *@This(), point: PointU32, color: ColorF32) void {
         const index = (point.x * self.format.color_bytes) + (self.dimensions.width * self.format.color_bytes * point.y);
-        self.format.write(color, self.bytes[index..index + self.format.color_bytes]);
+        self.format.write(color, self.bytes[index .. index + self.format.color_bytes]);
     }
 };

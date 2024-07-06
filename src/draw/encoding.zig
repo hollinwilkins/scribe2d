@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const msaa_module = @import("./msaa.zig");
+const texture_module = @import("./texture.zig");
 const encoding_kernel = @import("./encoding_kernel.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
@@ -13,6 +14,7 @@ const Arc = core.Arc;
 const QuadraticBezier = core.QuadraticBezier;
 const CubicBezier = core.CubicBezier;
 const PointF32 = core.PointF32;
+const PointU32 = core.PointU32;
 const PointI16 = core.PointI16;
 const LineF32 = core.LineF32;
 const LineI16 = core.LineI16;
@@ -22,6 +24,11 @@ const QuadraticBezierF32 = core.QuadraticBezierF32;
 const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
+const Texture = texture_module.Texture;
+const Colors = texture_module.Colors;
+const ColorF32 = texture_module.ColorF32;
+const ColorU8 = texture_module.ColorU8;
+const ColorBlend = texture_module.ColorBlend;
 const KernelConfig = encoding_kernel.KernelConfig;
 const SegmentEstimates = encoding_kernel.SegmentEstimates;
 const SegmentOffsets = encoding_kernel.SegmentOffsets;
@@ -79,18 +86,6 @@ pub const PathTag = packed struct {
         };
     }
 };
-
-pub fn Color(comptime T: type) type {
-    return struct {
-        r: T = 0,
-        g: T = 0,
-        b: T = 0,
-        a: T = 0,
-    };
-}
-
-pub const ColorF32 = Color(f32);
-pub const ColorU8 = Color(u8);
 
 pub const Style = packed struct {
     comptime {
@@ -780,7 +775,7 @@ pub const CpuRasterizer = struct {
         self.merge_fragments.items.len = 0;
     }
 
-    pub fn rasterize(self: *@This()) !void {
+    pub fn rasterize(self: *@This(), texture: *Texture) !void {
         // reset the rasterizer
         self.reset();
         // expand path monoids
@@ -792,6 +787,8 @@ pub const CpuRasterizer = struct {
         try self.flatten();
         // calculate scanline encoding
         try self.kernelRasterize();
+        // write scanline encoding to texture
+        self.flushTexture(texture);
     }
 
     fn expandPathMonoids(self: *@This()) !void {
@@ -972,7 +969,43 @@ pub const CpuRasterizer = struct {
         return false;
     }
 
-    pub fn debugPrint(self: @This()) void {
+    fn flushTexture(self: @This(), texture: *Texture) void {
+        const blend = ColorBlend.Alpha;
+
+        for (self.paths.items) |path| {
+            var start_merge_offset: u32 = 0;
+            const previous_path = if (path.index > 0) self.paths.items[path.index - 1] else null;
+            if (previous_path) |p| {
+                start_merge_offset = p.fill.merge_fragment.capacity;
+            }
+            const end_merge_offset = path.fill.merge_fragment.end;
+
+            const path_merge_fragments = self.merge_fragments.items[start_merge_offset..end_merge_offset];
+            for (path_merge_fragments) |fragment| {
+                const intensity = fragment.getIntensity();
+                const pixel = fragment.pixel;
+                if (pixel.x < 0 or pixel.y < 0) {
+                    continue;
+                }
+
+                const texture_pixel = PointU32{
+                    .x = @intCast(pixel.x),
+                    .y = @intCast(pixel.y),
+                };
+                const fragment_color = ColorF32{
+                    .r = 0.0,
+                    .g = 0.0,
+                    .b = 0.0,
+                    .a = intensity,
+                };
+                const texture_color = texture.getPixelUnsafe(texture_pixel);
+                const blend_color = blend.blend(fragment_color, texture_color);
+                texture.setPixelUnsafe(texture_pixel, blend_color);
+            }
+        }
+    }
+
+    pub fn debugPrint(self: @This(), texture: Texture) void {
         std.debug.print("============ Path Monoids ============\n", .{});
         for (self.path_monoids.items) |path_monoid| {
             std.debug.print("{}\n", .{path_monoid});
@@ -1112,6 +1145,48 @@ pub const CpuRasterizer = struct {
             }
             std.debug.print("============================================\n", .{});
         }
+
+        {
+            std.debug.print("============ Merge Fragments ============\n", .{});
+            var start_merge_offset: u32 = 0;
+            for (self.paths.items) |path| {
+                const end_merge_offset = path.fill.merge_fragment.end;
+                const merge_fragments = self.merge_fragments.items[start_merge_offset..end_merge_offset];
+
+                std.debug.print("--- Path({}) ---\n", .{
+                    path.index,
+                });
+                for (merge_fragments) |merge_fragment| {
+                    std.debug.print("Pixel({}), StencilMask({b:0>16})\n", .{ merge_fragment.pixel, merge_fragment.stencil_mask });
+                }
+
+                start_merge_offset = path.fill.merge_fragment.capacity;
+            }
+            std.debug.print("=======================================\n", .{});
+        }
+
+        {
+            std.debug.print("\n============== Boundary Texture\n\n", .{});
+            for (0..texture.dimensions.height) |y| {
+                std.debug.print("{:0>4}: ", .{y});
+                for (0..texture.dimensions.width) |x| {
+                    const pixel = texture.getPixelUnsafe(core.PointU32{
+                        .x = @intCast(x),
+                        .y = @intCast(y),
+                    });
+
+                    if (pixel.r < 1.0) {
+                        std.debug.print("#", .{});
+                    } else {
+                        std.debug.print(";", .{});
+                    }
+                }
+
+                std.debug.print("\n", .{});
+            }
+
+            std.debug.print("==============\n", .{});
+        }
     }
 };
 
@@ -1133,24 +1208,24 @@ test "encoding path monoids" {
     try encoder.encodeStyle(style);
 
     var path_encoder = encoder.pathEncoder(f32);
-    try path_encoder.moveTo(core.PointF32.create(1.0, 1.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(2.0, 2.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(4.0, 2.0));
+    try path_encoder.moveTo(core.PointF32.create(10.0, 10.0));
+    _ = try path_encoder.lineTo(core.PointF32.create(20.0, 20.0));
+    _ = try path_encoder.lineTo(core.PointF32.create(40.0, 20.0));
     //_ = try path_encoder.arcTo(core.PointF32.create(3.0, 3.0), core.PointF32.create(4.0, 2.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(1.0, 1.0));
+    _ = try path_encoder.lineTo(core.PointF32.create(10.0, 10.0));
     try path_encoder.finish();
 
-    var path_encoder2 = encoder.pathEncoder(i16);
-    try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    _ = try path_encoder2.cubicTo(
-        core.PointI16.create(120, 120),
-        core.PointI16.create(70, 130),
-        core.PointI16.create(22, 22),
-    );
-    try path_encoder2.finish();
+    // var path_encoder2 = encoder.pathEncoder(i16);
+    // try path_encoder2.moveTo(core.PointI16.create(10, 10));
+    // _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
+    // _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
+    // _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
+    // _ = try path_encoder2.cubicTo(
+    //     core.PointI16.create(120, 120),
+    //     core.PointI16.create(70, 130),
+    //     core.PointI16.create(22, 22),
+    // );
+    // try path_encoder2.finish();
 
     var half_planes = try HalfPlanesU16.init(std.testing.allocator);
     defer half_planes.deinit();
@@ -1164,9 +1239,16 @@ test "encoding path monoids" {
     );
     defer rasterizer.deinit();
 
-    try rasterizer.rasterize();
+    var texture = try Texture.init(std.testing.allocator, core.DimensionsU32{
+        .width = 50,
+        .height = 50,
+    }, texture_module.TextureFormat.RgbaU8);
+    defer texture.deinit();
+    texture.clear(Colors.WHITE);
 
-    rasterizer.debugPrint();
+    try rasterizer.rasterize(&texture);
+
+    rasterizer.debugPrint(texture);
     // const path_monoids = rasterizer.path_monoids.items;
 
     // try std.testing.expectEqualDeep(
