@@ -305,6 +305,7 @@ pub const BoundaryFragment = struct {
     });
 
     pixel: PointI32,
+    masks: Masks,
     intersections: [2]IntersectionF32,
 
     pub fn create(grid_intersections: [2]*const GridIntersection) @This() {
@@ -343,19 +344,20 @@ pub const BoundaryFragment = struct {
         std.debug.assert(intersections[1].point.y <= 1.0);
         return @This(){
             .pixel = pixel,
+            .masks = calculateMasks(intersections),
             .intersections = intersections,
         };
     }
 
-    pub fn calculateMasks(self: @This(), half_planes: *const HalfPlanesU16) Masks {
+    pub fn calculateMasks(intersections: [2]IntersectionF32, half_planes: *const HalfPlanesU16) Masks {
         var masks = Masks{};
-        if (self.intersections[0].point.x == 0.0 and self.intersections[1].point.x != 0.0) {
-            const vertical_mask = half_planes.getVerticalMask(self.intersections[0].point.y);
+        if (intersections[0].point.x == 0.0 and intersections[1].point.x != 0.0) {
+            const vertical_mask = half_planes.getVerticalMask(intersections[0].point.y);
 
-            if (self.intersections[0].point.y < 0.5) {
+            if (intersections[0].point.y < 0.5) {
                 masks.vertical_mask0 = ~vertical_mask;
                 masks.vertical_sign0 = -1;
-            } else if (self.intersections[0].point.y > 0.5) {
+            } else if (intersections[0].point.y > 0.5) {
                 masks.vertical_mask0 = vertical_mask;
                 masks.vertical_sign0 = 1;
             } else {
@@ -365,13 +367,13 @@ pub const BoundaryFragment = struct {
                 masks.vertical_mask1 = ~vertical_mask; // < 0.5
                 masks.vertical_sign1 = -0.5;
             }
-        } else if (self.intersections[1].point.x == 0.0 and self.intersections[0].point.x != 0.0) {
-            const vertical_mask = half_planes.getVerticalMask(self.intersections[1].point.y);
+        } else if (intersections[1].point.x == 0.0 and intersections[0].point.x != 0.0) {
+            const vertical_mask = half_planes.getVerticalMask(intersections[1].point.y);
 
-            if (self.intersections[1].point.y < 0.5) {
+            if (intersections[1].point.y < 0.5) {
                 masks.vertical_mask0 = ~vertical_mask;
                 masks.vertical_sign0 = 1;
-            } else if (self.intersections[1].point.y > 0.5) {
+            } else if (intersections[1].point.y > 0.5) {
                 masks.vertical_mask0 = vertical_mask;
                 masks.vertical_sign0 = -1;
             } else {
@@ -383,25 +385,22 @@ pub const BoundaryFragment = struct {
             }
         }
 
-        if (self.intersections[0].point.y > self.intersections[1].point.y) {
+        if (intersections[0].point.y > intersections[1].point.y) {
             // crossing top to bottom
             masks.horizontal_sign = 1;
-        } else if (self.intersections[0].point.y < self.intersections[1].point.y) {
+        } else if (intersections[0].point.y < intersections[1].point.y) {
             masks.horizontal_sign = -1;
         }
 
-        if (self.intersections[0].t > self.intersections[1].t) {
+        if (intersections[0].t > intersections[1].t) {
             masks.horizontal_sign *= -1;
             masks.vertical_sign0 *= -1;
             masks.vertical_sign1 *= -1;
         }
 
-        masks.horizontal_mask = half_planes.getHorizontalMask(self.getLine());
+        const line = LineF32.create(intersections[0].point, intersections[1].point);
+        masks.horizontal_mask = half_planes.getHorizontalMask(line);
         return masks;
-    }
-
-    pub fn getLine(self: @This()) LineF32 {
-        return LineF32.create(self.intersections[0].point, self.intersections[1].point);
     }
 
     pub fn calculateMainRayWinding(self: @This()) f32 {
@@ -430,7 +429,6 @@ pub const BoundaryFragment = struct {
 pub const MergeFragment = struct {
     pixel: PointI32,
     main_ray_winding: f32 = 0.0,
-    winding: [16]f32 = [_]f32{0.0} ** 16,
     stencil_mask: u16 = 0,
     boundary_offsets: RangeU32 = RangeU32{},
 
@@ -1416,36 +1414,40 @@ pub const Rasterize = struct {
         }
     }
 
-    // pub fn merge(
-    //     path_monoids: []const PathMonoid,
-    //     subpaths: []const Subpath,
-    //     boundary_fragments: []const BoundaryFragment,
-    //     range: RangeU32,
-    //     subpath_bumps: []std.atomic.Value(u32),
-    //     merge_fragments: []MergeFragment,
-    // ) void {
-    //     for (range.start..range.end) |segment_index| {
-    //         mergeSegment(
-    //             @intCast(segment_index),
-    //             path_monoids,
-    //             subpaths,
-    //             grid_intersections,
-    //             subpath_bumps,
-    //             boundary_fragments,
-    //         );
-    //     }
-    // }
+    pub fn merge(
+        paths: []const Path,
+        boundary_fragments: []const BoundaryFragment,
+        range: RangeU32,
+        path_bumps: []std.atomic.Value(u32),
+        merge_fragments: []MergeFragment,
+    ) void {
+        for (range.start..range.end) |path_index| {
+            mergeSegment(
+                @intCast(path_index),
+                paths,
+                boundary_fragments,
+                path_bumps,
+                merge_fragments,
+            );
+        }
+    }
 
-    // pub fn mergeSegment(
-    //     path_monoids: []const PathMonoid,
-    //     subpaths: []const Subpath,
-    //     boundary_fragments: []const BoundaryFragment,
-    //     subpath_bumps: []std.atomic.Value(u32),
-    //     flat_segment_offsets: []SegmentOffsets,
-    //     boundary_fragments: []BoundaryFragment,
-    // ) void {
+    pub fn mergeSegment(
+        path_index: u32,
+        paths: []const Path,
+        boundary_fragments: []const BoundaryFragment,
+        path_bumps: []std.atomic.Value(u32),
+        merge_fragments: []MergeFragment,
+    ) void {
+        const path = paths[path_index];
+        var start_boundary_offset: u32 = 0;
+        const previous_path = if (path_index > 0) paths[path_index - 1] else null;
+        if (previous_path) |p| {
+            start_boundary_offset = p.fill.boundary_fragment.capacity;
+        }
+        const end_boundary_offset = path.fill.boundary_fragment.capacity;
 
-    // }
+    }
 
     pub fn Writer(comptime T: type) type {
         return struct {
