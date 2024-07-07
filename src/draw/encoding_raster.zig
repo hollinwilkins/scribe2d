@@ -141,9 +141,8 @@ pub const CpuRasterizer = struct {
         const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
         const subpaths = try self.subpaths.addManyAsSlice(self.allocator, last_path_monoid.subpath_index + 1);
         const flat_paths = try self.flat_paths.addManyAsSlice(self.allocator, last_segment_offset.flat_path_offset);
-        const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, last_segment_offset.flat_subpath_offset);
+        // const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, last_segment_offset.flat_subpath_offset);
         const flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.flat_segment_offset);
-        _ = flat_subpaths;
         _ = flat_segments;
 
         // calculate Path objects
@@ -248,11 +247,30 @@ pub const CpuRasterizer = struct {
 
         //     if (style.isFill()) {
         //         const fill_flat_path = flat_paths[path.fill_flat_path_index];
-        //         const fill_subpath
+        //         const fill_flat_subpath = &flat_subpaths[fill_flat_path.start_flat_subpath_offset + subpath.subpath_index];
+        //         fill_flat_subpath.* = FlatSubpath{
+        //             .kind = .fill,
+        //         };
+        //         // fill_flat_subpath.back_flat_segment_offset = ???
         //     }
 
         //     if (style.isStroke()) {
         //         const stroke_flat_path = flat_paths[path.stroke_flat_path_index];
+        //         const stroke_flat_subpath = &flat_subpaths[stroke_flat_path.start_flat_subpath_offset + subpath.subpath_index];
+
+        //         const path_tag = self.encoding.path_tags[subpath.segment_index];
+        //         if (path_tag.segment.cap) {
+        //             stroke_flat_subpath.* = FlatSubpath{
+        //                 .kind = .stroke_capped,
+        //             };
+        //         } else {
+        //             stroke_flat_subpath.* = FlatSubpath{
+        //                 .kind = .stroke,
+        //             };
+        //         }
+
+        //         // stroke_flat_subpath.front_flat_segment_offset = ???
+        //         // stroke_flat_subpath.back_flat_segment_offset = ???
         //     }
         // }
     }
