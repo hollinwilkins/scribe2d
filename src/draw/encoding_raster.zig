@@ -141,7 +141,7 @@ pub const CpuRasterizer = struct {
         const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
         const subpaths = try self.subpaths.addManyAsSlice(self.allocator, last_path_monoid.subpath_index + 1);
         const flat_paths = try self.flat_paths.addManyAsSlice(self.allocator, last_segment_offset.flat_path_offset);
-        // const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, last_segment_offset.flat_subpath_offset);
+        const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, last_segment_offset.flat_subpath_offset);
         const flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.flat_segment_offset);
         _ = flat_segments;
 
@@ -175,13 +175,7 @@ pub const CpuRasterizer = struct {
                     path.stroke_flat_path_index = path.fill_flat_path_index + 1;
                 }
 
-                var start_subpath_offset: u32 = 0;
-                const previous_path_monoid = if (path_monoid.segment_index > 0) self.path_monoids.items[path_monoid.segment_index - 1] else null;
-                if (previous_path_monoid) |pm| {
-                    start_subpath_offset = pm.subpath_index;
-                }
-
-                path.subpath_offset = start_subpath_offset;
+                path.subpath_offset = path_monoid.subpath_index;
             }
         }
 
@@ -240,39 +234,39 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        // for (subpaths) |subpath| {
-        //     const path = paths[subpath.path_index];
-        //     const path_monoid = self.path_monoids.items[path.segment_index];
-        //     const style = self.encoding.styles[path_monoid.style_index];
+        for (subpaths) |subpath| {
+            const path = paths[subpath.path_index];
+            const path_monoid = self.path_monoids.items[path.segment_index];
+            const style = self.encoding.styles[path_monoid.style_index];
 
-        //     if (style.isFill()) {
-        //         const fill_flat_path = flat_paths[path.fill_flat_path_index];
-        //         const fill_flat_subpath = &flat_subpaths[fill_flat_path.start_flat_subpath_offset + subpath.subpath_index];
-        //         fill_flat_subpath.* = FlatSubpath{
-        //             .kind = .fill,
-        //         };
-        //         // fill_flat_subpath.back_flat_segment_offset = ???
-        //     }
+            if (style.isFill()) {
+                const fill_flat_path = flat_paths[path.fill_flat_path_index];
+                const fill_flat_subpath = &flat_subpaths[fill_flat_path.start_flat_subpath_offset + subpath.subpath_index];
+                fill_flat_subpath.* = FlatSubpath{
+                    .kind = .fill,
+                };
+                // fill_flat_subpath.back_flat_segment_offset = ???
+            }
 
-        //     if (style.isStroke()) {
-        //         const stroke_flat_path = flat_paths[path.stroke_flat_path_index];
-        //         const stroke_flat_subpath = &flat_subpaths[stroke_flat_path.start_flat_subpath_offset + subpath.subpath_index];
+            if (style.isStroke()) {
+                const stroke_flat_path = flat_paths[path.stroke_flat_path_index];
+                const stroke_flat_subpath = &flat_subpaths[stroke_flat_path.start_flat_subpath_offset + subpath.subpath_index];
 
-        //         const path_tag = self.encoding.path_tags[subpath.segment_index];
-        //         if (path_tag.segment.cap) {
-        //             stroke_flat_subpath.* = FlatSubpath{
-        //                 .kind = .stroke_capped,
-        //             };
-        //         } else {
-        //             stroke_flat_subpath.* = FlatSubpath{
-        //                 .kind = .stroke,
-        //             };
-        //         }
+                const path_tag = self.encoding.path_tags[subpath.segment_index];
+                if (path_tag.segment.cap) {
+                    stroke_flat_subpath.* = FlatSubpath{
+                        .kind = .stroke_capped,
+                    };
+                } else {
+                    stroke_flat_subpath.* = FlatSubpath{
+                        .kind = .stroke,
+                    };
+                }
 
-        //         // stroke_flat_subpath.front_flat_segment_offset = ???
-        //         // stroke_flat_subpath.back_flat_segment_offset = ???
-        //     }
-        // }
+                // stroke_flat_subpath.front_flat_segment_offset = ???
+                // stroke_flat_subpath.back_flat_segment_offset = ???
+            }
+        }
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
@@ -283,46 +277,53 @@ pub const CpuRasterizer = struct {
         }
         std.debug.print("======================================\n", .{});
 
+        std.debug.print("=================== Paths ============\n", .{});
+        for (self.paths.items) |path| {
+            std.debug.print("{}\n", .{path});
+        }
+        std.debug.print("======================================\n", .{});
+
+
         //         std.debug.print("============ Subpaths ============\n", .{});
         //         for (self.subpaths.items, 0..) |subpath, index| {
         //             std.debug.print("({}): {}\n", .{ index, subpath });
         //         }
         //         std.debug.print("==================================\n", .{});
 
-        std.debug.print("============ Path Segments ============\n", .{});
-        for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
-            switch (path_tag.segment.kind) {
-                .line_f32 => std.debug.print("LineF32: {}\n", .{
-                    self.encoding.getSegment(core.LineF32, path_monoid),
-                }),
-                .arc_f32 => std.debug.print("ArcF32: {}\n", .{
-                    self.encoding.getSegment(core.ArcF32, path_monoid),
-                }),
-                .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
-                }),
-                .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierF32, path_monoid),
-                }),
-                .line_i16 => std.debug.print("LineI16: {}\n", .{
-                    self.encoding.getSegment(core.LineI16, path_monoid),
-                }),
-                .arc_i16 => std.debug.print("ArcI16: {}\n", .{
-                    self.encoding.getSegment(core.ArcI16, path_monoid),
-                }),
-                .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
-                }),
-                .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierI16, path_monoid),
-                }),
-            }
+        // std.debug.print("============ Path Segments ============\n", .{});
+        // for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
+        //     switch (path_tag.segment.kind) {
+        //         .line_f32 => std.debug.print("LineF32: {}\n", .{
+        //             self.encoding.getSegment(core.LineF32, path_monoid),
+        //         }),
+        //         .arc_f32 => std.debug.print("ArcF32: {}\n", .{
+        //             self.encoding.getSegment(core.ArcF32, path_monoid),
+        //         }),
+        //         .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
+        //             self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
+        //         }),
+        //         .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
+        //             self.encoding.getSegment(core.CubicBezierF32, path_monoid),
+        //         }),
+        //         .line_i16 => std.debug.print("LineI16: {}\n", .{
+        //             self.encoding.getSegment(core.LineI16, path_monoid),
+        //         }),
+        //         .arc_i16 => std.debug.print("ArcI16: {}\n", .{
+        //             self.encoding.getSegment(core.ArcI16, path_monoid),
+        //         }),
+        //         .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
+        //             self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
+        //         }),
+        //         .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
+        //             self.encoding.getSegment(core.CubicBezierI16, path_monoid),
+        //         }),
+        //     }
 
-            const offset = self.segment_offsets.items[segment_index];
-            std.debug.print("Offset: {}\n", .{offset});
-            std.debug.print("----------\n", .{});
-        }
-        std.debug.print("======================================\n", .{});
+        //     const offset = self.segment_offsets.items[segment_index];
+        //     std.debug.print("Offset: {}\n", .{offset});
+        //     std.debug.print("----------\n", .{});
+        // }
+        // std.debug.print("======================================\n", .{});
 
         //         {
         //             std.debug.print("============ Flat Lines ============\n", .{});
