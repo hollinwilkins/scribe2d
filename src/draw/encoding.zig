@@ -683,6 +683,7 @@ pub fn PathEncoder(comptime T: type) type {
 pub const Path = struct {
     fill_flat_path_index: u32 = 0,
     stroke_flat_path_index: u32 = 0,
+    subpath_offset: u32 = 0,
 };
 
 pub const Subpath = struct {
@@ -760,9 +761,9 @@ pub const Offset = packed struct {
 };
 
 pub const SegmentOffset = packed struct {
-    flat_path: u32 = 0,
-    flat_subpath: u32 = 0,
-    flat_segment: u32 = 0,
+    flat_path_offset: u32 = 0,
+    flat_subpath_offset: u32 = 0,
+    flat_segment_offset: u32 = 0,
     fill: Offset = Offset{},
     front_stroke: Offset = Offset{},
     back_stroke: Offset = Offset{},
@@ -780,46 +781,46 @@ pub const SegmentOffset = packed struct {
         front_stroke: Offset,
         back_stroke: Offset,
     ) @This() {
-        var flat_path: u32 = 0;
-        var flat_subpath: u32 = 0;
-        var flat_segment: u32 = 0;
+        var flat_path_offset: u32 = 0;
+        var flat_subpath_offset: u32 = 0;
+        var flat_segment_offset: u32 = 0;
 
         if (path_tag.index.path == 1) {
             if (style.isFill()) {
-                flat_path += 1;
+                flat_path_offset += 1;
             }
 
             if (style.isStroke()) {
-                flat_path += 1;
+                flat_path_offset += 1;
             }
         }
 
         if (path_tag.index.subpath == 1) {
             if (style.isFill()) {
-                flat_subpath += 1;
+                flat_subpath_offset += 1;
             }
 
             if (style.isStroke()) {
                 if (path_tag.segment.cap) {
-                    flat_subpath += 1;
+                    flat_subpath_offset += 1;
                 } else {
-                    flat_subpath += 2;
+                    flat_subpath_offset += 2;
                 }
             }
         }
 
         if (style.isFill()) {
-            flat_segment += 1;
+            flat_segment_offset += 1;
         }
 
         if (style.isStroke()) {
-            flat_segment += 2;
+            flat_segment_offset += 2;
         }
 
         return @This(){
-            .flat_path = flat_path,
-            .flat_subpath = flat_subpath,
-            .flat_segment = flat_segment,
+            .flat_path_offset = flat_path_offset,
+            .flat_subpath_offset = flat_subpath_offset,
+            .flat_segment_offset = flat_segment_offset,
             .fill = fill,
             .front_stroke = front_stroke,
             .back_stroke = back_stroke,
@@ -828,9 +829,9 @@ pub const SegmentOffset = packed struct {
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .flat_path = self.flat_path + other.flat_path,
-            .flat_subpath = self.flat_subpath + other.flat_subpath,
-            .flat_segment = self.flat_segment + other.flat_segment,
+            .flat_path_offset = self.flat_path_offset + other.flat_path_offset,
+            .flat_subpath_offset = self.flat_subpath_offset + other.flat_subpath_offset,
+            .flat_segment_offset = self.flat_segment_offset + other.flat_segment_offset,
             .fill = self.fill.combine(other.fill),
             .front_stroke = self.front_stroke.combine(other.front_stroke),
             .back_stroke = self.back_stroke.combine(other.back_stroke),
