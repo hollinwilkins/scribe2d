@@ -706,8 +706,9 @@ pub const FlatSegment = struct {
     line_capacity: u32 = 0,
 };
 
-pub const Estimates = packed struct {
+pub const Offsets = packed struct {
     lines: u32 = 0,
+    line_offset: u32 = 0,
     intersections: u32 = 0,
     boundary_fragments: u32 = 0,
     merge_fragments: u32 = 0,
@@ -716,6 +717,7 @@ pub const Estimates = packed struct {
         std.debug.assert(intersections > 4);
         return @This(){
             .lines = lines,
+            .line_offset = lineOffset(lines),
             .intersections = intersections,
             .boundary_fragments = intersections,
             .merge_fragments = intersections,
@@ -734,82 +736,19 @@ pub const Estimates = packed struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .lines = self.lines + other.lines,
+            .line_offset = self.line_offset + other.line_offset,
             .intersections = self.intersections + other.intersections,
             .boundary_fragments = self.boundary_fragments + other.boundary_fragments,
             .merge_fragments = self.merge_fragments + other.merge_fragments,
         };
     }
 
-    pub fn lineOffset(self: @This()) u32 {
-        if (self.lines == 0) {
+    pub fn lineOffset(n_lines: u32) u32 {
+        if (n_lines == 0) {
             return 0;
         }
 
-        return @sizeOf(PointF32) + self.lines * @sizeOf(PointF32);
-    }
-};
-
-pub const OffsetRange = packed struct {
-    end: u32 = 0,
-    capacity: u32 = 0,
-
-    pub fn combine(self: @This(), other: @This()) @This() {
-        return @This(){
-            .end = self.end + other.end,
-            .capacity = self.capacity + other.capacity,
-        };
-    }
-};
-
-pub const Offsets = packed struct {
-    line: OffsetRange = OffsetRange{},
-    intersection: OffsetRange = OffsetRange{},
-    boundary_fragment: OffsetRange = OffsetRange{},
-    merge_fragment: OffsetRange = OffsetRange{},
-
-    pub fn create(estimates: Estimates) @This() {
-        const line_offset = estimates.lineOffset();
-        return @This(){
-            .line = OffsetRange{
-                .end = line_offset,
-                .capacity = line_offset,
-            },
-            .intersection = OffsetRange{
-                .end = estimates.intersections,
-                .capacity = estimates.intersections,
-            },
-            .boundary_fragment = OffsetRange{
-                .end = estimates.boundary_fragments,
-                .capacity = estimates.boundary_fragments,
-            },
-            .merge_fragment = OffsetRange{
-                .end = estimates.merge_fragments,
-                .capacity = estimates.merge_fragments,
-            },
-        };
-    }
-
-    pub fn combine(self: @This(), other: @This()) @This() {
-        return @This(){
-            .line = self.line.combine(other.line),
-            .intersection = self.intersection.combine(other.intersection),
-            .boundary_fragment = self.boundary_fragment.combine(other.boundary_fragment),
-            .merge_fragment = self.merge_fragment.combine(other.merge_fragment),
-        };
-    }
-};
-
-pub const SegmentEstimates = packed struct {
-    fill: Estimates = Estimates{},
-    front_stroke: Estimates = Estimates{},
-    back_stroke: Estimates = Estimates{},
-
-    pub fn combine(self: @This(), other: @This()) @This() {
-        return @This(){
-            .fill = self.fill.combine(other.fill),
-            .front_stroke = self.front_stroke.combine(other.front_stroke),
-            .back_stroke = self.back_stroke.combine(other.back_stroke),
-        };
+        return @sizeOf(PointF32) + n_lines * @sizeOf(PointF32);
     }
 };
 
@@ -817,69 +756,34 @@ pub const SegmentOffsets = packed struct {
     fill: Offsets = Offsets{},
     front_stroke: Offsets = Offsets{},
     back_stroke: Offsets = Offsets{},
+    sum: Offsets = Offsets{},
 
-    pub usingnamespace MonoidFunctions(SegmentEstimates, @This());
+    pub usingnamespace MonoidFunctions(@This(), @This());
 
-    pub fn createTag(estimates: SegmentEstimates) @This() {
-        return @This(){
-            .fill = Offsets.create(estimates.fill),
-            .front_stroke = Offsets.create(estimates.front_stroke),
-            .back_stroke = Offsets.create(estimates.back_stroke),
+    pub fn createTag(offsets: SegmentOffsets) @This() {
+        return offsets;
+    }
+
+    pub fn create(fill: Offsets, front_stroke: Offsets, back_stroke: Offsets) @This() {
+        const front_stroke2 = fill.combine(front_stroke);
+        const back_stroke2 = front_stroke2.combine(back_stroke);
+        
+        return @This() {
+            .fill = fill,
+            .front_stroke = front_stroke2,
+            .back_stroke = back_stroke2,
+            .sum = back_stroke2,
         };
     }
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .fill = self.fill.combine(other.fill),
-            .front_stroke = self.front_stroke.combine(other.front_stroke),
-            .back_stroke = self.back_stroke.combine(other.back_stroke),
+            .fill = other.fill,
+            .front_stroke = other.front_stroke,
+            .back_stroke = other.back_stroke,
+            .sum = self.sum.combine(other.sum),
         };
     }
-
-    // pub fn expandPaths(
-    //     path_tags: []const PathTag,
-    //     path_monoids: []const PathMonoid,
-    //     segment_offsets: []const SegmentOffsets,
-    //     paths: []Path,
-    //     subpaths: []Subpath,
-    // ) void {
-    //     for (path_tags, path_monoids, segment_offsets, 0..) |path_tag, path_monoid, offsets, segment_index| {
-    //         if (path_tag.index.path == 1) {
-    //             if (path_monoid.path_index > 0) {
-    //                 const path = &paths[path_monoid.path_index - 1];
-    //                 path.index = path_monoid.path_index - 1;
-    //                 path.fill.boundary_fragment = offsets.fill.boundary_fragment;
-    //                 path.fill.merge_fragment = offsets.fill.merge_fragment;
-    //                 path.front_stroke.boundary_fragment = offsets.front_stroke.boundary_fragment;
-    //                 path.front_stroke.merge_fragment = offsets.front_stroke.merge_fragment;
-    //                 path.back_stroke.boundary_fragment = offsets.back_stroke.boundary_fragment;
-    //                 path.back_stroke.merge_fragment = offsets.back_stroke.merge_fragment;
-    //             }
-    //         }
-
-    //         if (path_tag.index.subpath == 1) {
-    //             if (path_monoid.subpath_index > 0) {
-    //                 const subpath = &subpaths[path_monoid.subpath_index - 1];
-    //                 subpath.index = path_monoid.subpath_index - 1;
-    //                 subpath.last_segment_offset = @intCast(segment_index);
-    //             }
-    //         }
-    //     }
-
-    //     const last_path_monoid = path_monoids[segment_offsets.len - 1];
-    //     const last_offsets = segment_offsets[segment_offsets.len - 1];
-    //     const path = &paths[paths.len - 1];
-    //     const subpath = &subpaths[subpaths.len - 1];
-    //     path.index = last_path_monoid.path_index;
-    //     path.fill.boundary_fragment = last_offsets.fill.boundary_fragment;
-    //     path.fill.merge_fragment = last_offsets.fill.merge_fragment;
-    //     path.front_stroke.boundary_fragment = last_offsets.front_stroke.boundary_fragment;
-    //     path.front_stroke.merge_fragment = last_offsets.front_stroke.merge_fragment;
-    //     path.back_stroke.boundary_fragment = last_offsets.back_stroke.boundary_fragment;
-    //     path.back_stroke.merge_fragment = last_offsets.back_stroke.merge_fragment;
-    //     subpath.index = @intCast(last_path_monoid.subpath_index);
-    //     subpath.last_segment_offset = @intCast(path_monoids.len);
-    // }
 };
 
 pub const Masks = struct {
