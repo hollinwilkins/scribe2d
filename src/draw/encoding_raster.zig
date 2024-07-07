@@ -154,61 +154,80 @@ pub const CpuRasterizer = struct {
 
         SegmentOffset.expand(segment_offsets, segment_offsets);
 
-        const paths_n = self.path_monoids.getLast().path_index + 1;
-        const flat_path_monoids = try self.flat_path_monoids.addManyAsSlice(self.allocator, paths_n);
+        // const flat_path_n = self.segment_offsets.getLast().sum.segments;
+        // const flat_path_monoids = try self.flat_path_monoids.addManyAsSlice(self.allocator, flat_path_n);
 
-        for (
-            self.encoding.path_tags,
-            self.path_monoids.items,
-        ) |
-            path_tag,
-            path_monoid,
-        | {
-            const flat_path_monoid = &flat_path_monoids[path_monoid.path_index];
-            const style = self.encoding.styles[path_monoid.style_index];
+        // for (
+        //     self.encoding.path_tags,
+        //     self.path_monoids.items,
+        //     segment_offsets,
+        // ) |
+        //     path_tag,
+        //     path_monoid,
+        //     segment_offset,
+        // | {
+        //     const style = self.encoding.styles[path_monoid.style_index];
+        //     if (path_tag.index.path == 1) {
+        //         var start_segment_offset: u32 = 0;
 
-            if (path_tag.index.path == 1) {
+        //     }
+        // }
 
-                // 0-initialize
-                flat_path_monoid.* = FlatPathMonoid{
-                    .style_index = path_monoid.style_index,
-                };
+        // const paths_n = self.path_monoids.getLast().path_index + 1;
+        // const flat_path_monoids = try self.flat_path_monoids.addManyAsSlice(self.allocator, paths_n);
 
-                if (style.isFill()) {
-                    flat_path_monoid.fill_path_offset += 1;
-                }
+        // for (
+        //     self.encoding.path_tags,
+        //     self.path_monoids.items,
+        // ) |
+        //     path_tag,
+        //     path_monoid,
+        // | {
+        //     const flat_path_monoid = &flat_path_monoids[path_monoid.path_index];
+        //     const style = self.encoding.styles[path_monoid.style_index];
 
-                if (style.isStroke()) {
-                    flat_path_monoid.stroke_path_offset += 1;
-                }
-            }
+        //     if (path_tag.index.path == 1) {
 
-            if (path_tag.index.subpath == 1) {
-                if (style.isFill()) {
-                    flat_path_monoid.fill_subpath_offset += 1;
-                }
+        //         // 0-initialize
+        //         flat_path_monoid.* = FlatPathMonoid{
+        //             .style_index = path_monoid.style_index,
+        //         };
 
-                if (style.isStroke()) {
-                    if (path_tag.segment.cap) {
-                        // open subpath, only need one subpath for the stroke
-                        flat_path_monoid.stroke_subpath_offset += 1;
-                    } else {
-                        // closed subpath, need two subpaths for the stroke
-                        flat_path_monoid.stroke_subpath_offset += 2;
-                    }
-                }
-            }
-        }
+        //         if (style.isFill()) {
+        //             flat_path_monoid.fill_path_offset += 1;
+        //         }
 
-        FlatPathMonoid.expand(flat_path_monoids, flat_path_monoids);
+        //         if (style.isStroke()) {
+        //             flat_path_monoid.stroke_path_offset += 1;
+        //         }
+        //     }
 
-        const flat_paths_n = self.flat_path_monoids.getLast().path_offset;
-        const flat_path_fills = try self.flat_path_fills.addManyAsSlice(self.allocator, flat_paths_n);
-        _ = flat_path_fills;
+        //     if (path_tag.index.subpath == 1) {
+        //         if (style.isFill()) {
+        //             flat_path_monoid.fill_subpath_offset += 1;
+        //         }
 
-        for (flat_path_monoids) |flat_path_monoid| {
-            _ = flat_path_monoid;
-        }
+        //         if (style.isStroke()) {
+        //             if (path_tag.segment.cap) {
+        //                 // open subpath, only need one subpath for the stroke
+        //                 flat_path_monoid.stroke_subpath_offset += 1;
+        //             } else {
+        //                 // closed subpath, need two subpaths for the stroke
+        //                 flat_path_monoid.stroke_subpath_offset += 2;
+        //             }
+        //         }
+        //     }
+        // }
+
+        // FlatPathMonoid.expand(flat_path_monoids, flat_path_monoids);
+
+        // const flat_paths_n = self.flat_path_monoids.getLast().path_offset;
+        // const flat_path_fills = try self.flat_path_fills.addManyAsSlice(self.allocator, flat_paths_n);
+        // _ = flat_path_fills;
+
+        // for (flat_path_monoids) |flat_path_monoid| {
+        //     _ = flat_path_monoid;
+        // }
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {

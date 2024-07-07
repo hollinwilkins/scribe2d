@@ -681,39 +681,39 @@ pub fn PathEncoder(comptime T: type) type {
 }
 
 pub const FlatPathMonoid = struct {
-    style_index: u32 = 0,
-    fill_path_offset: u1 = 0,
-    stroke_path_offset: u1 = 0,
-    fill_subpath_offset: u32 = 0,
-    stroke_subpath_offset: u32 = 0,
-    path_offset: u32 = 0,
-    subpath_offset: u32 = 0,
+    // style_index: u32 = 0,
+    // fill_path_offset: u1 = 0,
+    // stroke_path_offset: u1 = 0,
+    // fill_subpath_offset: u32 = 0,
+    // stroke_subpath_offset: u32 = 0,
+    // path_offset: u32 = 0,
+    // subpath_offset: u32 = 0,
 
-    pub usingnamespace MonoidFunctions(FlatPathMonoid, @This());
+    // pub usingnamespace MonoidFunctions(FlatPathMonoid, @This());
 
-    pub fn createTag(tag: FlatPathMonoid) @This() {
-        return @This(){
-            .style_index = tag.style_index,
-            .fill_path_offset = tag.fill_path_offset,
-            .stroke_path_offset = tag.stroke_path_offset,
-            .fill_subpath_offset = tag.fill_subpath_offset,
-            .stroke_subpath_offset = tag.stroke_subpath_offset,
-            .path_offset = @as(u32, @intCast(tag.fill_path_offset)) + @as(u32, @intCast(tag.stroke_path_offset)),
-            .subpath_offset = tag.fill_subpath_offset + tag.stroke_subpath_offset,
-        };
-    }
+    // pub fn createTag(tag: FlatPathMonoid) @This() {
+    //     return @This(){
+    //         .style_index = tag.style_index,
+    //         .fill_path_offset = tag.fill_path_offset,
+    //         .stroke_path_offset = tag.stroke_path_offset,
+    //         .fill_subpath_offset = tag.fill_subpath_offset,
+    //         .stroke_subpath_offset = tag.stroke_subpath_offset,
+    //         .path_offset = @as(u32, @intCast(tag.fill_path_offset)) + @as(u32, @intCast(tag.stroke_path_offset)),
+    //         .subpath_offset = tag.fill_subpath_offset + tag.stroke_subpath_offset,
+    //     };
+    // }
 
-    pub fn combine(self: @This(), other: @This()) @This() {
-        return @This(){
-            .style_index = other.style_index,
-            .fill_path_offset = other.fill_path_offset,
-            .stroke_path_offset = other.stroke_path_offset,
-            .fill_subpath_offset = other.fill_subpath_offset,
-            .stroke_subpath_offset = other.stroke_subpath_offset,
-            .path_offset = self.path_offset + other.path_offset,
-            .subpath_offset = self.subpath_offset + other.subpath_offset,
-        };
-    }
+    // pub fn combine(self: @This(), other: @This()) @This() {
+    //     return @This(){
+    //         .style_index = other.style_index,
+    //         .fill_path_offset = other.fill_path_offset,
+    //         .stroke_path_offset = other.stroke_path_offset,
+    //         .fill_subpath_offset = other.fill_subpath_offset,
+    //         .stroke_subpath_offset = other.stroke_subpath_offset,
+    //         .path_offset = self.path_offset + other.path_offset,
+    //         .subpath_offset = self.subpath_offset + other.subpath_offset,
+    //     };
+    // }
 };
 
 pub const FlatPath = struct {
@@ -732,6 +732,7 @@ pub const FlatSegment = struct {
 };
 
 pub const Offset = packed struct {
+    segments: u32,
     lines: u32 = 0,
     line_offset: u32 = 0,
     intersections: u32 = 0,
@@ -741,6 +742,7 @@ pub const Offset = packed struct {
     pub fn create(lines: u32, intersections: u32) @This() {
         std.debug.assert(intersections > 4);
         return @This(){
+            .segments = 0,
             .lines = lines,
             .line_offset = lineOffset(lines),
             .intersections = intersections,
@@ -751,6 +753,7 @@ pub const Offset = packed struct {
 
     pub fn mulScalar(self: @This(), scalar: f32) @This() {
         return @This(){
+            .segments = 1,
             .lines = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.lines)) * scalar)),
             .intersections = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersections)) * scalar)),
             .boundary_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.boundary_fragments)) * scalar)),
@@ -760,6 +763,7 @@ pub const Offset = packed struct {
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
+            .segments = self.segments + other.segments,
             .lines = self.lines + other.lines,
             .line_offset = self.line_offset + other.line_offset,
             .intersections = self.intersections + other.intersections,

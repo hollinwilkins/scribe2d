@@ -151,39 +151,42 @@ pub const Estimate = struct {
         var front_stroke = Offsets{};
         var back_stroke = Offsets{};
 
-        switch (path_tag.segment.kind) {
-            .line_f32 => {
-                const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
-                fill = estimateLine(line);
-            },
-            .line_i16 => {
-                const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
-                fill = estimateLine(line);
-            },
-            .arc_f32 => {
-                const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                fill = estimateArc(config, arc);
-            },
-            .arc_i16 => {
-                const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                fill = estimateArc(config, arc);
-            },
-            .quadratic_bezier_f32 => {
-                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
-                fill = estimateQuadraticBezier(qb);
-            },
-            .quadratic_bezier_i16 => {
-                const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                fill = estimateQuadraticBezier(qb);
-            },
-            .cubic_bezier_f32 => {
-                const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                fill = estimateCubicBezier(cb);
-            },
-            .cubic_bezier_i16 => {
-                const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                fill = estimateCubicBezier(cb);
-            },
+        if (style.isFill()) {
+            switch (path_tag.segment.kind) {
+                .line_f32 => {
+                    const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
+                    fill = estimateLine(line);
+                },
+                .line_i16 => {
+                    const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
+                    fill = estimateLine(line);
+                },
+                .arc_f32 => {
+                    const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
+                    fill = estimateArc(config, arc);
+                },
+                .arc_i16 => {
+                    const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
+                    fill = estimateArc(config, arc);
+                },
+                .quadratic_bezier_f32 => {
+                    const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
+                    fill = estimateQuadraticBezier(qb);
+                },
+                .quadratic_bezier_i16 => {
+                    const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
+                    fill = estimateQuadraticBezier(qb);
+                },
+                .cubic_bezier_f32 => {
+                    const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
+                    fill = estimateCubicBezier(cb);
+                },
+                .cubic_bezier_i16 => {
+                    const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
+                    fill = estimateCubicBezier(cb);
+                },
+            }
+            fill.segments = 1;
         }
 
         if (style.isStroke()) {
@@ -197,6 +200,8 @@ pub const Estimate = struct {
             const base_stroke = fill.mulScalar(stroke_fudge);
             front_stroke = base_stroke.combine(cap).combine(join);
             back_stroke = base_stroke.combine(join);
+            front_stroke.segments = 1;
+            back_stroke.segments = 1;
         }
 
         return SegmentOffsets.create(fill, front_stroke, back_stroke);
