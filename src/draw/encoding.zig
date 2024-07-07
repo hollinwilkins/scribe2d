@@ -177,10 +177,12 @@ pub const BumpAllocator = struct {
 pub fn MonoidFunctions(comptime T: type, comptime M: type) type {
     return struct {
         pub fn expand(tags: []const T, expanded: []M) void {
+            std.debug.assert(tags.len > 0);
             std.debug.assert(tags.len == expanded.len);
 
-            var monoid = M{};
-            for (tags, expanded) |tag, *expanded_monoid| {
+            var monoid = M.createTag(tags[0]);
+            expanded[0] = monoid;
+            for (tags[1..], expanded[1..]) |tag, *expanded_monoid| {
                 monoid = monoid.combine(M.createTag(tag));
                 expanded_monoid.* = monoid;
             }
@@ -685,6 +687,33 @@ pub const FlatPathTag = packed struct {
     stroke_subpath: u2 = 0,
 };
 
+pub const FlatPathMonoid = struct {
+    fill_path_index: u32 = 0,
+    stroke_path_index: u32 = 0,
+    fill_subpath_index: u32 = 0,
+    stroke_subpath_index: u32 = 0,
+
+    pub usingnamespace MonoidFunctions(FlatPathTag, @This());
+
+    pub fn createTag(tag: FlatPathTag) @This() {
+        return @This(){
+            .fill_path_index = @intCast(tag.fill_path),
+            .stroke_path_index = @intCast(tag.stroke_path),
+            .fill_subpath_index = @intCast(tag.fill_subpath),
+            .stroke_subpath_index = @intCast(tag.stroke_subpath),
+        };
+    }
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This() {
+            .fill_path_index = self.fill_path_index + other.fill_path_index,
+            .stroke_path_index = self.stroke_path_index + other.stroke_path_index,
+            .fill_subpath_index = self.fill_subpath_index + other.fill_subpath_index,
+            .stroke_subpath_index = self.stroke_subpath_index + other.stroke_subpath_index,
+        };
+    }
+};
+
 pub const FlatPath = struct {
     pub const Kind = enum(u1) {
         fill,
@@ -767,8 +796,8 @@ pub const SegmentOffset = packed struct {
     pub fn create(fill: Offset, front_stroke: Offset, back_stroke: Offset) @This() {
         const front_stroke2 = fill.combine(front_stroke);
         const back_stroke2 = front_stroke2.combine(back_stroke);
-        
-        return @This() {
+
+        return @This(){
             .fill = fill,
             .front_stroke = front_stroke2,
             .back_stroke = back_stroke2,

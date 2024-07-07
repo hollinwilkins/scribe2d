@@ -13,6 +13,7 @@ const Style = encoding_module.Style;
 const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
 const FlatPathTag = encoding_module.FlatPathTag;
+const FlatPathMonoid = encoding_module.FlatPathMonoid;
 const FlatPath = encoding_module.FlatPath;
 const FlatSubpath = encoding_module.FlatSubpath;
 const FlatSegment = encoding_module.FlatSegment;
@@ -24,6 +25,7 @@ pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const FillList = std.ArrayListUnmanaged(Style.Fill);
     const FlatPathTagList = std.ArrayListUnmanaged(FlatPathTag);
+    const FlatPathMonoidList = std.ArrayListUnmanaged(FlatPathMonoid);
     const FlatPathList = std.ArrayListUnmanaged(FlatPath);
     const FlatSubpathList = std.ArrayListUnmanaged(FlatSubpath);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
@@ -45,6 +47,7 @@ pub const CpuRasterizer = struct {
     path_monoids: PathMonoidList = PathMonoidList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_path_tags: FlatPathTagList = FlatPathTagList{},
+    flat_path_monoids: FlatPathMonoidList = FlatPathMonoidList{},
     flat_paths: FlatPathList = FlatPathList{},
     flat_subpaths: FlatSubpathList = FlatSubpathList{},
     fills: FillList = FillList{},
@@ -76,6 +79,7 @@ pub const CpuRasterizer = struct {
         self.path_monoids.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
         self.flat_path_tags.deinit(self.allocator);
+        self.flat_path_monoids.deinit(self.allocator);
         self.flat_paths.deinit(self.allocator);
         self.flat_subpaths.deinit(self.allocator);
         self.fills.deinit(self.allocator);
@@ -94,6 +98,7 @@ pub const CpuRasterizer = struct {
         self.path_monoids.items.len = 0;
         self.segment_offsets.items.len = 0;
         self.flat_path_tags.items.len = 0;
+        self.flat_path_monoids.items.len = 0;
         self.flat_paths.items.len = 0;
         self.flat_subpaths.items.len = 0;
         self.fills.items.len = 0;
@@ -154,59 +159,55 @@ pub const CpuRasterizer = struct {
 
         SegmentOffset.expand(segment_offsets, segment_offsets);
 
-        // // TODO: expand SegmentEstimate into SegmentOffsets
-        // const flat_segment_offsets = try self.flat_segment_offsets.addManyAsSlice(self.allocator, flat_segment_estimates.len);
-        // SegmentOffsets.expand(flat_segment_estimates, flat_segment_offsets);
+        const flat_paths_n = self.path_monoids.getLast().path_index + 1;
+        const flat_path_tags = try self.flat_path_tags.addManyAsSlice(self.allocator, flat_paths_n);
+        const flat_path_monoids = try self.flat_path_monoids.addManyAsSlice(self.allocator, flat_paths_n);
+        // const flat_paths = self.flat_paths.addManyAsSlice(self.allocator, flat_paths_n);
+        // const flat_subpath_n = self.path_monoids.getLast().subpath_index + 1;
+        // const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, flat_subpath_n);
 
-        // const flat_paths_n = self.path_monoids.getLast().path_index + 1;
-        // const flat_path_tags = try self.flat_path_tags.addManyAsSlice(self.allocator, flat_paths_n);
-        // // const flat_subpath_n = self.path_monoids.getLast().subpath_index + 1;
-        // // const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, flat_subpath_n);
+        for (
+            self.encoding.path_tags,
+            self.path_monoids.items,
+        ) |
+            path_tag,
+            path_monoid,
+        | {
+            const flat_path_tag = &flat_path_tags[path_monoid.path_index];
+            const style = self.encoding.styles[path_monoid.style_index];
 
-        // for (
-        //     self.encoding.path_tags,
-        //     self.path_monoids.items,
-        //     flat_segment_estimates,
-        // ) |
-        //     path_tag,
-        //     path_monoid,
-        //     estimates,
-        // | {
-        //     const flat_path_tag = &flat_path_tags[path_monoid.path_index];
+            if (path_tag.index.path == 1) {
 
-        //     if (path_tag.index.path == 1) {
-        //         const style = self.encoding.styles[path_monoid.style_index];
+                // 0-initialize
+                flat_path_tag.* = FlatPathTag{};
 
-        //         // 0-initialize
-        //         flat_path_tag.* = FlatPathTag{};
+                if (style.isFill()) {
+                    flat_path_tag.fill_path = 1;
+                }
 
-        //         if (style.isFill()) {
-        //             flat_path_tag.fill_path = 1;
-        //         }
+                if (style.isStroke()) {
+                    flat_path_tag.stroke_path = 1;
+                }
+            }
 
-        //         if (style.isStroke()) {
-        //             flat_path_tag.stroke_path = 1;
-        //         }
-        //     }
+            if (path_tag.index.subpath == 1) {
+                if (style.isFill()) {
+                    flat_path_tag.fill_subpath = 1;
+                }
 
-        //     if (path_tag.index.subpath == 1) {
-        //         const style = self.encoding.styles[path_monoid.style_index];
+                if (style.isStroke()) {
+                    if (path_tag.segment.cap) {
+                        // open subpath, only need one subpath for the stroke
+                        flat_path_tag.stroke_subpath = 1;
+                    } else {
+                        // closed subpath, need two subpaths for the stroke
+                        flat_path_tag.stroke_subpath = 2;
+                    }
+                }
+            }
+        }
 
-        //         if (style.isFill()) {
-        //             flat_path_tag.fill_subpath = 1;
-        //         }
-
-        //         if (style.isStroke()) {
-        //             if (path_tag.segment.cap) {
-        //                 // open subpath, only need one subpath for the stroke
-        //                 flat_path_tag.stroke_subpath = 1;
-        //             } else {
-        //                 // closed subpath, need two subpaths for the stroke
-        //                 flat_path_tag.stroke_subpath = 2;
-        //             }
-        //         }
-        //     }
-        // }
+        FlatPathMonoid.expand(flat_path_tags, flat_path_monoids);
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
