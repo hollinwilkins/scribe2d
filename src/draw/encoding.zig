@@ -681,6 +681,7 @@ pub fn PathEncoder(comptime T: type) type {
 }
 
 pub const FlatPathMonoid = struct {
+    style_index: u32 = 0,
     fill_path_offset: u1 = 0,
     stroke_path_offset: u1 = 0,
     fill_subpath_offset: u32 = 0,
@@ -692,6 +693,7 @@ pub const FlatPathMonoid = struct {
 
     pub fn createTag(tag: FlatPathMonoid) @This() {
         return @This(){
+            .style_index = tag.style_index,
             .fill_path_offset = tag.fill_path_offset,
             .stroke_path_offset = tag.stroke_path_offset,
             .fill_subpath_offset = tag.fill_subpath_offset,
@@ -703,6 +705,7 @@ pub const FlatPathMonoid = struct {
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
+            .style_index = other.style_index,
             .fill_path_offset = other.fill_path_offset,
             .stroke_path_offset = other.stroke_path_offset,
             .fill_subpath_offset = other.fill_subpath_offset,

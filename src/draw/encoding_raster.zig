@@ -170,7 +170,9 @@ pub const CpuRasterizer = struct {
             if (path_tag.index.path == 1) {
 
                 // 0-initialize
-                flat_path_monoid.* = FlatPathMonoid{};
+                flat_path_monoid.* = FlatPathMonoid{
+                    .style_index = path_monoid.style_index,
+                };
 
                 if (style.isFill()) {
                     flat_path_monoid.fill_path_offset += 1;
@@ -204,12 +206,8 @@ pub const CpuRasterizer = struct {
         const flat_path_fills = try self.flat_path_fills.addManyAsSlice(self.allocator, flat_paths_n);
         _ = flat_path_fills;
 
-        for (
-            self.path_monoids.items,
-        ) |
-            path_monoid,
-        | {
-            _ = path_monoid;
+        for (flat_path_monoids) |flat_path_monoid| {
+            _ = flat_path_monoid;
         }
     }
 
