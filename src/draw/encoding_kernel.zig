@@ -186,7 +186,6 @@ pub const Estimate = struct {
                     fill = estimateCubicBezier(cb);
                 },
             }
-            fill.segments = 1;
         }
 
         if (style.isStroke()) {
@@ -200,11 +199,9 @@ pub const Estimate = struct {
             const base_stroke = fill.mulScalar(stroke_fudge);
             front_stroke = base_stroke.combine(cap).combine(join);
             back_stroke = base_stroke.combine(join);
-            front_stroke.segments = 1;
-            back_stroke.segments = 1;
         }
 
-        return SegmentOffsets.create(fill, front_stroke, back_stroke);
+        return SegmentOffsets.create(path_tag, style, fill, front_stroke, back_stroke);
     }
 
     pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Offsets {

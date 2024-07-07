@@ -12,7 +12,8 @@ const KernelConfig = kernel_module.KernelConfig;
 const Style = encoding_module.Style;
 const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
-const FlatPathMonoid = encoding_module.FlatPathMonoid;
+const Path = encoding_module.Path;
+const Subpath = encoding_module.Subpath;
 const FlatPath = encoding_module.FlatPath;
 const FlatSubpath = encoding_module.FlatSubpath;
 const FlatSegment = encoding_module.FlatSegment;
@@ -23,13 +24,15 @@ const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const FillList = std.ArrayListUnmanaged(Style.Fill);
-    const FlatPathMonoidList = std.ArrayListUnmanaged(FlatPathMonoid);
+    const PathList = std.ArrayListUnmanaged(Path);
+    const SubpathList = std.ArrayListUnmanaged(Subpath);
     const FlatPathList = std.ArrayListUnmanaged(FlatPath);
     const FlatSubpathList = std.ArrayListUnmanaged(FlatSubpath);
+    const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
+    const Buffer = std.ArrayListUnmanaged(u8);
     // const LineList = std.ArrayListUnmanaged(LineF32);
     // const BoolList = std.ArrayListUnmanaged(bool);
-    // const Buffer = std.ArrayListUnmanaged(u8);
     // const PathList = std.ArrayListUnmanaged(Path);
     // const SubpathList = std.ArrayListUnmanaged(Subpath);
     // const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
@@ -44,19 +47,12 @@ pub const CpuRasterizer = struct {
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
-    flat_path_monoids: FlatPathMonoidList = FlatPathMonoidList{},
+    paths: PathList = PathList{},
+    subpaths: SubpathList = SubpathList{},
     flat_paths: FlatPathList = FlatPathList{},
     flat_subpaths: FlatSubpathList = FlatSubpathList{},
-    flat_path_fills: FillList = FillList{},
-    // flat_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
-    // flat_segment_data: Buffer = Buffer{},
-    // paths: PathList = PathList{},
-    // subpaths: SubpathList = SubpathList{},
-    // path_bumps: BumpAllocatorList = BumpAllocatorList{},
-    // boundary_fragment_offsets: OffsetList = OffsetList{},
-    // grid_intersections: GridIntersectionList = GridIntersectionList{},
-    // boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
-    // merge_fragments: MergeFragmentList = MergeFragmentList{},
+    flat_segments: FlatSegmentList = FlatSegmentList{},
+    line_data: Buffer = Buffer{},
 
     pub fn init(
         allocator: Allocator,
@@ -75,37 +71,23 @@ pub const CpuRasterizer = struct {
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
-        self.flat_path_monoids.deinit(self.allocator);
+        self.paths.deinit(self.allocator);
+        self.subpaths.deinit(self.allocator);
         self.flat_paths.deinit(self.allocator);
         self.flat_subpaths.deinit(self.allocator);
-        self.flat_path_fills.deinit(self.allocator);
-        // self.flat_segment_offsets.deinit(self.allocator);
-        // self.flat_segment_data.deinit(self.allocator);
-        // self.paths.deinit(self.allocator);
-        // self.subpaths.deinit(self.allocator);
-        // self.path_bumps.deinit(self.allocator);
-        // self.boundary_fragment_offsets.deinit(self.allocator);
-        // self.grid_intersections.deinit(self.allocator);
-        // self.boundary_fragments.deinit(self.allocator);
-        // self.merge_fragments.deinit(self.allocator);
+        self.flat_segments.deinit(self.allocator);
+        self.line_data.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
         self.segment_offsets.items.len = 0;
-        self.flat_path_monoids.items.len = 0;
+        self.paths.items.len = 0;
+        self.subpaths.items.len = 0;
         self.flat_paths.items.len = 0;
         self.flat_subpaths.items.len = 0;
-        self.flat_path_fills.items.len = 0;
-        // self.flat_segment_offsets.items.len = 0;
-        // self.flat_segment_data.items.len = 0;
-        // self.paths.items.len = 0;
-        // self.subpaths.items.len = 0;
-        // self.path_bumps.items.len = 0;
-        // self.boundary_fragment_offsets.items.len = 0;
-        // self.grid_intersections.items.len = 0;
-        // self.boundary_fragments.items.len = 0;
-        // self.merge_fragments.items.len = 0;
+        self.flat_segments.items.len = 0;
+        self.line_data.items.len = 0;
     }
 
     pub fn rasterize(self: *@This(), texture: *Texture) !void {
@@ -154,80 +136,48 @@ pub const CpuRasterizer = struct {
 
         SegmentOffset.expand(segment_offsets, segment_offsets);
 
-        // const flat_path_n = self.segment_offsets.getLast().sum.segments;
-        // const flat_path_monoids = try self.flat_path_monoids.addManyAsSlice(self.allocator, flat_path_n);
+        const last_path_monoid = self.path_monoids.getLast();
+        const last_segment_offset = segment_offsets[segment_offsets.len - 1];
+        const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
+        const subpaths = try self.subpaths.addManyAsSlice(self.allocator, last_path_monoid.subpath_index + 1);
+        const flat_paths = try self.flat_paths.addManyAsSlice(self.allocator, last_segment_offset.flat_path);
+        const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, last_segment_offset.flat_subpath);
+        const flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.flat_segment);
+        _ = flat_paths;
+        _ = flat_subpaths;
+        _ = flat_segments;
 
-        // for (
-        //     self.encoding.path_tags,
-        //     self.path_monoids.items,
-        //     segment_offsets,
-        // ) |
-        //     path_tag,
-        //     path_monoid,
-        //     segment_offset,
-        // | {
-        //     const style = self.encoding.styles[path_monoid.style_index];
-        //     if (path_tag.index.path == 1) {
-        //         var start_segment_offset: u32 = 0;
+        for (
+            self.encoding.path_tags,
+            self.path_monoids.items,
+            segment_offsets,
+        ) |
+            path_tag,
+            path_monoid,
+            segment_offset,
+        | {
+            _ = segment_offset;
+            const path = &paths[path_monoid.path_index];
+            const style = self.encoding.styles[path_monoid.style_index];
 
-        //     }
-        // }
+            if (path_tag.index.path == 1) {
+                path.* = Path{};
 
-        // const paths_n = self.path_monoids.getLast().path_index + 1;
-        // const flat_path_monoids = try self.flat_path_monoids.addManyAsSlice(self.allocator, paths_n);
+                if (style.isFill()) {
+                    path.fill_flat_path_index = 1;
+                }
 
-        // for (
-        //     self.encoding.path_tags,
-        //     self.path_monoids.items,
-        // ) |
-        //     path_tag,
-        //     path_monoid,
-        // | {
-        //     const flat_path_monoid = &flat_path_monoids[path_monoid.path_index];
-        //     const style = self.encoding.styles[path_monoid.style_index];
+                if (style.isStroke()) {
+                    path.stroke_flat_path_index = path.fill_flat_path_index + 1;
+                }
+            }
 
-        //     if (path_tag.index.path == 1) {
-
-        //         // 0-initialize
-        //         flat_path_monoid.* = FlatPathMonoid{
-        //             .style_index = path_monoid.style_index,
-        //         };
-
-        //         if (style.isFill()) {
-        //             flat_path_monoid.fill_path_offset += 1;
-        //         }
-
-        //         if (style.isStroke()) {
-        //             flat_path_monoid.stroke_path_offset += 1;
-        //         }
-        //     }
-
-        //     if (path_tag.index.subpath == 1) {
-        //         if (style.isFill()) {
-        //             flat_path_monoid.fill_subpath_offset += 1;
-        //         }
-
-        //         if (style.isStroke()) {
-        //             if (path_tag.segment.cap) {
-        //                 // open subpath, only need one subpath for the stroke
-        //                 flat_path_monoid.stroke_subpath_offset += 1;
-        //             } else {
-        //                 // closed subpath, need two subpaths for the stroke
-        //                 flat_path_monoid.stroke_subpath_offset += 2;
-        //             }
-        //         }
-        //     }
-        // }
-
-        // FlatPathMonoid.expand(flat_path_monoids, flat_path_monoids);
-
-        // const flat_paths_n = self.flat_path_monoids.getLast().path_offset;
-        // const flat_path_fills = try self.flat_path_fills.addManyAsSlice(self.allocator, flat_paths_n);
-        // _ = flat_path_fills;
-
-        // for (flat_path_monoids) |flat_path_monoid| {
-        //     _ = flat_path_monoid;
-        // }
+            if (path_tag.index.subpath == 1) {
+                const subpath = &subpaths[path_monoid.subpath_index];
+                subpath.path_index = path_monoid.path_index;
+                subpath.subpath_index = 1;
+            }
+        }
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
