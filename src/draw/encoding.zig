@@ -762,6 +762,8 @@ pub const Offset = packed struct {
 
 pub const SegmentOffset = packed struct {
     flat_path_offset: u32 = 0,
+    fill_flat_subpaths: u32 = 0,
+    stroke_flat_subpaths: u32 = 0,
     flat_subpath_offset: u32 = 0,
     flat_segment_offset: u32 = 0,
     fill: Offset = Offset{},
@@ -782,7 +784,8 @@ pub const SegmentOffset = packed struct {
         back_stroke: Offset,
     ) @This() {
         var flat_path_offset: u32 = 0;
-        var flat_subpath_offset: u32 = 0;
+        var fill_flat_subpaths: u32 = 0;
+        var stroke_flat_subpaths: u32 = 0;
         var flat_segment_offset: u32 = 0;
 
         if (path_tag.index.path == 1) {
@@ -797,14 +800,14 @@ pub const SegmentOffset = packed struct {
 
         if (path_tag.index.subpath == 1) {
             if (style.isFill()) {
-                flat_subpath_offset += 1;
+                fill_flat_subpaths += 1;
             }
 
             if (style.isStroke()) {
                 if (path_tag.segment.cap) {
-                    flat_subpath_offset += 1;
+                    stroke_flat_subpaths += 1;
                 } else {
-                    flat_subpath_offset += 2;
+                    stroke_flat_subpaths += 2;
                 }
             }
         }
@@ -819,7 +822,9 @@ pub const SegmentOffset = packed struct {
 
         return @This(){
             .flat_path_offset = flat_path_offset,
-            .flat_subpath_offset = flat_subpath_offset,
+            .fill_flat_subpaths = fill_flat_subpaths,
+            .stroke_flat_subpaths = stroke_flat_subpaths,
+            .flat_subpath_offset = fill_flat_subpaths + stroke_flat_subpaths,
             .flat_segment_offset = flat_segment_offset,
             .fill = fill,
             .front_stroke = front_stroke,
@@ -830,6 +835,8 @@ pub const SegmentOffset = packed struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .flat_path_offset = self.flat_path_offset + other.flat_path_offset,
+            .fill_flat_subpaths = self.fill_flat_subpaths + other.fill_flat_subpaths,
+            .stroke_flat_subpaths = self.stroke_flat_subpaths + other.stroke_flat_subpaths,
             .flat_subpath_offset = self.flat_subpath_offset + other.flat_subpath_offset,
             .flat_segment_offset = self.flat_segment_offset + other.flat_segment_offset,
             .fill = self.fill.combine(other.fill),

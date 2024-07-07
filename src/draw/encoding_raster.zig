@@ -212,16 +212,26 @@ pub const CpuRasterizer = struct {
             const path_monoid = self.path_monoids.items[path.segment_index];
             const style = self.encoding.styles[path_monoid.style_index];
             var start_subpath_offset: u32 = 0;
+            var start_fill_flat_subpaths: u32 = 0;
             const previous_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else null;
             if (previous_segment_offset) |offset| {
                 start_subpath_offset = offset.flat_subpath_offset;
+                start_fill_flat_subpaths = offset.fill_flat_subpaths;
+            }
+            var next_segment_offset: SegmentOffset = undefined;
+            if (path_monoid.path_index + 1 < paths.len) {
+                const next_path = paths[path_monoid.path_index + 1];
+                next_segment_offset = segment_offsets[next_path.segment_index - 1];
+            } else {
+                next_segment_offset = segment_offsets[segment_offsets.len - 1];
             }
 
             if (style.isFill()) {
                 const fill_flat_path = &flat_paths[path.fill_flat_path_index];
                 fill_flat_path.* = FlatPath{};
                 fill_flat_path.start_flat_subpath_offset = start_subpath_offset;
-                start_subpath_offset += 1;
+                const fill_flat_subpaths = next_segment_offset.fill_flat_subpaths - start_fill_flat_subpaths;
+                start_subpath_offset += fill_flat_subpaths;
             }
 
             if (style.isStroke()) {
