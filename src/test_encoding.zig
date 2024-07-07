@@ -1,6 +1,6 @@
 const std = @import("std");
-pub const encoding = @import("./draw/encoding.zig");
+pub const encoding_raster = @import("./draw/encoding_raster.zig");
 
 test {
-    std.testing.refAllDecls(encoding);
+    std.testing.refAllDecls(encoding_raster);
 }
