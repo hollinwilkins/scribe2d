@@ -143,7 +143,6 @@ pub const CpuRasterizer = struct {
         const flat_paths = try self.flat_paths.addManyAsSlice(self.allocator, last_segment_offset.flat_path_offset);
         const flat_subpaths = try self.flat_subpaths.addManyAsSlice(self.allocator, last_segment_offset.flat_subpath_offset);
         const flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.flat_segment_offset);
-        _ = flat_paths;
         _ = flat_subpaths;
         _ = flat_segments;
 
@@ -159,7 +158,9 @@ pub const CpuRasterizer = struct {
             const style = self.encoding.styles[path_monoid.style_index];
 
             if (path_tag.index.path == 1) {
-                path.* = Path{};
+                path.* = Path{
+                    .segment_index = path_monoid.segment_index,
+                };
 
                 var start_flat_path_offset: u32 = 0;
                 const previous_segment_offset = if (path_monoid.segment_index > 0) segment_offsets[path_monoid.segment_index - 1] else null;
@@ -197,12 +198,53 @@ pub const CpuRasterizer = struct {
 
             if (path_tag.index.subpath == 1) {
                 const path = paths[path_monoid.path_index];
-                subpath.* = Subpath{};
+                subpath.* = Subpath{
+                    .segment_index = path_monoid.segment_index,
+                };
 
                 subpath.path_index = path_monoid.path_index;
                 subpath.subpath_index = path_monoid.subpath_index - path.subpath_offset;
             }
         }
+
+        // calculate flat paths
+        for (paths) |path| {
+            const path_monoid = self.path_monoids.items[path.segment_index];
+            const style = self.encoding.styles[path_monoid.style_index];
+            var start_subpath_offset: u32 = 0;
+            const previous_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else null;
+            if (previous_segment_offset) |offset| {
+                start_subpath_offset = offset.flat_subpath_offset;
+            }
+
+            if (style.isFill()) {
+                const fill_flat_path = &flat_paths[path.fill_flat_path_index];
+                fill_flat_path.* = FlatPath{};
+                fill_flat_path.start_flat_subpath_offset = start_subpath_offset;
+                start_subpath_offset += 1;
+            }
+
+            if (style.isStroke()) {
+                const stroke_flat_path = &flat_paths[path.stroke_flat_path_index];
+                stroke_flat_path.* = FlatPath{};
+                stroke_flat_path.start_flat_subpath_offset = start_subpath_offset;
+            }
+        }
+
+        // for (subpaths) |subpath| {
+        //     const path = paths[subpath.path_index];
+        //     const path_monoid = self.path_monoids.items[path.segment_index];
+        //     const style = self.encoding.styles[path_monoid.style_index];
+
+        //     if (style.isFill()) {
+        //         const fill_flat_path = flat_paths[path.fill_flat_path_index];
+        //         const fill_subpath
+        //     }
+
+        //     if (style.isStroke()) {
+        //         const stroke_flat_path = flat_paths[path.stroke_flat_path_index];
+        //     }
+        // }
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
