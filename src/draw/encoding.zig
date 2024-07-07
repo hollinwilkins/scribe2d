@@ -680,47 +680,40 @@ pub fn PathEncoder(comptime T: type) type {
     };
 }
 
-pub const FlatPathTag = packed struct {
-    fill_path: u1 = 0,
-    stroke_path: u1 = 0,
-    fill_subpath: u1 = 0,
-    stroke_subpath: u2 = 0,
-};
-
 pub const FlatPathMonoid = struct {
-    fill_path_index: u32 = 0,
-    stroke_path_index: u32 = 0,
-    fill_subpath_index: u32 = 0,
-    stroke_subpath_index: u32 = 0,
+    fill_path_offset: u1 = 0,
+    stroke_path_offset: u1 = 0,
+    fill_subpath_offset: u32 = 0,
+    stroke_subpath_offset: u32 = 0,
+    path_offset: u32 = 0,
+    subpath_offset: u32 = 0,
 
-    pub usingnamespace MonoidFunctions(FlatPathTag, @This());
+    pub usingnamespace MonoidFunctions(FlatPathMonoid, @This());
 
-    pub fn createTag(tag: FlatPathTag) @This() {
+    pub fn createTag(tag: FlatPathMonoid) @This() {
         return @This(){
-            .fill_path_index = @intCast(tag.fill_path),
-            .stroke_path_index = @intCast(tag.stroke_path),
-            .fill_subpath_index = @intCast(tag.fill_subpath),
-            .stroke_subpath_index = @intCast(tag.stroke_subpath),
+            .fill_path_offset = tag.fill_path_offset,
+            .stroke_path_offset = tag.stroke_path_offset,
+            .fill_subpath_offset = tag.fill_subpath_offset,
+            .stroke_subpath_offset = tag.stroke_subpath_offset,
+            .path_offset = @as(u32, @intCast(tag.fill_path_offset)) + @as(u32, @intCast(tag.stroke_path_offset)),
+            .subpath_offset = tag.fill_subpath_offset + tag.stroke_subpath_offset,
         };
     }
 
     pub fn combine(self: @This(), other: @This()) @This() {
-        return @This() {
-            .fill_path_index = self.fill_path_index + other.fill_path_index,
-            .stroke_path_index = self.stroke_path_index + other.stroke_path_index,
-            .fill_subpath_index = self.fill_subpath_index + other.fill_subpath_index,
-            .stroke_subpath_index = self.stroke_subpath_index + other.stroke_subpath_index,
+        return @This(){
+            .fill_path_offset = other.fill_path_offset,
+            .stroke_path_offset = other.stroke_path_offset,
+            .fill_subpath_offset = other.fill_subpath_offset,
+            .stroke_subpath_offset = other.stroke_subpath_offset,
+            .path_offset = self.path_offset + other.path_offset,
+            .subpath_offset = self.subpath_offset + other.subpath_offset,
         };
     }
 };
 
 pub const FlatPath = struct {
-    pub const Kind = enum(u1) {
-        fill,
-        stroke,
-    };
-
-    kind: Kind,
     path_index: u32 = 0,
     flat_segment_offset: u32 = 0,
 };
