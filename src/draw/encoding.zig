@@ -191,6 +191,17 @@ pub fn MonoidFunctions(comptime T: type, comptime M: type) type {
                 M.fixExpansion(expanded);
             }
         }
+
+        pub fn reduce(tags: []const T) M {
+            std.debug.assert(tags.len > 0);
+
+            var monoid = M.createTag(tags[0]);
+            for (tags[1..]) |tag| {
+                monoid = monoid.combine(M.createTag(tag));
+            }
+
+            return monoid;
+        }
     };
 }
 
@@ -733,8 +744,10 @@ pub const Offset = packed struct {
     }
 
     pub fn mulScalar(self: @This(), scalar: f32) @This() {
+        const n_lines: u32 = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.lines)) * scalar));
         return @This(){
-            .lines = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.lines)) * scalar)),
+            .lines = n_lines,
+            .line_offset = lineOffset(n_lines),
             .intersections = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersections)) * scalar)),
             .boundary_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.boundary_fragments)) * scalar)),
             .merge_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.merge_fragments)) * scalar)),
@@ -761,13 +774,6 @@ pub const Offset = packed struct {
 };
 
 pub const SegmentOffset = packed struct {
-    flat_path_offset: u32 = 0,
-    fill_flat_subpaths: u32 = 0,
-    stroke_flat_subpaths: u32 = 0,
-    flat_subpath_offset: u32 = 0,
-    fill_flat_segments: u32 = 0,
-    stroke_flat_segments: u32 = 0,
-    flat_segment_offset: u32 = 0,
     fill: Offset = Offset{},
     front_stroke: Offset = Offset{},
     back_stroke: Offset = Offset{},
@@ -779,68 +785,22 @@ pub const SegmentOffset = packed struct {
     }
 
     pub fn create(
-        path_tag: PathTag,
-        style: Style,
         fill: Offset,
         front_stroke: Offset,
         back_stroke: Offset,
     ) @This() {
-        var flat_path_offset: u32 = 0;
-        var fill_flat_subpaths: u32 = 0;
-        var stroke_flat_subpaths: u32 = 0;
-        var flat_segment_offset: u32 = 0;
-
-        if (path_tag.index.path == 1) {
-            if (style.isFill()) {
-                flat_path_offset += 1;
-            }
-
-            if (style.isStroke()) {
-                flat_path_offset += 1;
-            }
-        }
-
-        if (path_tag.index.subpath == 1) {
-            if (style.isFill()) {
-                fill_flat_subpaths += 1;
-            }
-
-            if (style.isStroke()) {
-                if (path_tag.segment.cap) {
-                    stroke_flat_subpaths += 1;
-                } else {
-                    stroke_flat_subpaths += 2;
-                }
-            }
-        }
-
-        if (style.isFill()) {
-            flat_segment_offset += 1;
-        }
-
-        if (style.isStroke()) {
-            flat_segment_offset += 2;
-        }
+        const front_stroke2 = fill.combine(front_stroke);
+        const back_stroke2 = front_stroke2.combine(back_stroke);
 
         return @This(){
-            .flat_path_offset = flat_path_offset,
-            .fill_flat_subpaths = fill_flat_subpaths,
-            .stroke_flat_subpaths = stroke_flat_subpaths,
-            .flat_subpath_offset = fill_flat_subpaths + stroke_flat_subpaths,
-            .flat_segment_offset = flat_segment_offset,
             .fill = fill,
-            .front_stroke = front_stroke,
-            .back_stroke = back_stroke,
+            .front_stroke = front_stroke2,
+            .back_stroke = back_stroke2,
         };
     }
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .flat_path_offset = self.flat_path_offset + other.flat_path_offset,
-            .fill_flat_subpaths = self.fill_flat_subpaths + other.fill_flat_subpaths,
-            .stroke_flat_subpaths = self.stroke_flat_subpaths + other.stroke_flat_subpaths,
-            .flat_subpath_offset = self.flat_subpath_offset + other.flat_subpath_offset,
-            .flat_segment_offset = self.flat_segment_offset + other.flat_segment_offset,
             .fill = self.fill.combine(other.fill),
             .front_stroke = self.front_stroke.combine(other.front_stroke),
             .back_stroke = self.back_stroke.combine(other.back_stroke),

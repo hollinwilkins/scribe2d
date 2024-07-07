@@ -147,45 +147,48 @@ pub const Estimate = struct {
         transform: TransformF32.Affine,
         segment_data: SegmentData,
     ) SegmentOffsets {
+        var base = Offsets{};
         var fill = Offsets{};
         var front_stroke = Offsets{};
         var back_stroke = Offsets{};
 
+        switch (path_tag.segment.kind) {
+            .line_f32 => {
+                const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
+                base = estimateLine(line);
+            },
+            .line_i16 => {
+                const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
+                base = estimateLine(line);
+            },
+            .arc_f32 => {
+                const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
+                base = estimateArc(config, arc);
+            },
+            .arc_i16 => {
+                const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
+                base = estimateArc(config, arc);
+            },
+            .quadratic_bezier_f32 => {
+                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
+                base = estimateQuadraticBezier(qb);
+            },
+            .quadratic_bezier_i16 => {
+                const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
+                base = estimateQuadraticBezier(qb);
+            },
+            .cubic_bezier_f32 => {
+                const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
+                base = estimateCubicBezier(cb);
+            },
+            .cubic_bezier_i16 => {
+                const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
+                base = estimateCubicBezier(cb);
+            },
+        }
+
         if (style.isFill()) {
-            switch (path_tag.segment.kind) {
-                .line_f32 => {
-                    const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
-                    fill = estimateLine(line);
-                },
-                .line_i16 => {
-                    const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
-                    fill = estimateLine(line);
-                },
-                .arc_f32 => {
-                    const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                    fill = estimateArc(config, arc);
-                },
-                .arc_i16 => {
-                    const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                    fill = estimateArc(config, arc);
-                },
-                .quadratic_bezier_f32 => {
-                    const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
-                    fill = estimateQuadraticBezier(qb);
-                },
-                .quadratic_bezier_i16 => {
-                    const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                    fill = estimateQuadraticBezier(qb);
-                },
-                .cubic_bezier_f32 => {
-                    const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                    fill = estimateCubicBezier(cb);
-                },
-                .cubic_bezier_i16 => {
-                    const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                    fill = estimateCubicBezier(cb);
-                },
-            }
+            fill = base;
         }
 
         if (style.isStroke()) {
@@ -196,12 +199,12 @@ pub const Estimate = struct {
             const stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
             const cap = estimateCap(config, path_tag, stroke, scaled_width);
             const join = estimateJoin(config, stroke, scaled_width);
-            const base_stroke = fill.mulScalar(stroke_fudge);
+            const base_stroke = base.mulScalar(stroke_fudge);
             front_stroke = base_stroke.combine(cap).combine(join);
             back_stroke = base_stroke.combine(join);
         }
 
-        return SegmentOffsets.create(path_tag, style, fill, front_stroke, back_stroke);
+        return SegmentOffsets.create(fill, front_stroke, back_stroke);
     }
 
     pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Offsets {
