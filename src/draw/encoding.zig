@@ -706,7 +706,7 @@ pub const FlatSegment = struct {
     line_capacity: u32 = 0,
 };
 
-pub const Offsets = packed struct {
+pub const Offset = packed struct {
     lines: u32 = 0,
     line_offset: u32 = 0,
     intersections: u32 = 0,
@@ -752,19 +752,19 @@ pub const Offsets = packed struct {
     }
 };
 
-pub const SegmentOffsets = packed struct {
-    fill: Offsets = Offsets{},
-    front_stroke: Offsets = Offsets{},
-    back_stroke: Offsets = Offsets{},
-    sum: Offsets = Offsets{},
+pub const SegmentOffset = packed struct {
+    fill: Offset = Offset{},
+    front_stroke: Offset = Offset{},
+    back_stroke: Offset = Offset{},
+    sum: Offset = Offset{},
 
     pub usingnamespace MonoidFunctions(@This(), @This());
 
-    pub fn createTag(offsets: SegmentOffsets) @This() {
+    pub fn createTag(offsets: SegmentOffset) @This() {
         return offsets;
     }
 
-    pub fn create(fill: Offsets, front_stroke: Offsets, back_stroke: Offsets) @This() {
+    pub fn create(fill: Offset, front_stroke: Offset, back_stroke: Offset) @This() {
         const front_stroke2 = fill.combine(front_stroke);
         const back_stroke2 = front_stroke2.combine(back_stroke);
         

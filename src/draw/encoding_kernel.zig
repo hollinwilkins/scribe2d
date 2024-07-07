@@ -11,8 +11,8 @@ const SegmentData = encoding_module.SegmentData;
 const Style = encoding_module.Style;
 const MonoidFunctions = encoding_module.MonoidFunctions;
 const Estimates = encoding_module.Estimates;
-const SegmentEstimates = encoding_module.SegmentEstimates;
-const SegmentOffsets = encoding_module.SegmentOffsets;
+const Offsets = encoding_module.Offset;
+const SegmentOffsets = encoding_module.SegmentOffset;
 const BumpAllocator = encoding_module.BumpAllocator;
 const TransformF32 = core.TransformF32;
 const IntersectionF32 = core.IntersectionF32;
@@ -117,7 +117,7 @@ pub const Estimate = struct {
         segment_data: []const u8,
         range: RangeU32,
         // outputs
-        flat_segment_estimates: []SegmentEstimates,
+        segment_offsets: []SegmentOffsets,
     ) void {
         for (range.start..range.end) |index| {
             const path_tag = path_tags[index];
@@ -128,7 +128,7 @@ pub const Estimate = struct {
                 .segment_data = segment_data,
             };
 
-            flat_segment_estimates[index] = estimateSegment(
+            segment_offsets[index] = estimateSegment(
                 config,
                 path_tag,
                 path_monoid,
@@ -146,41 +146,43 @@ pub const Estimate = struct {
         style: Style,
         transform: TransformF32.Affine,
         segment_data: SegmentData,
-    ) SegmentEstimates {
-        var estimates = SegmentEstimates{};
+    ) SegmentOffsets {
+        var fill = Offsets{};
+        var front_stroke = Offsets{};
+        var back_stroke = Offsets{};
 
         switch (path_tag.segment.kind) {
             .line_f32 => {
                 const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
-                estimates.fill = estimateLine(line);
+                fill = estimateLine(line);
             },
             .line_i16 => {
                 const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
-                estimates.fill = estimateLine(line);
+                fill = estimateLine(line);
             },
             .arc_f32 => {
                 const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                estimates.fill = estimateArc(config, arc);
+                fill = estimateArc(config, arc);
             },
             .arc_i16 => {
                 const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                estimates.fill = estimateArc(config, arc);
+                fill = estimateArc(config, arc);
             },
             .quadratic_bezier_f32 => {
                 const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
-                estimates.fill = estimateQuadraticBezier(qb);
+                fill = estimateQuadraticBezier(qb);
             },
             .quadratic_bezier_i16 => {
                 const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                estimates.fill = estimateQuadraticBezier(qb);
+                fill = estimateQuadraticBezier(qb);
             },
             .cubic_bezier_f32 => {
                 const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                estimates.fill = estimateCubicBezier(cb);
+                fill = estimateCubicBezier(cb);
             },
             .cubic_bezier_i16 => {
                 const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                estimates.fill = estimateCubicBezier(cb);
+                fill = estimateCubicBezier(cb);
             },
         }
 
@@ -192,54 +194,54 @@ pub const Estimate = struct {
             const stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
             const cap = estimateCap(config, path_tag, stroke, scaled_width);
             const join = estimateJoin(config, stroke, scaled_width);
-            const base_stroke = estimates.fill.mulScalar(stroke_fudge);
-            estimates.front_stroke = base_stroke.combine(cap).combine(join);
-            estimates.back_stroke = estimates.front_stroke.combine(base_stroke);
+            const base_stroke = fill.mulScalar(stroke_fudge);
+            front_stroke = base_stroke.combine(cap).combine(join);
+            back_stroke = base_stroke.combine(join);
         }
 
-        return estimates;
+        return SegmentOffsets.create(fill, front_stroke, back_stroke);
     }
 
-    pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Estimates {
+    pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Offsets {
         switch (stroke.join) {
             .bevel => {
-                return Estimates.create(1, estimateLineWidthIntersections(scaled_width));
+                return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
             },
             .miter => {
                 const MITER_FUDGE: u16 = 2;
-                return Estimates.create(2, estimateLineWidthIntersections(scaled_width) * 2 * MITER_FUDGE);
+                return Offsets.create(2, estimateLineWidthIntersections(scaled_width) * 2 * MITER_FUDGE);
             },
             .round => {
                 const arc_estimate = estimateRoundArc(config, scaled_width);
-                return Estimates.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
+                return Offsets.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
             },
         }
     }
 
-    pub fn estimateCap(config: KernelConfig, path_tag: PathTag, stroke: Style.Stroke, scaled_width: f32) Estimates {
+    pub fn estimateCap(config: KernelConfig, path_tag: PathTag, stroke: Style.Stroke, scaled_width: f32) Offsets {
         if (path_tag.segment.cap) {
             const is_start_cap = path_tag.index.subpath == 1;
             const cap = if (is_start_cap) stroke.start_cap else stroke.end_cap;
 
             switch (cap) {
                 .butt => {
-                    return Estimates.create(1, estimateLineWidthIntersections(scaled_width));
+                    return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
                 },
                 .square => {
-                    return Estimates.create(3, estimateLineWidthIntersections(scaled_width) * 2);
+                    return Offsets.create(3, estimateLineWidthIntersections(scaled_width) * 2);
                 },
                 .round => {
                     const arc_estimate = estimateRoundArc(config, scaled_width);
-                    return Estimates.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
+                    return Offsets.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
                 },
             }
         }
 
-        return Estimates{};
+        return Offsets{};
     }
 
-    pub fn estimateLineWidth(scaled_width: f32) Estimates {
-        return Estimates.create(1, estimateLineWidthIntersections(scaled_width));
+    pub fn estimateLineWidth(scaled_width: f32) Offsets {
+        return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
     }
 
     pub fn estimateLineWidthIntersections(scaled_width: f32) u16 {
@@ -252,22 +254,22 @@ pub const Estimate = struct {
         return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
     }
 
-    pub fn estimateLine(line: LineF32) Estimates {
+    pub fn estimateLine(line: LineF32) Offsets {
         const dxdy = line.p1.sub(line.p0);
         var intersections: u16 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
         intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
 
-        return Estimates.create(1, intersections);
+        return Offsets.create(1, intersections);
     }
 
-    pub fn estimateArc(config: KernelConfig, arc: ArcF32) Estimates {
+    pub fn estimateArc(config: KernelConfig, arc: ArcF32) Offsets {
         const width = arc.p0.sub(arc.p1).length() + arc.p2.sub(arc.p1).length();
         const arc_estimate = estimateRoundArc(config, width);
 
-        return Estimates.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
+        return Offsets.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
     }
 
-    pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Estimates {
+    pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Offsets {
         const lines = @as(u16, @intFromFloat(Wang.quadratic(
             @floatCast(RSQRT_OF_TOL),
             quadratic_bezier.p0,
@@ -282,10 +284,10 @@ pub const Estimate = struct {
             lines,
         );
 
-        return Estimates.create(lines, intersections);
+        return Offsets.create(lines, intersections);
     }
 
-    pub fn estimateCubicBezier(cubic_bezier: CubicBezierF32) Estimates {
+    pub fn estimateCubicBezier(cubic_bezier: CubicBezierF32) Offsets {
         const lines = @as(u16, @intFromFloat(Wang.cubic(
             @floatCast(RSQRT_OF_TOL),
             cubic_bezier.p0,
@@ -301,7 +303,7 @@ pub const Estimate = struct {
             lines,
         );
 
-        return Estimates.create(lines, intersections);
+        return Offsets.create(lines, intersections);
     }
 
     pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u16) u16 {
