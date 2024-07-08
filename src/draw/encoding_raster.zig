@@ -23,11 +23,6 @@ const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
-    const FillList = std.ArrayListUnmanaged(Style.Fill);
-    const PathList = std.ArrayListUnmanaged(Path);
-    const SubpathList = std.ArrayListUnmanaged(Subpath);
-    const FlatPathList = std.ArrayListUnmanaged(FlatPath);
-    const FlatSubpathList = std.ArrayListUnmanaged(FlatSubpath);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
     const Buffer = std.ArrayListUnmanaged(u8);
@@ -47,6 +42,8 @@ pub const CpuRasterizer = struct {
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
+    flat_segments: FlatSegmentList = FlatSegmentList{},
+    line_data: Buffer = Buffer{},
 
     pub fn init(
         allocator: Allocator,
@@ -65,11 +62,15 @@ pub const CpuRasterizer = struct {
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
+        self.flat_segments.deinit(self.allocator);
+        self.line_data.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
         self.segment_offsets.items.len = 0;
+        self.flat_segments.items.len = 0;
+        self.line_data.items.len = 0;
     }
 
     pub fn rasterize(self: *@This(), texture: *Texture) !void {
@@ -119,6 +120,40 @@ pub const CpuRasterizer = struct {
         SegmentOffset.expand(segment_offsets, segment_offsets);
     }
 
+    // fn flatten(self: *@This()) !void {
+    //     const flattener = kernel_module.Flatten;
+    //     const last_segment_offset = self.segment_offsets.getLast();
+    //     const flat_segments = try self.flat_segments.addManyAsSlice(
+    //         self.allocator,
+    //         last_segment_offset.flat_segment_offset,
+    //     );
+    //     const line_data = try self.line_data.addManyAsSlice(
+    //         self.allocator,
+    //         last_segment_offset.back_stroke.line_offset,
+    //     );
+
+    //     const range = RangeU32{
+    //         .start = 0,
+    //         .end = @intCast(self.path_monoids.items.len),
+    //     };
+    //     var chunk_iter = range.chunkIterator(self.config.chunk_size);
+
+    //     while (chunk_iter.next()) |chunk| {
+    //         flattener.flatten(
+    //             self.config,
+    //             self.encoding.path_tags,
+    //             self.path_monoids.items,
+    //             self.encoding.styles,
+    //             self.encoding.transforms,
+    //             self.encoding.segment_data,
+    //             chunk,
+    //             self.segment_offsets.items,
+    //             flat_segments,
+    //             line_data,
+    //         );
+    //     }
+    // }
+
     pub fn debugPrint(self: @This(), texture: Texture) void {
         _ = texture;
         std.debug.print("============ Path Monoids ============\n", .{});
@@ -126,7 +161,6 @@ pub const CpuRasterizer = struct {
             std.debug.print("{}\n", .{path_monoid});
         }
         std.debug.print("======================================\n", .{});
-
 
         //         std.debug.print("============ Subpaths ============\n", .{});
         //         for (self.subpaths.items, 0..) |subpath, index| {

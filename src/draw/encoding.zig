@@ -721,8 +721,16 @@ pub const FlatSubpath = struct {
 };
 
 pub const FlatSegment = struct {
-    line_end: u32 = 0,
-    line_capacity: u32 = 0,
+    pub const Kind = enum(u2) {
+        fill = 0,
+        stroke_front = 1,
+        stroke_back = 2,
+    };
+
+    kind: Kind,
+    path_index: u32 = 0,
+    subpath_index: u32 = 0,
+    segment_index: u32 = 0,
 };
 
 pub const Offset = packed struct {
@@ -774,6 +782,7 @@ pub const Offset = packed struct {
 };
 
 pub const SegmentOffset = packed struct {
+    flat_segment_offset: u32 = 0,
     fill: Offset = Offset{},
     front_stroke: Offset = Offset{},
     back_stroke: Offset = Offset{},
@@ -785,14 +794,24 @@ pub const SegmentOffset = packed struct {
     }
 
     pub fn create(
+        style: Style,
         fill: Offset,
         front_stroke: Offset,
         back_stroke: Offset,
     ) @This() {
+        var flat_segment_offset: u32 = 0;
+        if (style.isFill()) {
+            flat_segment_offset += 1;
+        }
+        if (style.isStroke()) {
+            flat_segment_offset += 2;
+        }
+
         const front_stroke2 = fill.combine(front_stroke);
         const back_stroke2 = front_stroke2.combine(back_stroke);
 
         return @This(){
+            .flat_segment_offset = flat_segment_offset,
             .fill = fill,
             .front_stroke = front_stroke2,
             .back_stroke = back_stroke2,
@@ -801,6 +820,7 @@ pub const SegmentOffset = packed struct {
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
+            .flat_segment_offset = self.flat_segment_offset + other.flat_segment_offset,
             .fill = self.fill.combine(other.fill),
             .front_stroke = self.front_stroke.combine(other.front_stroke),
             .back_stroke = self.back_stroke.combine(other.back_stroke),
