@@ -390,52 +390,24 @@ pub const Flatten = struct {
     ) void {
         for (range.start..range.end) |index| {
             const path_monoid = path_monoids[index];
-            var path = paths[path_monoid.path_index];
+            const path = paths[path_monoid.path_index];
             const style = styles[path_monoid.style_index];
             const current_segment_offset = segment_offsets[index];
-            const previous_segment_offset = if (index > 0) segment_offsets[index - 1] else null;
-            var start_segment_offset: SegmentOffset = undefined;
-            var end_segment_offset: SegmentOffset = undefined;
-
-            if (path.segment_index > 0) {
-                start_segment_offset = segment_offsets[path.segment_index - 1];
-            } else {
-                start_segment_offset = SegmentOffset{};
-            }
-
-            if (path_monoid.path_index + 1 < paths.len) {
-                end_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
-            } else {
-                end_segment_offset = segment_offsets[segment_offsets.len - 1];
-            }
+            const previous_segment_offset = if (index > 0) segment_offsets[index - 1] else SegmentOffset{};
+            const start_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
 
             if (style.isFill()) {
-                var line_bump = BumpAllocator{
-                    .start = start_segment_offset.sum.line_offset,
-                    .end = start_segment_offset.sum.line_offset + end_segment_offset.fill.line_offset,
-                    .offset = &path.fill_line_bump,
-                };
-                var flat_segment_bump = BumpAllocator{
-                    .start = start_segment_offset.sum.flat_segment,
-                    .end = start_segment_offset.sum.flat_segment + end_segment_offset.fill.flat_segment,
-                    .offset = &path.fill_flat_segment_bump,
-                };
+                const flat_segment_index = start_segment_offset.fill.flat_segment + (previous_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
+                const start_line_offset = start_segment_offset.sum.line_offset + (previous_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
+                const end_line_offset = start_segment_offset.sum.line_offset + (current_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
+                const fill_line_data = line_data[start_line_offset .. end_line_offset];
 
-                var start_line_offset: u32 = 0;
-                if (previous_segment_offset) |offset| {
-                    start_line_offset = offset.fill.line_offset;
-                }
-                const end_line_offset = current_segment_offset.fill.line_offset;
-                const line_data_size = end_line_offset - start_line_offset;
-                const start_line_data_offset = line_bump.bump(line_data_size);
-                const fill_line_data = line_data[start_line_data_offset .. start_line_data_offset + line_data_size];
-
-                const flat_segment = &flat_segments[flat_segment_bump.bump(1)];
+                const flat_segment = &flat_segments[flat_segment_index];
                 flat_segment.* = FlatSegment{
                     .kind = .fill,
                     .segment_index = path_monoid.segment_index,
-                    .start_line_data_offset = start_line_data_offset,
-                    .end_line_data_offset = start_line_data_offset,
+                    .start_line_data_offset = start_line_offset,
+                    .end_line_data_offset = start_line_offset,
                 };
 
                 fill(
@@ -450,7 +422,37 @@ pub const Flatten = struct {
                 );
             }
 
-            if (style.isStroke()) {}
+            // if (style.isStroke()) {
+            //     const front_stroke_offset = fill_offset.combine(current_segment_offset.front_stroke);
+            //     const back_stroke_offset = front_stroke_offset.combine(current_segment_offset.back_stroke);
+            //     var front_line_bump = BumpAllocator{
+            //         .start = start_segment_offset.sum.line_offset,
+            //         .end = start_segment_offset.sum.line_offset + end_segment_offset.fill.line_offset,
+            //         .offset = &path.front_stroke_line_bump,
+            //     };
+            //     var front_flat_segment_bump = BumpAllocator{
+            //         .start = start_segment_offset.sum.flat_segment,
+            //         .end = start_segment_offset.sum.flat_segment + end_segment_offset.fill.flat_segment,
+            //         .offset = &path.front_stroke_flat_segment_bump,
+            //     };
+
+            //     var start_line_offset: u32 = 0;
+            //     if (previous_segment_offset) |offset| {
+            //         start_line_offset = offset.fill.line_offset;
+            //     }
+            //     const end_line_offset = current_segment_offset.fill.line_offset;
+            //     const line_data_size = end_line_offset - start_line_offset;
+            //     const start_line_data_offset = line_bump.bump(line_data_size);
+            //     const fill_line_data = line_data[start_line_data_offset .. start_line_data_offset + line_data_size];
+
+            //     const flat_segment = &flat_segments[flat_segment_bump.bump(1)];
+            //     flat_segment.* = FlatSegment{
+            //         .kind = .fill,
+            //         .segment_index = path_monoid.segment_index,
+            //         .start_line_data_offset = start_line_data_offset,
+            //         .end_line_data_offset = start_line_data_offset,
+            //     };
+            // }
         }
     }
 

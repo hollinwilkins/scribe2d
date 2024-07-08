@@ -695,12 +695,6 @@ pub const Path = struct {
     pub const Bump = std.atomic.Value(u32);
 
     segment_index: u32 = 0,
-    fill_line_bump: Bump = Bump{ .raw = 0 },
-    fill_flat_segment_bump: Bump = Bump{ .raw = 0 },
-    front_stroke_bump: Bump = Bump{ .raw = 0 },
-    front_stroke_flat_segment_bump: Bump = Bump{ .raw = 0 },
-    back_stroke_bump: Bump = Bump{ .raw = 0 },
-    back_stroke_flat_segment_bump: Bump = Bump{ .raw = 0 },
 };
 
 pub const FlatSegment = struct {
