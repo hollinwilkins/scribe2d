@@ -1414,7 +1414,13 @@ pub const Rasterize = struct {
         const path_monoid = path_monoids[flat_segment.segment_index];
         const path = &paths[path_monoid.path_index];
         const path_offset = PathOffset.create(path_monoid.path_index, segment_offsets, paths);
-        const subpath_offset = SubpathOffset.create(path_monoid.subpath_index, segment_offsets, subpaths);
+        const subpath_offset = SubpathOffset.create(
+            flat_segment.segment_index,
+            path_monoids,
+            segment_offsets,
+            paths,
+            subpaths,
+        );
 
         if (flat_segment.kind == .fill) {
             var fill_path_bump = BumpAllocator{
@@ -1688,8 +1694,7 @@ pub const Rasterize = struct {
 
             if (self.index < self.segment_grid_intersections.len) {
                 next_grid_intersection = self.segment_grid_intersections[self.index];
-            }
-            else if (self.index == self.segment_grid_intersections.len) {
+            } else if (self.index == self.segment_grid_intersections.len) {
                 const next_flat_segment_index = (self.flat_segment_index + 1) % (self.subpath_flat_segments.len);
                 const next_flat_segment = self.subpath_flat_segments[next_flat_segment_index];
                 next_grid_intersection = self.grid_intersections[next_flat_segment.start_intersection_offset];
