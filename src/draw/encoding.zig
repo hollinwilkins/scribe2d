@@ -734,6 +734,7 @@ pub const Offset = packed struct {
     pub fn mulScalar(self: @This(), scalar: f32) @This() {
         const n_lines: u32 = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.lines)) * scalar));
         return @This(){
+            .flat_segment = self.flat_segment,
             .lines = n_lines,
             .line_offset = lineOffset(n_lines),
             .intersections = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersections)) * scalar)),
