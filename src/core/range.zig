@@ -40,6 +40,10 @@ pub fn Range(comptime T: type) type {
                     .end = @min(self.range.end, chunk_start + self.chunk_size),
                 };
             }
+
+            pub fn reset(self: *@This()) void {
+                self.index = 0;
+            }
         };
     };
 }

@@ -1,10 +1,12 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const encoding_module = @import("./encoding.zig");
+const texture_module = @import("./texture.zig");
 const euler_module = @import("./euler.zig");
 const msaa_module = @import("./msaa.zig");
 const RangeI32 = core.RangeI32;
 const RangeU32 = core.RangeU32;
+const PointU32 = core.PointU32;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const Path = encoding_module.Path;
@@ -38,6 +40,9 @@ const QuadraticBezierF32 = core.QuadraticBezierF32;
 const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
+const Texture = texture_module.Texture;
+const ColorF32 = texture_module.ColorF32;
+const ColorBlend = texture_module.ColorBlend;
 const CubicPoints = euler_module.CubicPoints;
 const CubicParams = euler_module.CubicParams;
 const EulerParams = euler_module.EulerParams;
@@ -1543,6 +1548,61 @@ pub const Rasterize = struct {
         }
     }
 
+    pub fn boundaryFinish(
+        path_monoids: []const PathMonoid,
+        segment_offsets: []const SegmentOffset,
+        range: RangeU32,
+        paths: []Path,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        for (range.start..range.end) |path_index| {
+            const path = &paths[path_index];
+            const path_monoid = path_monoids[path.segment_index];
+            const path_offset = PathOffset.create(
+                path_monoid.path_index,
+                segment_offsets,
+                paths,
+            );
+
+            path.start_fill_boundary_offset = path_offset.start_fill_boundary_offset;
+            path.end_fill_boundary_offset = path_offset.start_fill_boundary_offset + path.fill_bump.raw;
+
+            path.start_stroke_boundary_offset = path_offset.start_stroke_boundary_offset;
+            path.end_stroke_boundary_offset = path_offset.start_stroke_boundary_offset + path.stroke_bump.raw;
+
+            std.mem.sort(
+                BoundaryFragment,
+                boundary_fragments[path.start_fill_boundary_offset..path.end_fill_boundary_offset],
+                @as(u32, 0),
+                boundaryFragmentLessThan,
+            );
+
+            std.mem.sort(
+                BoundaryFragment,
+                boundary_fragments[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset],
+                @as(u32, 0),
+                boundaryFragmentLessThan,
+            );
+
+            path.fill_bump.raw = 0;
+            path.stroke_bump.raw = 0;
+        }
+    }
+
+    fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
+        if (left.pixel.y < right.pixel.y) {
+            return true;
+        } else if (left.pixel.y > right.pixel.y) {
+            return false;
+        } else if (left.pixel.x < right.pixel.x) {
+            return true;
+        } else if (left.pixel.x > right.pixel.x) {
+            return false;
+        }
+
+        return false;
+    }
+
     pub fn merge(
         boundary_fragments: []const BoundaryFragment,
         range: RangeU32,
@@ -1817,6 +1877,39 @@ pub const Rasterize = struct {
 
         if (line.intersectHorizontalLine(scan_line)) |intersection| {
             intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+        }
+    }
+};
+
+pub const Blend = struct {
+    pub fn fill(
+        merge_fragments: []const MergeFragment,
+        range: RangeU32,
+        texture: *Texture,
+    ) void {
+        const color_blend = ColorBlend.Alpha;
+
+        for (range.start..range.end) |merge_index| {
+            const merge_fragment = merge_fragments[merge_index];
+            const pixel = merge_fragment.pixel;
+            if (pixel.x < 0 or pixel.y < 0 or pixel.x >= texture.dimensions.width or pixel.y >= texture.dimensions.height) {
+                continue;
+            }
+
+            const intensity = merge_fragment.getIntensity();
+            const texture_pixel = PointU32{
+                .x = @intCast(pixel.x),
+                .y = @intCast(pixel.y),
+            };
+            const fragment_color = ColorF32{
+                .r = 0.0,
+                .g = 0.0,
+                .b = 0.0,
+                .a = intensity,
+            };
+            const texture_color = texture.getPixelUnsafe(texture_pixel);
+            const blend_color = color_blend.blend(fragment_color, texture_color);
+            texture.setPixelUnsafe(texture_pixel, blend_color);
         }
     }
 };
