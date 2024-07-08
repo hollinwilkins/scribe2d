@@ -231,7 +231,15 @@ pub const CpuRasterizer = struct {
         {
             std.debug.print("============ Flat Fill Lines ============\n", .{});
             for (self.flat_segments.items) |flat_segment| {
-                std.debug.print("Kind: {}\n", .{flat_segment.kind});
+                std.debug.print("{s}:\n", .{@tagName(flat_segment.kind)});
+                const flat_segment_lines = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset];
+                var line_iter = encoding_module.LineIterator{
+                    .line_data = flat_segment_lines,
+                };
+                while (line_iter.next()) |line| {
+                    std.debug.print("{}\n", .{line});
+                }
+                std.debug.print("-----------\n", .{});
             }
             // var first_segment_offset: u32 = 0;
             // for (self.subpaths.items) |subpath| {

@@ -972,16 +972,16 @@ pub const GridIntersection = struct {
 };
 
 pub const LineIterator = struct {
-    segment_data: []const u8,
+    line_data: []const u8,
     offset: u32 = 0,
 
     pub fn next(self: *@This()) ?LineF32 {
         const end_offset = self.offset + @sizeOf(PointF32);
-        if (end_offset >= self.segment_data.len) {
+        if (end_offset >= self.line_data.len) {
             return null;
         }
 
-        const line = std.mem.bytesToValue(LineF32, self.segment_data[self.offset..end_offset]);
+        const line = std.mem.bytesToValue(LineF32, self.line_data[self.offset..end_offset]);
         self.offset += @sizeOf(PointF32);
         return line;
     }
