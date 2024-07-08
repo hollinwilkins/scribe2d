@@ -197,7 +197,7 @@ pub const CpuRasterizer = struct {
         //     sb.raw = 0;
         // }
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
-        // const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
         // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_path.fill.merge_fragment.capacity);
 
         const flat_segment_range = RangeU32{
@@ -219,20 +219,20 @@ pub const CpuRasterizer = struct {
             );
         }
 
-        // chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
-        // while (chunk_iter.next()) |chunk| {
-        //     rasterizer.boundary(
-        //         self.half_planes,
-        //         self.path_monoids.items,
-        //         self.subpaths.items,
-        //         self.flat_segments.items,
-        //         grid_intersections,
-        //         self.segment_offsets.items,
-        //         chunk,
-        //         self.paths.items,
-        //         boundary_fragments,
-        //     );
-        // }
+        chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.boundary(
+                self.half_planes,
+                self.path_monoids.items,
+                self.subpaths.items,
+                self.flat_segments.items,
+                grid_intersections,
+                self.segment_offsets.items,
+                chunk,
+                self.paths.items,
+                boundary_fragments,
+            );
+        }
 
         // var start_boundary_fragment: u32 = 0;
         // for (self.paths.items, path_bumps) |*path, bump| {
@@ -846,17 +846,17 @@ test "encoding path monoids" {
     _ = try path_encoder.lineTo(core.PointF32.create(10.0, 10.0));
     try path_encoder.finish();
 
-    // var path_encoder2 = encoder.pathEncoder(i16);
-    // try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    // _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    // _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    // _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    // _ = try path_encoder2.cubicTo(
-    //     core.PointI16.create(120, 120),
-    //     core.PointI16.create(70, 130),
-    //     core.PointI16.create(22, 22),
-    // );
-    // try path_encoder2.finish();
+    var path_encoder2 = encoder.pathEncoder(i16);
+    try path_encoder2.moveTo(core.PointI16.create(10, 10));
+    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
+    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
+    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
+    _ = try path_encoder2.cubicTo(
+        core.PointI16.create(120, 120),
+        core.PointI16.create(70, 130),
+        core.PointI16.create(22, 22),
+    );
+    try path_encoder2.finish();
 
     var half_planes = try HalfPlanesU16.init(std.testing.allocator);
     defer half_planes.deinit();

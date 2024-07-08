@@ -1422,7 +1422,7 @@ pub const Rasterize = struct {
 
             boundarySegment2(
                 half_planes,
-                flat_segment_index,
+                flat_segment_index - subpath_offset.start_fill_flat_segment_offset,
                 flat_segment,
                 subpath_flat_segments,
                 grid_intersections,
