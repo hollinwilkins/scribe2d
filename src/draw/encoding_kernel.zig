@@ -405,7 +405,7 @@ pub const Flatten = struct {
             }
 
             if (style.isFill()) {
-                const flat_segment_index = start_segment_offset.fill.flat_segment + (previous_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
+                const flat_segment_index = start_segment_offset.sum.flat_segment + (previous_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
                 const start_line_offset = start_segment_offset.sum.line_offset + (previous_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
                 const end_line_offset = start_segment_offset.sum.line_offset + (current_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
                 const fill_line_data = line_data[start_line_offset..end_line_offset];

@@ -712,7 +712,7 @@ pub const FlatSegment = struct {
     end_line_data_offset: u32 = 0,
 };
 
-pub const Offset = packed struct {
+pub const Offset = struct {
     flat_segment: u32 = 0,
     lines: u32 = 0,
     line_offset: u32 = 0,
@@ -763,7 +763,7 @@ pub const Offset = packed struct {
     }
 };
 
-pub const SegmentOffset = packed struct {
+pub const SegmentOffset = struct {
     fill: Offset = Offset{},
     front_stroke: Offset = Offset{},
     back_stroke: Offset = Offset{},
