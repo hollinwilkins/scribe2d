@@ -697,8 +697,10 @@ pub const Path = struct {
     segment_index: u32 = 0,
     start_fill_boundary_offset: u32 = 0,
     end_fill_boundary_offset: u32 = 0,
+    end_fill_merge_offset: u32 = 0,
     start_stroke_boundary_offset: u32 = 0,
     end_stroke_boundary_offset: u32 = 0,
+    end_stroke_merge_offset: u32 = 0,
     fill_bump: Bump = Bump{ .raw = 0 },
     stroke_bump: Bump = Bump{ .raw = 0 },
 };

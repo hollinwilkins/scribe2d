@@ -22,6 +22,7 @@ const FlatSegment = encoding_module.FlatSegment;
 const SegmentOffset = encoding_module.SegmentOffset;
 const GridIntersection = encoding_module.GridIntersection;
 const BoundaryFragment = encoding_module.BoundaryFragment;
+const MergeFragment = encoding_module.MergeFragment;
 const Texture = texture_module.Texture;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
@@ -34,10 +35,10 @@ pub const CpuRasterizer = struct {
     const Buffer = std.ArrayListUnmanaged(u8);
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
+    const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
     // const LineList = std.ArrayListUnmanaged(LineF32);
     // const BoolList = std.ArrayListUnmanaged(bool);
     // const SubpathList = std.ArrayListUnmanaged(Subpath);
-    // const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
     // const OffsetList = std.ArrayListUnmanaged(u32);
 
     allocator: Allocator,
@@ -52,6 +53,7 @@ pub const CpuRasterizer = struct {
     line_data: Buffer = Buffer{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
+    merge_fragments: MergeFragmentList = MergeFragmentList{},
 
     pub fn init(
         allocator: Allocator,
@@ -76,6 +78,7 @@ pub const CpuRasterizer = struct {
         self.line_data.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
+        self.merge_fragments.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
@@ -87,6 +90,7 @@ pub const CpuRasterizer = struct {
         self.line_data.items.len = 0;
         self.grid_intersections.items.len = 0;
         self.boundary_fragments.items.len = 0;
+        self.merge_fragments.items.len = 0;
     }
 
     pub fn rasterize(self: *@This(), texture: *Texture) !void {
@@ -199,16 +203,12 @@ pub const CpuRasterizer = struct {
         // }
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
-        // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_path.fill.merge_fragment.capacity);
+        const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
 
         const flat_segment_range = RangeU32{
             .start = 0,
             .end = @intCast(self.flat_segments.items.len),
         };
-        // const path_range = RangeU32{
-        //     .start = 0,
-        //     .end = @intCast(self.paths.items.len),
-        // };
 
         var chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
         while (chunk_iter.next()) |chunk| {
@@ -263,40 +263,24 @@ pub const CpuRasterizer = struct {
                 @as(u32, 0),
                 boundaryFragmentLessThan,
             );
+
+            path.fill_bump.raw = 0;
+            path.stroke_bump.raw = 0;
         }
 
-        // var start_boundary_fragment: u32 = 0;
-        // for (self.paths.items, path_bumps) |*path, bump| {
-        //     path.fill.boundary_fragment.end = start_boundary_fragment + bump.raw;
-        //     std.mem.sort(
-        //         BoundaryFragment,
-        //         self.boundary_fragments.items[start_boundary_fragment..path.fill.boundary_fragment.end],
-        //         @as(u32, 0),
-        //         boundaryFragmentLessThan,
-        //     );
-        //     start_boundary_fragment = path.fill.boundary_fragment.capacity;
-        // }
+        rasterizer.merge(
+            boundary_fragments,
+            self.paths.items,
+            merge_fragments,
+        );
 
-        // for (self.path_bumps.items) |*bump| {
-        //     bump.raw = 0;
-        // }
+        for (self.paths.items) |*path| {
+            path.end_fill_merge_offset = path.start_fill_boundary_offset + path.fill_bump.raw;
+            path.end_stroke_merge_offset = path.start_stroke_boundary_offset + path.stroke_bump.raw;
 
-        // chunk_iter = path_range.chunkIterator(self.config.chunk_size);
-        // while (chunk_iter.next()) |chunk| {
-        //     rasterizer.merge(
-        //         self.paths.items,
-        //         self.boundary_fragments.items,
-        //         chunk,
-        //         self.path_bumps.items,
-        //         merge_fragments,
-        //     );
-        // }
-
-        // var start_merge_fragment: u32 = 0;
-        // for (self.paths.items, path_bumps) |*path, bump| {
-        //     path.fill.merge_fragment.end = start_merge_fragment + bump.raw;
-        //     start_merge_fragment = path.fill.merge_fragment.capacity;
-        // }
+            path.fill_bump.raw = 0;
+            path.stroke_bump.raw = 0;
+        }
 
         // chunk_iter = path_range.chunkIterator(self.config.chunk_size);
         // while (chunk_iter.next()) |chunk| {

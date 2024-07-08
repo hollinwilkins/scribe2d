@@ -1543,65 +1543,80 @@ pub const Rasterize = struct {
         }
     }
 
-    // pub fn merge(
-    //     paths: []const Path,
-    //     boundary_fragments: []const BoundaryFragment,
-    //     range: RangeU32,
-    //     path_bumps: []std.atomic.Value(u32),
-    //     merge_fragments: []MergeFragment,
-    // ) void {
-    //     for (range.start..range.end) |path_index| {
-    //         mergePath(
-    //             @intCast(path_index),
-    //             paths,
-    //             boundary_fragments,
-    //             path_bumps,
-    //             merge_fragments,
-    //         );
-    //     }
-    // }
+    pub fn merge(
+        boundary_fragments: []const BoundaryFragment,
+        paths: []Path,
+        merge_fragments: []MergeFragment,
+    ) void {
+        for (0..paths.len) |path_index| {
+            mergePath(
+                @intCast(path_index),
+                boundary_fragments,
+                paths,
+                merge_fragments,
+            );
+        }
+    }
 
-    // pub fn mergePath(
-    //     path_index: u32,
-    //     paths: []const Path,
-    //     boundary_fragments: []const BoundaryFragment,
-    //     path_bumps: []std.atomic.Value(u32),
-    //     merge_fragments: []MergeFragment,
-    // ) void {
-    //     const path = paths[path_index];
-    //     var start_boundary_offset: u32 = 0;
-    //     var start_merge_offset: u32 = 0;
-    //     const previous_path = if (path_index > 0) paths[path_index - 1] else null;
-    //     if (previous_path) |p| {
-    //         start_boundary_offset = p.fill.boundary_fragment.capacity;
-    //         start_merge_offset = p.fill.merge_fragment.capacity;
-    //     }
-    //     const end_boundary_offset = path.fill.boundary_fragment.end;
-    //     const end_merge_offset = path.fill.merge_fragment.capacity;
-    //     var bump = BumpAllocator{
-    //         .start = start_merge_offset,
-    //         .end = end_merge_offset,
-    //         .offset = &path_bumps[path_index],
-    //     };
-    //     const path_boundary_fragments = boundary_fragments[start_boundary_offset..end_boundary_offset];
+    pub fn mergePath(
+        path_index: u32,
+        boundary_fragments: []const BoundaryFragment,
+        paths: []Path,
+        merge_fragments: []MergeFragment,
+    ) void {
+        const path = &paths[path_index];
 
-    //     var merge_fragment = &merge_fragments[bump.bump(1)];
-    //     merge_fragment.* = MergeFragment{
-    //         .pixel = boundary_fragments[start_boundary_offset].pixel,
-    //     };
-    //     for (path_boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
-    //         if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
-    //             merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(boundary_fragment_index));
+        var fill_bump = BumpAllocator{
+            .start = path.start_fill_boundary_offset,
+            .end = path.end_fill_boundary_offset,
+            .offset = &path.fill_bump,
+        };
+        var stroke_bump = BumpAllocator{
+            .start = path.start_stroke_boundary_offset,
+            .end = path.end_stroke_boundary_offset,
+            .offset = &path.stroke_bump,
+        };
 
-    //             merge_fragment = &merge_fragments[bump.bump(1)];
-    //             merge_fragment.* = MergeFragment{
-    //                 .pixel = boundary_fragment.pixel,
-    //             };
-    //         }
-    //     }
+        mergePath2(
+            path.start_fill_boundary_offset,
+            path.end_fill_boundary_offset,
+            boundary_fragments,
+            &fill_bump,
+            merge_fragments,
+        );
 
-    //     merge_fragment.boundary_offset = end_boundary_offset;
-    // }
+        mergePath2(
+            path.start_stroke_boundary_offset,
+            path.end_stroke_boundary_offset,
+            boundary_fragments,
+            &stroke_bump,
+            merge_fragments,
+        );
+    }
+
+    pub fn mergePath2(
+        start_boundary_offset: u32,
+        end_boundary_offset: u32,
+        boundary_fragments: []const BoundaryFragment,
+        bump: *BumpAllocator,
+        merge_fragments: []MergeFragment,
+    ) void {
+        const path_boundary_fragments = boundary_fragments[start_boundary_offset..end_boundary_offset];
+        var merge_fragment = &merge_fragments[bump.bump(1)];
+        merge_fragment.* = MergeFragment{
+            .pixel = boundary_fragments[start_boundary_offset].pixel,
+        };
+        for (path_boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
+            if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
+                merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(boundary_fragment_index));
+
+                merge_fragment = &merge_fragments[bump.bump(1)];
+                merge_fragment.* = MergeFragment{
+                    .pixel = boundary_fragment.pixel,
+                };
+            }
+        }
+    }
 
     // pub fn mask(
     //     config: KernelConfig,
