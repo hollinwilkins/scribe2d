@@ -693,31 +693,6 @@ pub fn PathEncoder(comptime T: type) type {
 
 pub const Path = struct {
     segment_index: u32 = 0,
-    fill_flat_path_index: u32 = 0,
-    stroke_flat_path_index: u32 = 0,
-    subpath_offset: u32 = 0,
-};
-
-pub const Subpath = struct {
-    segment_index: u32 = 0,
-    path_index: u32 = 0,
-    subpath_index: u32 = 0,
-};
-
-pub const FlatPath = struct {
-    start_flat_subpath_offset: u32 = 0,
-};
-
-pub const FlatSubpath = struct {
-    pub const Kind = enum(u2) {
-        fill,
-        stroke,
-        stroke_capped,
-    };
-
-    kind: Kind,
-    front_flat_segment_offset: u32 = 0,
-    back_flat_segment_offset: u32 = 0,
 };
 
 pub const FlatSegment = struct {

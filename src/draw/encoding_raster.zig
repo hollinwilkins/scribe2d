@@ -23,17 +23,17 @@ const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
+    const PathList = std.ArrayListUnmanaged(Path);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
+    const BumpAllocatorList = std.ArrayListUnmanaged(std.atomic.Value(u32));
     const Buffer = std.ArrayListUnmanaged(u8);
     // const LineList = std.ArrayListUnmanaged(LineF32);
     // const BoolList = std.ArrayListUnmanaged(bool);
-    // const PathList = std.ArrayListUnmanaged(Path);
     // const SubpathList = std.ArrayListUnmanaged(Subpath);
     // const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     // const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     // const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
-    // const BumpAllocatorList = std.ArrayListUnmanaged(std.atomic.Value(u32));
     // const OffsetList = std.ArrayListUnmanaged(u32);
 
     allocator: Allocator,
@@ -41,6 +41,8 @@ pub const CpuRasterizer = struct {
     config: KernelConfig,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
+    paths: PathList = PathList{},
+    path_bumps: BumpAllocatorList = BumpAllocatorList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segments: FlatSegmentList = FlatSegmentList{},
     line_data: Buffer = Buffer{},
@@ -61,6 +63,8 @@ pub const CpuRasterizer = struct {
 
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
+        self.paths.deinit(self.allocator);
+        self.path_bumps.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
         self.flat_segments.deinit(self.allocator);
         self.line_data.deinit(self.allocator);
@@ -68,6 +72,8 @@ pub const CpuRasterizer = struct {
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
+        self.paths.items.len = 0;
+        self.path_bumps.items.len = 0;
         self.segment_offsets.items.len = 0;
         self.flat_segments.items.len = 0;
         self.line_data.items.len = 0;
@@ -93,6 +99,21 @@ pub const CpuRasterizer = struct {
     fn expandPathMonoids(self: *@This()) !void {
         const path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
         PathMonoid.expand(self.encoding.path_tags, path_monoids);
+
+        const last_path_monoid = path_monoids[path_monoids.len - 1];
+        const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
+        for (self.encoding.path_tags, path_monoids) |path_tag, path_monoid| {
+            if (path_tag.index.path == 1) {
+                paths[path_monoid.path_index] = Path{
+                    .segment_index = path_monoid.segment_index,
+                };
+            }
+        }
+
+        const path_bumps = try self.path_bumps.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
+        for (path_bumps) |*bump| {
+            bump.raw = 0;
+        }
     }
 
     fn estimateSegments(self: *@This()) !void {
