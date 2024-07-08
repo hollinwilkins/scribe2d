@@ -1252,20 +1252,21 @@ pub const Flatten = struct {
             }
 
             const last_point = self.lastPoint();
-            if (!std.meta.eql(last_point, line.p0)) {
-                var line_iter = encoding_module.LineIterator{
-                    .line_data = self.line_data[0..self.offset],
-                };
+            std.debug.assert(std.meta.eql(last_point, line.p0));
+            // if (!std.meta.eql(last_point, line.p0)) {
+            //     var line_iter = encoding_module.LineIterator{
+            //         .line_data = self.line_data[0..self.offset],
+            //     };
 
-                std.debug.print("=========== Bad Line Data =============:\n", .{});
-                while (line_iter.next()) |l| {
-                    std.debug.print("{}\n", .{l});
-                }
-                std.debug.print("--------\n", .{});
-                std.debug.print("Bad Line: {}\n", .{line});
-                std.debug.print("=================================\n", .{});
-                std.debug.assert(false);
-            }
+            //     std.debug.print("=========== Bad Line Data =============:\n", .{});
+            //     while (line_iter.next()) |l| {
+            //         std.debug.print("{}\n", .{l});
+            //     }
+            //     std.debug.print("--------\n", .{});
+            //     std.debug.print("Bad Line: {}\n", .{line});
+            //     std.debug.print("=================================\n", .{});
+            //     std.debug.assert(false);
+            // }
             self.addPoint(line.p1);
         }
 
