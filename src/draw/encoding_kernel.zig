@@ -1449,29 +1449,62 @@ pub const Rasterize = struct {
             );
         } else {
             const subpath_tag = path_tags[path_monoid.subpath_index];
-            // const front_flat_segments = flat_segments[subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset];
-            // const back_flat_segments = flat_segments[subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset];
 
             if (subpath_tag.segment.cap) {
                 // front/back stroke are a single subpath
+                // TODO: this needs one IntersectionIterator that smoothly transitions
+                //       between front/back segments
+
+                // const front_flat_segments = flat_segments[subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset];
+                // const back_flat_segments = flat_segments[subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset];
             } else {
-                // var stroke_path_bump = BumpAllocator{
-                //     .start = path_offset.start_stroke_boundary_offset,
-                //     .end = path_offset.end_stroke_boundary_offset,
-                //     .offset = &path.stroke_bump,
-                // };
-
                 // front/back stroke are separate subpaths
-                // var front_stroke_path_bump = BumpAllocator
-            }
+                var stroke_path_bump = BumpAllocator{
+                    .start = path_offset.start_stroke_boundary_offset,
+                    .end = path_offset.end_stroke_boundary_offset,
+                    .offset = &path.stroke_bump,
+                };
 
-            // TODO: this section needs a bit of thought
-            // var stroke_path_bump = BumpAllocator{
-            //     .start = path_offset.start_stroke_boundary_offset,
-            //     .end = path_offset.end_stroke_boundary_offset,
-            //     .offset = &path.bump,
-            // };
-            // const subpath_flat_segments = flat_segments[subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset];
+                if (flat_segment.kind == .stroke_front) {
+                    const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_fill_flat_segment_offset;
+                    const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
+                    const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
+                    var intersection_iter = IntersectionIterator{
+                        .flat_segment_index = subpath_flat_segment_index,
+                        .flat_segment = flat_segment,
+                        .subpath_flat_segments = subpath_flat_segments,
+                        .segment_grid_intersections = segment_grid_intersections,
+                        .grid_intersections = grid_intersections,
+                    };
+
+                    boundarySegment2(
+                        IntersectionIterator,
+                        half_planes,
+                        &stroke_path_bump,
+                        &intersection_iter,
+                        boundary_fragments,
+                    );
+                } else if (flat_segment.kind == .stroke_back) {
+                    const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_fill_flat_segment_offset;
+                    const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
+                    const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
+                    var intersection_iter = IntersectionIterator{
+                        .flat_segment_index = subpath_flat_segment_index,
+                        .flat_segment = flat_segment,
+                        .subpath_flat_segments = subpath_flat_segments,
+                        .segment_grid_intersections = segment_grid_intersections,
+                        .grid_intersections = grid_intersections,
+                    };
+
+                    boundarySegment2(
+                        IntersectionIterator,
+                        half_planes,
+                        &stroke_path_bump,
+                        &intersection_iter,
+                        boundary_fragments,
+                    );
+                }
+            }
         }
     }
 
