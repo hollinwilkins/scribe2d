@@ -15,6 +15,7 @@ const Style = encoding_module.Style;
 const MonoidFunctions = encoding_module.MonoidFunctions;
 const Estimates = encoding_module.Estimates;
 const Offsets = encoding_module.Offset;
+const FlatSegmentOffset = encoding_module.FlatSegmentOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
 const BumpAllocator = encoding_module.BumpAllocator;
 const TransformF32 = core.TransformF32;
@@ -392,30 +393,21 @@ pub const Flatten = struct {
     ) void {
         for (range.start..range.end) |segment_index| {
             const path_monoid = path_monoids[segment_index];
-            const path = paths[path_monoid.path_index];
             const style = styles[path_monoid.style_index];
-            const current_segment_offset = segment_offsets[segment_index];
-            const previous_segment_offset = if (segment_index > 0) segment_offsets[segment_index - 1] else SegmentOffset{};
-            const start_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
-            var end_segment_offset: SegmentOffset = undefined;
-            if (path_monoid.path_index + 1 < paths.len) {
-                end_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
-            } else {
-                end_segment_offset = segment_offsets[segment_offsets.len - 1];
-            }
+            const flat_segment_offset = FlatSegmentOffset.create(
+                @intCast(segment_index),
+                path_monoid,
+                segment_offsets,
+                paths,
+            );
 
             if (style.isFill()) {
-                const flat_segment_index = start_segment_offset.sum.flat_segment + (previous_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
-                const start_line_offset = start_segment_offset.sum.line_offset + (previous_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
-                const end_line_offset = start_segment_offset.sum.line_offset + (current_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
-                const fill_line_data = line_data[start_line_offset..end_line_offset];
-
-                const flat_segment = &flat_segments[flat_segment_index];
+                const flat_segment = &flat_segments[flat_segment_offset.fill_flat_segment_index];
                 flat_segment.* = FlatSegment{
                     .kind = .fill,
                     .segment_index = path_monoid.segment_index,
-                    .start_line_data_offset = start_line_offset,
-                    .end_line_data_offset = start_line_offset,
+                    .start_line_data_offset = flat_segment_offset.start_fill_line_offset,
+                    .end_line_data_offset = flat_segment_offset.end_fill_line_offset,
                 };
 
                 flattenFill(
@@ -426,38 +418,25 @@ pub const Flatten = struct {
                     transforms,
                     segment_data,
                     flat_segment,
-                    fill_line_data,
+                    line_data,
                 );
             }
 
             if (style.isStroke()) {
-                const last_fill_line_offset = start_segment_offset.sum.line_offset + (end_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
-                const last_fill_flat_segment_offset = start_segment_offset.sum.flat_segment + (end_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
-                const start_front_stroke_line_offset = last_fill_line_offset + (previous_segment_offset.front_stroke.line_offset - start_segment_offset.front_stroke.line_offset);
-                const end_front_stroke_line_offset = last_fill_line_offset + (current_segment_offset.front_stroke.line_offset - start_segment_offset.front_stroke.line_offset);
-                const front_stroke_flat_segment_index = last_fill_flat_segment_offset + (previous_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
-                const last_front_stroke_line_offset = last_fill_line_offset + (end_segment_offset.front_stroke.line_offset - start_segment_offset.front_stroke.line_offset);
-                const last_front_stroke_flat_segment_offset = last_fill_flat_segment_offset + (end_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
-                const start_back_stroke_line_offset = last_front_stroke_line_offset + (previous_segment_offset.back_stroke.line_offset - start_segment_offset.back_stroke.line_offset);
-                const end_back_stroke_line_offset = last_front_stroke_line_offset + (current_segment_offset.back_stroke.line_offset - start_segment_offset.back_stroke.line_offset);
-                const back_stroke_flat_segment_index = last_front_stroke_flat_segment_offset + (previous_segment_offset.back_stroke.flat_segment - start_segment_offset.back_stroke.flat_segment);
-
-                const front_stroke_flat_segment = &flat_segments[front_stroke_flat_segment_index];
+                const front_stroke_flat_segment = &flat_segments[flat_segment_offset.front_stroke_flat_segment_index];
                 front_stroke_flat_segment.* = FlatSegment{
                     .kind = .stroke_front,
                     .segment_index = path_monoid.segment_index,
-                    .start_line_data_offset = start_front_stroke_line_offset,
-                    .end_line_data_offset = start_front_stroke_line_offset,
+                    .start_line_data_offset = flat_segment_offset.start_front_stroke_line_offset,
+                    .end_line_data_offset = flat_segment_offset.end_front_stroke_line_offset,
                 };
-                const front_stroke_line_data = line_data[start_front_stroke_line_offset..end_front_stroke_line_offset];
-                const back_stroke_flat_segment = &flat_segments[back_stroke_flat_segment_index];
+                const back_stroke_flat_segment = &flat_segments[flat_segment_offset.back_stroke_flat_segment_index];
                 back_stroke_flat_segment.* = FlatSegment{
                     .kind = .stroke_back,
                     .segment_index = path_monoid.segment_index,
-                    .start_line_data_offset = start_back_stroke_line_offset,
-                    .end_line_data_offset = start_back_stroke_line_offset,
+                    .start_line_data_offset = flat_segment_offset.start_back_stroke_line_offset,
+                    .end_line_data_offset = flat_segment_offset.end_back_stroke_line_offset,
                 };
-                const back_stroke_line_data = line_data[start_back_stroke_line_offset..end_back_stroke_line_offset];
 
                 flattenStroke(
                     config,
@@ -470,8 +449,7 @@ pub const Flatten = struct {
                     segment_data,
                     front_stroke_flat_segment,
                     back_stroke_flat_segment,
-                    front_stroke_line_data,
-                    back_stroke_line_data,
+                    line_data,
                 );
             }
         }
@@ -497,7 +475,7 @@ pub const Flatten = struct {
         }
 
         var writer = Writer{
-            .line_data = line_data,
+            .line_data = line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
         };
 
         const cubic_points = getCubicPoints(
@@ -517,7 +495,7 @@ pub const Flatten = struct {
         );
 
         // adjust lines to represent actual filled lines
-        flat_segment.end_line_data_offset = flat_segment.end_line_data_offset + writer.offset;
+        flat_segment.end_line_data_offset = flat_segment.start_line_data_offset + writer.offset;
     }
 
     pub fn flattenStroke(
@@ -531,8 +509,7 @@ pub const Flatten = struct {
         segment_data: []const u8,
         front_flat_segment: *FlatSegment,
         back_flat_segment: *FlatSegment,
-        front_line_data: []u8,
-        back_line_data: []u8,
+        line_data: []u8,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
@@ -564,10 +541,10 @@ pub const Flatten = struct {
         }
 
         var front_writer = Writer{
-            .line_data = front_line_data,
+            .line_data = line_data[front_flat_segment.start_line_data_offset..front_flat_segment.end_line_data_offset],
         };
         var back_writer = Writer{
-            .line_data = back_line_data,
+            .line_data = line_data[back_flat_segment.start_line_data_offset..back_flat_segment.end_line_data_offset],
         };
 
         const cubic_points = getCubicPoints(
@@ -695,8 +672,8 @@ pub const Flatten = struct {
             );
         }
 
-        front_flat_segment.end_line_data_offset = front_flat_segment.end_line_data_offset + front_writer.offset;
-        back_flat_segment.end_line_data_offset = back_flat_segment.end_line_data_offset + back_writer.offset;
+        front_flat_segment.end_line_data_offset = front_flat_segment.start_line_data_offset + front_writer.offset;
+        back_flat_segment.end_line_data_offset = back_flat_segment.start_line_data_offset + back_writer.offset;
     }
 
     fn flattenEuler(
