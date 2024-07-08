@@ -497,7 +497,7 @@ pub const Flatten = struct {
         }
 
         var writer = Writer{
-            .segment_data = line_data,
+            .line_data = line_data,
         };
 
         const cubic_points = getCubicPoints(
@@ -544,8 +544,15 @@ pub const Flatten = struct {
         } else {
             next_subpath = subpaths[subpaths.len - 1];
         }
-        const last_path_tag = path_tags[next_subpath.segment_index - 1];
-        const last_path_monoid = path_monoids[next_subpath.segment_index - 1];
+        var last_path_tag: PathTag = undefined;
+        var last_path_monoid: PathMonoid = undefined;
+        if (next_subpath.segment_index > 0) {
+            last_path_tag = path_tags[next_subpath.segment_index - 1];
+            last_path_monoid = path_monoids[next_subpath.segment_index - 1];
+        } else {
+            last_path_tag = path_tags[path_tags.len - 1];
+            last_path_monoid = path_monoids[path_monoids.len - 1];
+        }
 
         if (path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
             return;
@@ -557,10 +564,10 @@ pub const Flatten = struct {
         }
 
         var front_writer = Writer{
-            .segment_data = front_line_data,
+            .line_data = front_line_data,
         };
         var back_writer = Writer{
-            .segment_data = back_line_data,
+            .line_data = back_line_data,
         };
 
         const cubic_points = getCubicPoints(
@@ -845,9 +852,9 @@ pub const Flatten = struct {
                         lp1 = es.applyOffset(s, normalized_offset);
                     }
 
-                    const l0 = if (offset >= 0.0) lp0 else lp1;
-                    const l1 = if (offset >= 0.0) lp1 else lp0;
-                    const line = LineF32.create(transform.apply(l0), transform.apply(l1));
+                    // const l0 = if (offset >= 0.0) lp0 else lp1;
+                    // const l1 = if (offset >= 0.0) lp1 else lp0;
+                    const line = LineF32.create(transform.apply(lp0), transform.apply(lp1));
                     writer.write(line);
 
                     lp0 = lp1;
@@ -936,7 +943,7 @@ pub const Flatten = struct {
             .bevel => {
                 if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
                     left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
-                    right_writer.write(LineF32.create(back0, back1).affineTransform(transform));
+                    right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
                 }
             },
             .miter => {
@@ -1234,7 +1241,7 @@ pub const Flatten = struct {
     }
 
     const Writer = struct {
-        segment_data: []u8,
+        line_data: []u8,
         offset: u32 = 0,
 
         pub fn write(self: *@This(), line: LineF32) void {
@@ -1244,18 +1251,30 @@ pub const Flatten = struct {
                 return;
             }
 
-            // TODO: reenable this at some point
-            // const last_point = self.lastPoint();
-            // std.debug.assert(std.meta.eql(last_point, line.p0));
+            const last_point = self.lastPoint();
+            if (!std.meta.eql(last_point, line.p0)) {
+                var line_iter = encoding_module.LineIterator{
+                    .line_data = self.line_data[0..self.offset],
+                };
+
+                std.debug.print("=========== Bad Line Data =============:\n", .{});
+                while (line_iter.next()) |l| {
+                    std.debug.print("{}\n", .{l});
+                }
+                std.debug.print("--------\n", .{});
+                std.debug.print("Bad Line: {}\n", .{line});
+                std.debug.print("=================================\n", .{});
+                std.debug.assert(false);
+            }
             self.addPoint(line.p1);
         }
 
         fn lastPoint(self: @This()) PointF32 {
-            return std.mem.bytesToValue(PointF32, self.segment_data[self.offset - @sizeOf(PointF32) .. self.offset]);
+            return std.mem.bytesToValue(PointF32, self.line_data[self.offset - @sizeOf(PointF32) .. self.offset]);
         }
 
         fn addPoint(self: *@This(), point: PointF32) void {
-            std.mem.bytesAsValue(PointF32, self.segment_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
+            std.mem.bytesAsValue(PointF32, self.line_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
         }
     };
