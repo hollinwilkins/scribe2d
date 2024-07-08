@@ -699,6 +699,46 @@ pub const Subpath = struct {
     segment_index: u32 = 0,
 };
 
+pub const SubpathOffset = struct {
+    start_fill_flat_segment_offset: u32 = 0,
+    end_fill_flat_segment_offset: u32 = 0,
+    start_front_stroke_flat_segment_offset: u32 = 0,
+    end_front_stroke_flat_segment_offset: u32 = 0,
+    start_back_stroke_flat_segment_offset: u32 = 0,
+    end_back_stroke_flat_segment_offset: u32 = 0,
+
+    pub fn create(
+        subpath_index: u32,
+        segment_offsets: []const SegmentOffset,
+        subpaths: []const Subpath,
+    ) @This() {
+        const subpath = subpaths[subpath_index];
+        const start_segment_offset = if (subpath.segment_index > 0) segment_offsets[subpath.segment_index - 1] else SegmentOffset{};
+        var end_segment_offset: SegmentOffset = undefined;
+        if (subpath_index + 1 < subpaths.len) {
+            end_segment_offset = segment_offsets[subpaths[subpath_index + 1].segment_index - 1];
+        } else {
+            end_segment_offset = segment_offsets[segment_offsets.len - 1];
+        }
+
+        const start_fill_flat_segment_offset = start_segment_offset.sum.flat_segment;
+        const end_fill_flat_segment_offset = start_segment_offset.sum.flat_segment + (end_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
+        const start_front_stroke_flat_segment_offset = end_fill_flat_segment_offset;
+        const end_front_stroke_flat_segment_offset = end_fill_flat_segment_offset + (end_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
+        const start_back_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset;
+        const end_back_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset + (end_segment_offset.back_stroke.flat_segment - start_segment_offset.back_stroke.flat_segment);
+
+        return @This(){
+            .start_fill_flat_segment_offset = start_fill_flat_segment_offset,
+            .end_fill_flat_segment_offset = end_fill_flat_segment_offset,
+            .start_front_stroke_flat_segment_offset = start_front_stroke_flat_segment_offset,
+            .end_front_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset,
+            .start_back_stroke_flat_segment_offset = start_back_stroke_flat_segment_offset,
+            .end_back_stroke_flat_segment_offset = end_back_stroke_flat_segment_offset,
+        };
+    }
+};
+
 pub const FlatSegmentOffset = struct {
     start_fill_line_offset: u32 = 0,
     end_fill_line_offset: u32 = 0,

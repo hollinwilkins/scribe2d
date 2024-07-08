@@ -14,6 +14,7 @@ const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
 const Path = encoding_module.Path;
 const Subpath = encoding_module.Subpath;
+const SubpathOffset = encoding_module.SubpathOffset;
 const FlatPath = encoding_module.FlatPath;
 const FlatSubpath = encoding_module.FlatSubpath;
 const FlatSegment = encoding_module.FlatSegment;
@@ -230,47 +231,99 @@ pub const CpuRasterizer = struct {
 
         {
             std.debug.print("============ Flat Fill Lines ============\n", .{});
-            for (self.flat_segments.items) |flat_segment| {
-                std.debug.print("{s}:\n", .{@tagName(flat_segment.kind)});
-                const flat_segment_lines = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset];
-                var line_iter = encoding_module.LineIterator{
-                    .line_data = flat_segment_lines,
-                };
-                while (line_iter.next()) |line| {
-                    std.debug.print("{}\n", .{line});
+            for (self.subpaths.items, 0..) |subpath, subpath_index| {
+                const path_monoid = self.path_monoids.items[subpath.segment_index];
+                const subpath_offset = SubpathOffset.create(
+                    @intCast(subpath_index),
+                    self.segment_offsets.items,
+                    self.subpaths.items,
+                );
+
+                std.debug.print("Subpath({},{})\n", .{ path_monoid.path_index, subpath_index });
+                std.debug.print("Fill Lines\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset) |flat_segment_index| {
+                    const flat_segment = self.flat_segments.items[flat_segment_index];
+                    var line_iter = encoding_module.LineIterator{
+                        .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                    };
+
+                    while (line_iter.next()) |line| {
+                        std.debug.print("{}\n", .{line});
+                    }
+                }
+                std.debug.print("-----------\n\n", .{});
+
+                std.debug.print("Front Stroke Lines\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset) |flat_segment_index| {
+                    const flat_segment = self.flat_segments.items[flat_segment_index];
+                    var line_iter = encoding_module.LineIterator{
+                        .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                    };
+
+                    while (line_iter.next()) |line| {
+                        std.debug.print("{}\n", .{line});
+                    }
+                }
+                std.debug.print("-----------\n\n", .{});
+
+                std.debug.print("Back Stroke Lines\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset) |flat_segment_index| {
+                    const flat_segment = self.flat_segments.items[flat_segment_index];
+                    var line_iter = encoding_module.LineIterator{
+                        .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                    };
+
+                    while (line_iter.next()) |line| {
+                        std.debug.print("{}\n", .{line});
+                    }
                 }
                 std.debug.print("-----------\n", .{});
             }
-            // var first_segment_offset: u32 = 0;
-            // for (self.subpaths.items) |subpath| {
-            //     const last_segment_offset = subpath.segment_index;
-            //     const first_path_monoid = self.path_monoids.items[first_segment_offset];
-            //     const segment_offsets = self.flat_segment_offsets.items[first_segment_offset..last_segment_offset];
-            //     var start_line_offset: u32 = 0;
-            //     const previous_segment_offsets = if (first_segment_offset > 0) self.flat_segment_offsets.items[first_segment_offset - 1] else null;
-            //     if (previous_segment_offsets) |so| {
-            //         start_line_offset = so.fill.line.capacity;
-            //     }
 
-            //     std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
-            //     // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
-            //     for (segment_offsets) |offsets| {
-            //         const end_line_offset = offsets.fill.line.capacity;
-            //         const line_data = self.flat_segment_data.items[start_line_offset..end_line_offset];
-            //         var line_iter = encoding_kernel.LineIterator{
-            //             .segment_data = line_data,
+            //     for (self.flat_segments.items) |flat_segment| {
+            //         std.debug.print("{s}:\n", .{@tagName(flat_segment.kind)});
+            //         const flat_segment_lines = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset];
+            //         var line_iter = encoding_module.LineIterator{
+            //             .line_data = flat_segment_lines,
             //         };
-
             //         while (line_iter.next()) |line| {
             //             std.debug.print("{}\n", .{line});
             //         }
-
-            //         start_line_offset = offsets.fill.line.capacity;
+            //         std.debug.print("-----------\n", .{});
             //     }
+            //     // var first_segment_offset: u32 = 0;
+            //     // for (self.subpaths.items) |subpath| {
+            //     //     const last_segment_offset = subpath.segment_index;
+            //     //     const first_path_monoid = self.path_monoids.items[first_segment_offset];
+            //     //     const segment_offsets = self.flat_segment_offsets.items[first_segment_offset..last_segment_offset];
+            //     //     var start_line_offset: u32 = 0;
+            //     //     const previous_segment_offsets = if (first_segment_offset > 0) self.flat_segment_offsets.items[first_segment_offset - 1] else null;
+            //     //     if (previous_segment_offsets) |so| {
+            //     //         start_line_offset = so.fill.line.capacity;
+            //     //     }
 
-            //     first_segment_offset = subpath.last_segment_offset;
-            // }
-            std.debug.print("====================================\n", .{});
+            //     //     std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
+            //     //     // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
+            //     //     for (segment_offsets) |offsets| {
+            //     //         const end_line_offset = offsets.fill.line.capacity;
+            //     //         const line_data = self.flat_segment_data.items[start_line_offset..end_line_offset];
+            //     //         var line_iter = encoding_kernel.LineIterator{
+            //     //             .segment_data = line_data,
+            //     //         };
+
+            //     //         while (line_iter.next()) |line| {
+            //     //             std.debug.print("{}\n", .{line});
+            //     //         }
+
+            //     //         start_line_offset = offsets.fill.line.capacity;
+            //     //     }
+
+            //     //     first_segment_offset = subpath.last_segment_offset;
+            //     // }
+            //     std.debug.print("====================================\n", .{});
         }
 
         //         {
@@ -699,7 +752,7 @@ test "encoding path monoids" {
         .brush = .color,
     });
     style.setStroke(Style.Stroke{
-        .join = .round,
+        .join = .bevel,
     });
     try encoder.encodeStyle(style);
 
