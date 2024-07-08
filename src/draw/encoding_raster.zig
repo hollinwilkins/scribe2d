@@ -14,6 +14,7 @@ const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
 const Path = encoding_module.Path;
 const Subpath = encoding_module.Subpath;
+const PathOffset = encoding_module.PathOffset;
 const SubpathOffset = encoding_module.SubpathOffset;
 const FlatPath = encoding_module.FlatPath;
 const FlatSubpath = encoding_module.FlatSubpath;
@@ -235,6 +236,35 @@ pub const CpuRasterizer = struct {
             );
         }
 
+        for (self.paths.items) |*path| {
+            const path_monoid = self.path_monoids.items[path.segment_index];
+            const path_offset = PathOffset.create(
+                path_monoid.path_index,
+                self.segment_offsets.items,
+                self.paths.items,
+            );
+
+            path.start_fill_boundary_offset = path_offset.start_fill_boundary_offset;
+            path.end_fill_boundary_offset = path_offset.start_fill_boundary_offset + path.fill_bump.raw;
+
+            path.start_stroke_boundary_offset = path_offset.start_stroke_boundary_offset;
+            path.end_stroke_boundary_offset = path_offset.start_stroke_boundary_offset + path.stroke_bump.raw;
+
+            std.mem.sort(
+                BoundaryFragment,
+                self.boundary_fragments.items[path.start_fill_boundary_offset..path.end_fill_boundary_offset],
+                @as(u32, 0),
+                boundaryFragmentLessThan,
+            );
+
+            std.mem.sort(
+                BoundaryFragment,
+                self.boundary_fragments.items[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset],
+                @as(u32, 0),
+                boundaryFragmentLessThan,
+            );
+        }
+
         // var start_boundary_fragment: u32 = 0;
         // for (self.paths.items, path_bumps) |*path, bump| {
         //     path.fill.boundary_fragment.end = start_boundary_fragment + bump.raw;
@@ -278,6 +308,20 @@ pub const CpuRasterizer = struct {
         //         self.merge_fragments.items,
         //     );
         // }
+    }
+
+    fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
+        if (left.pixel.y < right.pixel.y) {
+            return true;
+        } else if (left.pixel.y > right.pixel.y) {
+            return false;
+        } else if (left.pixel.x < right.pixel.x) {
+            return true;
+        } else if (left.pixel.x > right.pixel.x) {
+            return false;
+        }
+
+        return false;
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
