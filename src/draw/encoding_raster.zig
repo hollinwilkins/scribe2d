@@ -198,11 +198,6 @@ pub const CpuRasterizer = struct {
     fn kernelRasterize(self: *@This()) !void {
         const rasterizer = kernel_module.Rasterize;
         const last_segment_offset = self.segment_offsets.getLast();
-        // const last_path = self.paths.getLast();
-        // const path_bumps = try self.path_bumps.addManyAsSlice(self.allocator, self.paths.items.len);
-        // for (path_bumps) |*sb| {
-        //     sb.raw = 0;
-        // }
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
         const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
@@ -270,26 +265,30 @@ pub const CpuRasterizer = struct {
             path.stroke_bump.raw = 0;
         }
 
-        rasterizer.merge(
-            boundary_fragments,
-            self.paths.items,
-            merge_fragments,
-        );
-
-        for (self.paths.items) |*path| {
-            path.end_fill_merge_offset = path.start_fill_boundary_offset + path.fill_bump.raw;
-            path.end_stroke_merge_offset = path.start_stroke_boundary_offset + path.stroke_bump.raw;
-
-            path.fill_bump.raw = 0;
-            path.stroke_bump.raw = 0;
+        const path_range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.paths.items.len),
+        };
+        chunk_iter = path_range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.merge(
+                boundary_fragments,
+                chunk,
+                self.paths.items,
+                merge_fragments,
+            );
         }
 
-        rasterizer.mask(
-            self.config,
-            self.paths.items,
-            self.boundary_fragments.items,
-            self.merge_fragments.items,
-        );
+        chunk_iter = path_range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.mask(
+                self.config,
+                self.paths.items,
+                chunk,
+                self.boundary_fragments.items,
+                self.merge_fragments.items,
+            );
+        }
     }
 
     fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {

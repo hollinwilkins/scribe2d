@@ -1545,16 +1545,23 @@ pub const Rasterize = struct {
 
     pub fn merge(
         boundary_fragments: []const BoundaryFragment,
+        range: RangeU32,
         paths: []Path,
         merge_fragments: []MergeFragment,
     ) void {
-        for (0..paths.len) |path_index| {
+        for (range.start..range.end) |path_index| {
             mergePath(
                 @intCast(path_index),
                 boundary_fragments,
                 paths,
                 merge_fragments,
             );
+
+            const path = &paths[path_index];
+            path.end_fill_merge_offset = path.start_fill_boundary_offset + path.fill_bump.raw;
+            path.end_stroke_merge_offset = path.start_stroke_boundary_offset + path.stroke_bump.raw;
+            path.fill_bump.raw = 0;
+            path.stroke_bump.raw = 0;
         }
     }
 
@@ -1623,10 +1630,11 @@ pub const Rasterize = struct {
     pub fn mask(
         config: KernelConfig,
         paths: []const Path,
+        range: RangeU32,
         boundary_fragments: []const BoundaryFragment,
         merge_fragments: []MergeFragment,
     ) void {
-        for (0..paths.len) |path_index| {
+        for (range.start..range.end) |path_index| {
             const path = paths[path_index];
 
             const fill_merge_range = RangeU32{
