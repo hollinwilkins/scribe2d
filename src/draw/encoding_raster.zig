@@ -282,16 +282,12 @@ pub const CpuRasterizer = struct {
             path.stroke_bump.raw = 0;
         }
 
-        // chunk_iter = path_range.chunkIterator(self.config.chunk_size);
-        // while (chunk_iter.next()) |chunk| {
-        //     rasterizer.mask(
-        //         self.config,
-        //         self.paths.items,
-        //         self.boundary_fragments.items,
-        //         chunk,
-        //         self.merge_fragments.items,
-        //     );
-        // }
+        // rasterizer.mask(
+        //     self.config,
+        //     self.paths.items,
+        //     self.boundary_fragments.items,
+        //     self.merge_fragments.items,
+        // );
     }
 
     fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
