@@ -699,7 +699,7 @@ test "encoding path monoids" {
         .brush = .color,
     });
     style.setStroke(Style.Stroke{
-        .join = .miter,
+        .join = .round,
     });
     try encoder.encodeStyle(style);
 

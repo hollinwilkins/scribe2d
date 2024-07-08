@@ -979,8 +979,8 @@ pub const Flatten = struct {
                 if (cr > 0.0) {
                     flattenArc(
                         config,
-                        back0,
                         back1,
+                        back0,
                         p0,
                         @abs(std.math.atan2(cr, d)),
                         transform,
@@ -999,7 +999,7 @@ pub const Flatten = struct {
                         left_writer,
                     );
 
-                    right_writer.write(LineF32.create(back0, back1).affineTransform(transform));
+                    right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
                 }
             },
         }
