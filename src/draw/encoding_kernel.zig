@@ -1451,36 +1451,38 @@ pub const Rasterize = struct {
     ) void {
         const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
-        if (segment_grid_intersections.len == 0) {
-            return;
-        }
+        var intersection_reader = IntersectionReader{
+            .flat_segment_index = flat_segment_index,
+            .flat_segment = flat_segment,
+            .subpath_flat_segments = flat_segments,
+            .segment_grid_intersections = segment_grid_intersections,
+            .grid_intersections = grid_intersections,
+        };
 
-        for (segment_grid_intersections, 0..) |*grid_intersection, index| {
-            var next_grid_intersection: GridIntersection = undefined;
-            const next_index = index + 1;
+        var previous_grid_intersection: ?GridIntersection = null;
+        while (intersection_reader.next()) |grid_intersection| {
+            if (previous_grid_intersection) |*previous| {
+                if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
+                    // skip if exactly the same point
+                    previous_grid_intersection = grid_intersection;
+                    continue;
+                }
 
-            if (next_index >= segment_grid_intersections.len) {
-                const next_flat_segment_index = (flat_segment_index + 1) % (flat_segments.len);
-                const next_flat_segment = flat_segments[next_flat_segment_index];
-                next_grid_intersection = grid_intersections[next_flat_segment.start_intersection_offset];
+                {
+                    const boundary_fragment_index = bump.bump(1);
+                    boundary_fragments[boundary_fragment_index] = BoundaryFragment.create(
+                        half_planes,
+                        [_]*const GridIntersection{
+                            previous,
+                            &grid_intersection,
+                        },
+                    );
+                }
+
+                previous_grid_intersection = grid_intersection;
             } else {
-                next_grid_intersection = segment_grid_intersections[next_index];
-            }
-
-            if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
-                // skip if exactly the same point
+                previous_grid_intersection = grid_intersection;
                 continue;
-            }
-
-            {
-                const boundary_fragment_index = bump.bump(1);
-                boundary_fragments[boundary_fragment_index] = BoundaryFragment.create(
-                    half_planes,
-                    [_]*const GridIntersection{
-                        grid_intersection,
-                        &next_grid_intersection,
-                    },
-                );
             }
         }
     }
@@ -1655,6 +1657,37 @@ pub const Rasterize = struct {
     const IntersectionWriter = Writer(GridIntersection);
     // const BoundaryFragmentWriter = Writer(BoundaryFragment);
     // const MergeFragmentWriter = Writer(MergeFragment);
+
+    pub const IntersectionReader = struct {
+        index: u32 = 0,
+        flat_segment_index: u32,
+        flat_segment: FlatSegment,
+        subpath_flat_segments: []const FlatSegment,
+        segment_grid_intersections: []const GridIntersection,
+        grid_intersections: []const GridIntersection,
+
+        pub fn next(self: *@This()) ?GridIntersection {
+            if (self.segment_grid_intersections.len == 0) {
+                return null;
+            }
+
+            var next_grid_intersection: GridIntersection = undefined;
+
+            if (self.index < self.segment_grid_intersections.len) {
+                next_grid_intersection = self.segment_grid_intersections[self.index];
+            }
+            else if (self.index == self.segment_grid_intersections.len) {
+                const next_flat_segment_index = (self.flat_segment_index + 1) % (self.subpath_flat_segments.len);
+                const next_flat_segment = self.subpath_flat_segments[next_flat_segment_index];
+                next_grid_intersection = self.grid_intersections[next_flat_segment.start_intersection_offset];
+            } else {
+                return null;
+            }
+
+            self.index += 1;
+            return next_grid_intersection;
+        }
+    };
 
     fn scanX(
         grid_x: f32,
