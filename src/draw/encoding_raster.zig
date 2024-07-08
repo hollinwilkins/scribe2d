@@ -85,7 +85,7 @@ pub const CpuRasterizer = struct {
         try self.estimateSegments();
         // allocate the FlatEncoder
         // use the FlatEncoder to flatten the encoding
-        // try self.flatten();
+        try self.flatten();
         // calculate scanline encoding
         // try self.kernelRasterize();
         // write scanline encoding to texture
@@ -132,40 +132,40 @@ pub const CpuRasterizer = struct {
         SegmentOffset.expand(segment_offsets, segment_offsets);
     }
 
-    // fn flatten(self: *@This()) !void {
-    //     const flattener = kernel_module.Flatten;
-    //     const last_segment_offset = self.segment_offsets.getLast();
-    //     const flat_segments = try self.flat_segments.addManyAsSlice(
-    //         self.allocator,
-    //         last_segment_offset.flat_segment_offset,
-    //     );
-    //     const line_data = try self.line_data.addManyAsSlice(
-    //         self.allocator,
-    //         last_segment_offset.back_stroke.line_offset,
-    //     );
+    fn flatten(self: *@This()) !void {
+        const flattener = kernel_module.Flatten;
+        const last_segment_offset = self.segment_offsets.getLast();
+        const flat_segments = try self.flat_segments.addManyAsSlice(
+            self.allocator,
+            last_segment_offset.flat_segment_offset,
+        );
+        const line_data = try self.line_data.addManyAsSlice(
+            self.allocator,
+            last_segment_offset.sum().line_offset,
+        );
 
-    //     const range = RangeU32{
-    //         .start = 0,
-    //         .end = @intCast(self.path_monoids.items.len),
-    //     };
-    //     var chunk_iter = range.chunkIterator(self.config.chunk_size);
+        const range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.path_monoids.items.len),
+        };
+        var chunk_iter = range.chunkIterator(self.config.chunk_size);
 
-    //     while (chunk_iter.next()) |chunk| {
-    //         flattener.flatten(
-    //             self.config,
-    //             self.encoding.path_tags,
-    //             self.path_monoids.items,
-    //             self.paths.items,
-    //             self.encoding.styles,
-    //             self.encoding.transforms,
-    //             self.encoding.segment_data,
-    //             chunk,
-    //             self.segment_offsets.items,
-    //             flat_segments,
-    //             line_data,
-    //         );
-    //     }
-    // }
+        while (chunk_iter.next()) |chunk| {
+            flattener.flatten(
+                self.config,
+                self.encoding.path_tags,
+                self.path_monoids.items,
+                self.encoding.styles,
+                self.encoding.transforms,
+                self.encoding.segment_data,
+                chunk,
+                self.paths.items,
+                self.segment_offsets.items,
+                flat_segments,
+                line_data,
+            );
+        }
+    }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
         _ = texture;

@@ -7,6 +7,7 @@ const RangeI32 = core.RangeI32;
 const RangeU32 = core.RangeU32;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
+const Path = encoding_module.Path;
 const SegmentData = encoding_module.SegmentData;
 const FlatSegment = encoding_module.FlatSegment;
 const Style = encoding_module.Style;
@@ -369,92 +370,129 @@ pub const Estimate = struct {
 };
 
 pub const Flatten = struct {
-    // pub fn flatten(
-    //     config: KernelConfig,
-    //     path_tags: []const PathTag,
-    //     path_monoids: []const PathMonoid,
-    //     styles: []const Style,
-    //     transforms: []const TransformF32.Affine,
-    //     segment_data: []const u8,
-    //     range: RangeU32,
-    //     // outputs
-    //     // true if path is used, false to ignore
-    //     segment_offsets: []SegmentOffset,
-    //     flat_segments: []FlatSegment,
-    //     line_data: []u8,
-    // ) void {
-    //     for (range.start..range.end) |index| {
-    //         const path_monoid = path_monoids[index];
-    //         const style = styles[path_monoid.style_index];
+    pub fn flatten(
+        config: KernelConfig,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        styles: []const Style,
+        transforms: []const TransformF32.Affine,
+        segment_data: []const u8,
+        range: RangeU32,
+        // outputs
+        // true if path is used, false to ignore
+        paths: []Path,
+        segment_offsets: []SegmentOffset,
+        flat_segments: []FlatSegment,
+        line_data: []u8,
+    ) void {
+        for (range.start..range.end) |index| {
+            const path_monoid = path_monoids[index];
+            var path = paths[path_monoid.path_index];
+            const style = styles[path_monoid.style_index];
+            const current_segment_offset = segment_offsets[index];
+            const previous_segment_offset = if (index > 0) segment_offsets[index - 1] else null;
+            var start_segment_offset: SegmentOffset = undefined;
+            var end_segment_offset: SegmentOffset = undefined;
 
-    //         if (style.isFill()) {
-    //             fill(
-    //                 config,
-    //                 index,
-    //                 path_tags,
-    //                 path_monoids,
-    //                 transforms,
-    //                 segment_data,
-    //                 segment_offsets,
-    //                 flat_segments,
-    //                 line_data,
-    //             );
-    //         }
+            if (path.segment_index > 0) {
+                start_segment_offset = segment_offsets[path.segment_index - 1];
+            } else {
+                start_segment_offset = SegmentOffset{};
+            }
 
-    //         if (style.isStroke()) {}
-    //     }
-    // }
+            if (path_monoid.path_index + 1 < paths.len) {
+                end_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
+            } else {
+                end_segment_offset = segment_offsets[segment_offsets.len - 1];
+            }
 
-    // pub fn fill(
-    //     config: KernelConfig,
-    //     segment_index: usize,
-    //     path_tags: []const PathTag,
-    //     path_monoids: []const PathMonoid,
-    //     transforms: []const TransformF32.Affine,
-    //     segment_data: []const u8,
-    //     segment_offsets: []SegmentOffset,
-    //     flat_segments: []FlatSegment,
-    //     line_data: []u8,
-    // ) void {
-    //     const path_tag = path_tags[segment_index];
-    //     const path_monoid = path_monoids[segment_index];
-    //     const transform = transforms[path_monoid.transform_index];
-    //     const segment_offsets = &segment_offsets[segment_index];
-    //     const previous_segment_offsets = if (segment_index > 0) segment_offsets[segment_index - 1] else null;
-    //     var start_line_offset: u32 = 0;
-    //     if (previous_segment_offsets) |so| {
-    //         start_line_offset = so.fill.line.capacity;
-    //     }
-    //     const end_line_offset = segment_offsets.fill.line.capacity;
+            var flat_segment_bump = BumpAllocator{
+                .start = start_segment_offset.flat_segment_offset,
+                .end = end_segment_offset.flat_segment_offset,
+                .offset = &path.bump0,
+            };
+            var line_bump = BumpAllocator{
+                .start = start_segment_offset.back_stroke.line_offset,
+                .end = end_segment_offset.back_stroke.line_offset,
+                .offset = &path.bump1,
+            };
 
-    //     var writer = Writer{
-    //         .segment_data = line_data[start_line_offset..end_line_offset],
-    //     };
+            if (style.isFill()) {
+                var start_line_offset: u32 = 0;
+                if (previous_segment_offset) |offset| {
+                    start_line_offset = offset.fill.line_offset;
+                }
+                const end_line_offset = current_segment_offset.fill.line_offset;
+                const line_data_size = end_line_offset - start_line_offset;
+                const start_line_data_offset = line_bump.bump(line_data_size);
+                const fill_line_data = line_data[start_line_data_offset .. start_line_data_offset + line_data_size];
 
-    //     if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
-    //         std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
-    //         return;
-    //     }
+                const flat_segment = &flat_segments[flat_segment_bump.bump(1)];
+                flat_segment.* = FlatSegment{
+                    .kind = .fill,
+                    .segment_index = path_monoid.segment_index,
+                    .start_line_data_offset = start_line_data_offset,
+                    .end_line_data_offset = start_line_data_offset + line_data_size,
+                };
 
-    //     const cubic_points = getCubicPoints(
-    //         path_tag,
-    //         path_monoid,
-    //         segment_data,
-    //     );
+                fill(
+                    config,
+                    index,
+                    path_tags,
+                    path_monoids,
+                    transforms,
+                    segment_data,
+                    flat_segment,
+                    fill_line_data,
+                );
+            }
 
-    //     flattenEuler(
-    //         config,
-    //         cubic_points,
-    //         transform,
-    //         0.0,
-    //         cubic_points.p0,
-    //         cubic_points.p3,
-    //         &writer,
-    //     );
+            if (style.isStroke()) {}
+        }
+    }
 
-    //     // adjust lines to represent actual filled lines
-    //     segment_offsets.fill.line.end = start_line_offset + writer.lineOffset();
-    // }
+    pub fn fill(
+        config: KernelConfig,
+        segment_index: usize,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        transforms: []const TransformF32.Affine,
+        segment_data: []const u8,
+        flat_segment: *FlatSegment,
+        line_data: []u8,
+    ) void {
+        const path_tag = path_tags[segment_index];
+        const path_monoid = path_monoids[segment_index];
+        const transform = transforms[path_monoid.transform_index];
+
+        var writer = Writer{
+            .segment_data = line_data,
+        };
+
+        if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
+            std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
+            return;
+        }
+
+        const cubic_points = getCubicPoints(
+            path_tag,
+            path_monoid,
+            segment_data,
+        );
+
+        flattenEuler(
+            config,
+            cubic_points,
+            transform,
+            0.0,
+            cubic_points.p0,
+            cubic_points.p3,
+            &writer,
+        );
+
+        // adjust lines to represent actual filled lines
+        flat_segment.end_line_data_offset = flat_segment.start_line_data_offset + writer.offset;
+    }
 
     fn flattenEuler(
         config: KernelConfig,
@@ -814,20 +852,17 @@ pub const Flatten = struct {
     const Writer = struct {
         segment_data: []u8,
         offset: u32 = 0,
-        lines: u16 = 0,
 
         pub fn write(self: *@This(), line: LineF32) void {
             if (self.offset == 0) {
                 self.addPoint(line.p0);
                 self.addPoint(line.p1);
-                self.lines += 1;
                 return;
             }
 
             const last_point = self.lastPoint();
             std.debug.assert(std.meta.eql(last_point, line.p0));
             self.addPoint(line.p1);
-            self.lines += 1;
         }
 
         fn lastPoint(self: @This()) PointF32 {
@@ -837,14 +872,6 @@ pub const Flatten = struct {
         fn addPoint(self: *@This(), point: PointF32) void {
             std.mem.bytesAsValue(PointF32, self.segment_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
-        }
-
-        pub fn lineOffset(self: @This()) u32 {
-            if (self.lines == 0) {
-                return 0;
-            }
-
-            return @sizeOf(PointF32) + self.lines * @sizeOf(PointF32);
         }
     };
 };

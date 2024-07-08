@@ -707,9 +707,9 @@ pub const FlatSegment = struct {
     };
 
     kind: Kind,
-    path_index: u32 = 0,
-    subpath_index: u32 = 0,
     segment_index: u32 = 0,
+    start_line_data_offset: u32 = 0,
+    end_line_data_offset: u32 = 0,
 };
 
 pub const Offset = packed struct {
@@ -786,14 +786,11 @@ pub const SegmentOffset = packed struct {
             flat_segment_offset += 2;
         }
 
-        const front_stroke2 = fill.combine(front_stroke);
-        const back_stroke2 = front_stroke2.combine(back_stroke);
-
         return @This(){
             .flat_segment_offset = flat_segment_offset,
             .fill = fill,
-            .front_stroke = front_stroke2,
-            .back_stroke = back_stroke2,
+            .front_stroke = front_stroke,
+            .back_stroke = back_stroke,
         };
     }
 
@@ -804,6 +801,10 @@ pub const SegmentOffset = packed struct {
             .front_stroke = self.front_stroke.combine(other.front_stroke),
             .back_stroke = self.back_stroke.combine(other.back_stroke),
         };
+    }
+
+    pub fn sum(self: @This()) Offset {
+        return self.fill.combine(self.front_stroke).combine(self.back_stroke);
     }
 };
 
