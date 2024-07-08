@@ -933,8 +933,8 @@ pub const Flatten = struct {
     ) void {
         var front0 = p0.add(n_prev);
         const front1 = p0.add(n_next);
-        var back0 = p0.sub(n_next);
-        const back1 = p0.sub(n_prev);
+        const back0 = p0.sub(n_next);
+        var back1 = p0.sub(n_prev);
 
         const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
         const d = tan_prev.dot(tan_next);
@@ -954,7 +954,7 @@ pub const Flatten = struct {
                     const is_backside = cr > 0.0;
                     const fp_last = if (is_backside) back1 else front0;
                     const fp_this = if (is_backside) back0 else front1;
-                    const p = if (is_backside) back0 else front0;
+                    const p = if (is_backside) back1 else front0;
 
                     const v = fp_this.sub(fp_last);
                     const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
@@ -965,15 +965,15 @@ pub const Flatten = struct {
 
                     if (is_backside) {
                         right_writer.write(LineF32.create(p, miter_pt).affineTransform(transform));
-                        back0 = miter_pt;
+                        back1 = miter_pt;
                     } else {
                         left_writer.write(LineF32.create(p, miter_pt).affineTransform(transform));
                         front0 = miter_pt;
                     }
                 }
 
+                right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
                 left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
-                right_writer.write(LineF32.create(back0, back1).affineTransform(transform));
             },
             .round => {
                 if (cr > 0.0) {
