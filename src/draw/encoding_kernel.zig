@@ -210,9 +210,9 @@ pub const Estimate = struct {
             const stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
             const cap = estimateCap(config, path_tag, stroke, scaled_width);
             const join = estimateJoin(config, stroke, scaled_width);
-            const base_stroke = base.mulScalar(stroke_fudge);
-            front_stroke = base_stroke.combine(cap).combine(join);
-            back_stroke = base_stroke.combine(join);
+            const base_stroke = base.mulScalar(stroke_fudge).combine(join);
+            front_stroke = base_stroke.combine(cap);
+            back_stroke = base_stroke;
             front_stroke.flat_segment = 1;
             back_stroke.flat_segment = 1;
         }
@@ -400,11 +400,12 @@ pub const Flatten = struct {
         for (range.start..range.end) |segment_index| {
             const path_monoid = path_monoids[segment_index];
             const style = styles[path_monoid.style_index];
-            const flatten_offsets = FlatSegmentOffset.FlattenOffsets.create(
+            const flatten_offsets = FlatSegmentOffset.create(
                 @intCast(segment_index),
                 path_monoid,
                 segment_offsets,
                 paths,
+                subpaths,
             );
 
             if (style.isFill()) {
@@ -1434,7 +1435,6 @@ pub const Rasterize = struct {
             );
         } else {
             const subpath_tag = path_tags[path_monoid.subpath_index];
-
 
             if (subpath_tag.segment.cap) {
                 // front/back stroke are a single subpath

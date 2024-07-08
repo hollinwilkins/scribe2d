@@ -703,14 +703,8 @@ pub const Subpath = struct {
 };
 
 pub const PathOffset = struct {
-    start_fill_flat_segment_offset: u32 = 0,
-    end_fill_flat_segment_offset: u32 = 0,
     start_fill_boundary_offset: u32 = 0,
     end_fill_boundary_offset: u32 = 0,
-    start_front_stroke_flat_segment_offset: u32 = 0,
-    end_front_stroke_flat_segment_offset: u32 = 0,
-    start_back_stroke_flat_segment_offset: u32 = 0,
-    end_back_stroke_flat_segment_offset: u32 = 0,
     start_stroke_boundary_offset: u32 = 0,
     end_stroke_boundary_offset: u32 = 0,
 
@@ -720,34 +714,23 @@ pub const PathOffset = struct {
         paths: []const Path,
     ) @This() {
         const path = paths[path_index];
-        const start_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
-        var end_segment_offset: SegmentOffset = undefined;
+        const start_path_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
+        var end_path_segment_offset: SegmentOffset = undefined;
         if (path_index + 1 < paths.len) {
-            end_segment_offset = segment_offsets[paths[path_index + 1].segment_index - 1];
+            end_path_segment_offset = segment_offsets[paths[path_index + 1].segment_index - 1];
         } else {
-            end_segment_offset = segment_offsets[segment_offsets.len - 1];
+            end_path_segment_offset = segment_offsets[segment_offsets.len - 1];
         }
 
-        const start_fill_flat_segment_offset = start_segment_offset.sum.flat_segment;
-        const end_fill_flat_segment_offset = start_segment_offset.sum.flat_segment + (end_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
-        const start_fill_boundary_offset = start_segment_offset.sum.boundary_fragments;
-        const end_fill_boundary_offset = start_segment_offset.sum.boundary_fragments + (end_segment_offset.fill.boundary_fragments - start_segment_offset.fill.boundary_fragments);
-        const start_front_stroke_flat_segment_offset = end_fill_flat_segment_offset;
-        const end_front_stroke_flat_segment_offset = end_fill_flat_segment_offset + (end_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
-        const start_back_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset;
-        const end_back_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset + (end_segment_offset.back_stroke.flat_segment - start_segment_offset.back_stroke.flat_segment);
+        const start_fill_boundary_offset = start_path_segment_offset.sum.boundary_fragments;
+        const end_fill_boundary_offset = start_path_segment_offset.sum.boundary_fragments + (end_path_segment_offset.fill.boundary_fragments - start_path_segment_offset.fill.boundary_fragments);
+
         const start_stroke_boundary_offset = end_fill_boundary_offset;
-        const end_stroke_boundary_offset = end_fill_boundary_offset + (end_segment_offset.front_stroke.boundary_fragments - start_segment_offset.front_stroke.boundary_fragments);
+        const end_stroke_boundary_offset = end_path_segment_offset.sum.boundary_fragments;
 
         return @This(){
-            .start_fill_flat_segment_offset = start_fill_flat_segment_offset,
-            .end_fill_flat_segment_offset = end_fill_flat_segment_offset,
             .start_fill_boundary_offset = start_fill_boundary_offset,
             .end_fill_boundary_offset = end_fill_boundary_offset,
-            .start_front_stroke_flat_segment_offset = start_front_stroke_flat_segment_offset,
-            .end_front_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset,
-            .start_back_stroke_flat_segment_offset = start_back_stroke_flat_segment_offset,
-            .end_back_stroke_flat_segment_offset = end_back_stroke_flat_segment_offset,
             .start_stroke_boundary_offset = start_stroke_boundary_offset,
             .end_stroke_boundary_offset = end_stroke_boundary_offset,
         };
@@ -763,25 +746,42 @@ pub const SubpathOffset = struct {
     end_back_stroke_flat_segment_offset: u32 = 0,
 
     pub fn create(
-        subpath_index: u32,
+        segment_index: u32,
+        path_monoids: []const PathMonoid,
         segment_offsets: []const SegmentOffset,
+        paths: []const Path,
         subpaths: []const Subpath,
     ) @This() {
-        const subpath = subpaths[subpath_index];
-        const start_segment_offset = if (subpath.segment_index > 0) segment_offsets[subpath.segment_index - 1] else SegmentOffset{};
-        var end_segment_offset: SegmentOffset = undefined;
-        if (subpath_index + 1 < subpaths.len) {
-            end_segment_offset = segment_offsets[subpaths[subpath_index + 1].segment_index - 1];
+        const path_monoid = path_monoids[segment_index];
+        const path = subpaths[path_monoid.path_index];
+        const subpath = subpaths[path_monoid.subpath_index];
+        const start_path_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
+        var end_path_segment_offset: SegmentOffset = undefined;
+        if (path_monoid.path_index + 1 < subpaths.len) {
+            end_path_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
         } else {
-            end_segment_offset = segment_offsets[segment_offsets.len - 1];
+            end_path_segment_offset = segment_offsets[segment_offsets.len - 1];
         }
 
-        const start_fill_flat_segment_offset = start_segment_offset.sum.flat_segment;
-        const end_fill_flat_segment_offset = start_segment_offset.sum.flat_segment + (end_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
-        const start_front_stroke_flat_segment_offset = end_fill_flat_segment_offset;
-        const end_front_stroke_flat_segment_offset = end_fill_flat_segment_offset + (end_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
+        const start_subpath_segment_offset = if (subpath.segment_index > 0) segment_offsets[subpath.segment_index - 1] else SegmentOffset{};
+        var end_subpath_segment_offset: SegmentOffset = undefined;
+        if (path_monoid.subpath_index + 1 < subpaths.len) {
+            end_subpath_segment_offset = segment_offsets[subpaths[path_monoid.subpath_index + 1].segment_index - 1];
+        } else {
+            end_subpath_segment_offset = segment_offsets[segment_offsets.len - 1];
+        }
+
+        const start_fill_flat_segment_offset = start_subpath_segment_offset.sum.flat_segment;
+        const end_fill_flat_segment_offset = start_subpath_segment_offset.sum.flat_segment + (end_subpath_segment_offset.fill.flat_segment - start_subpath_segment_offset.fill.flat_segment);
+
+        var start_stroke_flat_segment_offset = start_path_segment_offset.sum.flat_segment;
+        start_stroke_flat_segment_offset += (end_subpath_segment_offset.fill.flat_segment - start_subpath_segment_offset.fill.flat_segment);
+
+        const start_front_stroke_flat_segment_offset = start_stroke_flat_segment_offset;
+        const end_front_stroke_flat_segment_offset = start_stroke_flat_segment_offset + (end_subpath_segment_offset.front_stroke.flat_segment - start_subpath_segment_offset.front_stroke.flat_segment);
+
         const start_back_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset;
-        const end_back_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset + (end_segment_offset.back_stroke.flat_segment - start_segment_offset.back_stroke.flat_segment);
+        const end_back_stroke_flat_segment_offset = end_front_stroke_flat_segment_offset + (end_subpath_segment_offset.back_stroke.flat_segment - start_subpath_segment_offset.back_stroke.flat_segment);
 
         return @This(){
             .start_fill_flat_segment_offset = start_fill_flat_segment_offset,
@@ -795,85 +795,105 @@ pub const SubpathOffset = struct {
 };
 
 pub const FlatSegmentOffset = struct {
-    pub const FlattenOffsets = struct {
-        fill_flat_segment_index: u32 = 0,
-        start_fill_line_offset: u32 = 0,
-        end_fill_line_offset: u32 = 0,
-        start_fill_intersection_offset: u32 = 0,
-        end_fill_intersection_offset: u32 = 0,
+    fill_flat_segment_index: u32 = 0,
+    start_fill_line_offset: u32 = 0,
+    end_fill_line_offset: u32 = 0,
+    start_fill_intersection_offset: u32 = 0,
+    end_fill_intersection_offset: u32 = 0,
 
-        front_stroke_flat_segment_index: u32 = 0,
-        start_front_stroke_line_offset: u32 = 0,
-        end_front_stroke_line_offset: u32 = 0,
-        start_front_stroke_intersection_offset: u32 = 0,
-        end_front_stroke_intersection_offset: u32 = 0,
+    front_stroke_flat_segment_index: u32 = 0,
+    start_front_stroke_line_offset: u32 = 0,
+    end_front_stroke_line_offset: u32 = 0,
+    start_front_stroke_intersection_offset: u32 = 0,
+    end_front_stroke_intersection_offset: u32 = 0,
 
-        back_stroke_flat_segment_index: u32 = 0,
-        start_back_stroke_line_offset: u32 = 0,
-        end_back_stroke_line_offset: u32 = 0,
-        start_back_stroke_intersection_offset: u32 = 0,
-        end_back_stroke_intersection_offset: u32 = 0,
+    back_stroke_flat_segment_index: u32 = 0,
+    start_back_stroke_line_offset: u32 = 0,
+    end_back_stroke_line_offset: u32 = 0,
+    start_back_stroke_intersection_offset: u32 = 0,
+    end_back_stroke_intersection_offset: u32 = 0,
 
-        pub fn create(
-            segment_index: u32,
-            path_monoid: PathMonoid,
-            segment_offsets: []const SegmentOffset,
-            paths: []const Path,
-        ) @This() {
-            const path = paths[path_monoid.path_index];
-            const current_segment_offset = segment_offsets[segment_index];
-            const previous_segment_offset = if (segment_index > 0) segment_offsets[segment_index - 1] else SegmentOffset{};
-            const start_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
-            var end_segment_offset: SegmentOffset = undefined;
-            if (path_monoid.path_index + 1 < paths.len) {
-                end_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
-            } else {
-                end_segment_offset = segment_offsets[segment_offsets.len - 1];
-            }
-
-            const fill_flat_segment_index = start_segment_offset.sum.flat_segment + (previous_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
-            const start_fill_line_offset = start_segment_offset.sum.line_offset + (previous_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
-            const end_fill_line_offset = start_segment_offset.sum.line_offset + (current_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
-            const start_fill_intersection_offset = start_segment_offset.sum.intersections + (previous_segment_offset.fill.intersections - start_segment_offset.fill.intersections);
-            const end_fill_intersection_offset = start_segment_offset.sum.intersections + (current_segment_offset.fill.intersections - start_segment_offset.fill.intersections);
-            const last_fill_intersection_offset = start_segment_offset.sum.intersections + (end_segment_offset.fill.intersections - start_segment_offset.fill.intersections);
-            const last_fill_line_offset = start_segment_offset.sum.line_offset + (end_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
-            const last_fill_flat_segment_offset = start_segment_offset.sum.flat_segment + (end_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
-            const start_front_stroke_line_offset = last_fill_line_offset + (previous_segment_offset.front_stroke.line_offset - start_segment_offset.front_stroke.line_offset);
-            const end_front_stroke_line_offset = last_fill_line_offset + (current_segment_offset.front_stroke.line_offset - start_segment_offset.front_stroke.line_offset);
-            const start_front_stroke_intersection_offset = last_fill_intersection_offset + (previous_segment_offset.front_stroke.intersections - start_segment_offset.front_stroke.intersections);
-            const end_front_stroke_intersection_offset = last_fill_intersection_offset + (current_segment_offset.front_stroke.intersections - start_segment_offset.front_stroke.intersections);
-            const last_front_stroke_intersection_offset = last_fill_intersection_offset + (end_segment_offset.front_stroke.intersections - start_segment_offset.front_stroke.intersections);
-            const front_stroke_flat_segment_index = last_fill_flat_segment_offset + (previous_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
-            const last_front_stroke_line_offset = last_fill_line_offset + (end_segment_offset.front_stroke.line_offset - start_segment_offset.front_stroke.line_offset);
-            const last_front_stroke_flat_segment_offset = last_fill_flat_segment_offset + (end_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
-            const start_back_stroke_line_offset = last_front_stroke_line_offset + (previous_segment_offset.back_stroke.line_offset - start_segment_offset.back_stroke.line_offset);
-            const end_back_stroke_line_offset = last_front_stroke_line_offset + (current_segment_offset.back_stroke.line_offset - start_segment_offset.back_stroke.line_offset);
-            const start_back_stroke_intersection_offset = last_front_stroke_intersection_offset + (previous_segment_offset.back_stroke.intersections - start_segment_offset.back_stroke.intersections);
-            const end_back_stroke_intersection_offset = last_front_stroke_intersection_offset + (current_segment_offset.back_stroke.intersections - start_segment_offset.back_stroke.intersections);
-            const back_stroke_flat_segment_index = last_front_stroke_flat_segment_offset + (previous_segment_offset.back_stroke.flat_segment - start_segment_offset.back_stroke.flat_segment);
-
-            return @This(){
-                .fill_flat_segment_index = fill_flat_segment_index,
-                .start_fill_line_offset = start_fill_line_offset,
-                .end_fill_line_offset = end_fill_line_offset,
-                .start_fill_intersection_offset = start_fill_intersection_offset,
-                .end_fill_intersection_offset = end_fill_intersection_offset,
-
-                .front_stroke_flat_segment_index = front_stroke_flat_segment_index,
-                .start_front_stroke_line_offset = start_front_stroke_line_offset,
-                .end_front_stroke_line_offset = end_front_stroke_line_offset,
-                .start_front_stroke_intersection_offset = start_front_stroke_intersection_offset,
-                .end_front_stroke_intersection_offset = end_front_stroke_intersection_offset,
-
-                .back_stroke_flat_segment_index = back_stroke_flat_segment_index,
-                .start_back_stroke_line_offset = start_back_stroke_line_offset,
-                .end_back_stroke_line_offset = end_back_stroke_line_offset,
-                .start_back_stroke_intersection_offset = start_back_stroke_intersection_offset,
-                .end_back_stroke_intersection_offset = end_back_stroke_intersection_offset,
-            };
+    pub fn create(
+        segment_index: u32,
+        path_monoid: PathMonoid,
+        segment_offsets: []const SegmentOffset,
+        paths: []const Path,
+        subpaths: []const Subpath,
+    ) @This() {
+        const path = paths[path_monoid.path_index];
+        const subpath = paths[path_monoid.subpath_index];
+        const current_segment_offset = segment_offsets[segment_index];
+        const previous_segment_offset = if (segment_index > 0) segment_offsets[segment_index - 1] else SegmentOffset{};
+        const start_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
+        var end_segment_offset: SegmentOffset = undefined;
+        if (path_monoid.path_index + 1 < paths.len) {
+            end_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
+        } else {
+            end_segment_offset = segment_offsets[segment_offsets.len - 1];
         }
-    };
+        const start_subpath_segment_offset = if (subpath.segment_index > 0) segment_offsets[subpath.segment_index - 1] else SegmentOffset{};
+        var end_subpath_segment_offset: SegmentOffset = undefined;
+        if (path_monoid.subpath_index + 1 < subpaths.len) {
+            end_subpath_segment_offset = segment_offsets[subpaths[path_monoid.subpath_index + 1].segment_index - 1];
+        } else {
+            end_subpath_segment_offset = segment_offsets[segment_offsets.len - 1];
+        }
+
+        const fill_flat_segment_index = start_segment_offset.sum.flat_segment + (previous_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
+        const start_fill_line_offset = start_segment_offset.sum.line_offset + (previous_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
+        const end_fill_line_offset = start_segment_offset.sum.line_offset + (current_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
+        const start_fill_intersection_offset = start_segment_offset.sum.intersections + (previous_segment_offset.fill.intersections - start_segment_offset.fill.intersections);
+        const end_fill_intersection_offset = start_segment_offset.sum.intersections + (current_segment_offset.fill.intersections - start_segment_offset.fill.intersections);
+
+        const last_fill_line_offset = start_segment_offset.sum.line_offset + (end_segment_offset.fill.line_offset - start_segment_offset.fill.line_offset);
+        const last_fill_intersection_offset = start_segment_offset.sum.intersections + (end_segment_offset.fill.intersections - start_segment_offset.fill.intersections);
+        const last_fill_flat_segment_offset = start_segment_offset.sum.flat_segment + (end_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
+        var start_subpath_stroke_line_offset = last_fill_line_offset;
+        start_subpath_stroke_line_offset += (start_subpath_segment_offset.front_stroke.line_offset - start_segment_offset.front_stroke.line_offset);
+        start_subpath_stroke_line_offset += (start_subpath_segment_offset.back_stroke.line_offset - start_segment_offset.back_stroke.line_offset);
+        var start_subpath_stroke_intersection_offest = last_fill_intersection_offset;
+        start_subpath_stroke_intersection_offest += (start_subpath_segment_offset.front_stroke.intersections - start_segment_offset.front_stroke.intersections);
+        start_subpath_stroke_intersection_offest += (start_subpath_segment_offset.back_stroke.intersections - start_segment_offset.back_stroke.intersections);
+        var start_subpath_stroke_flat_segment_offset = last_fill_flat_segment_offset;
+        start_subpath_stroke_flat_segment_offset += (start_subpath_segment_offset.front_stroke.flat_segment - start_segment_offset.front_stroke.flat_segment);
+        start_subpath_stroke_flat_segment_offset += (start_subpath_segment_offset.back_stroke.flat_segment - start_segment_offset.back_stroke.flat_segment);
+
+        const start_front_stroke_line_offset = start_subpath_stroke_line_offset + (previous_segment_offset.front_stroke.line_offset - start_subpath_segment_offset.front_stroke.line_offset);
+        const end_front_stroke_line_offset = start_subpath_stroke_line_offset + (current_segment_offset.front_stroke.line_offset - start_subpath_segment_offset.front_stroke.line_offset);
+        const start_front_stroke_intersection_offset = start_subpath_stroke_intersection_offest + (previous_segment_offset.front_stroke.intersections - start_subpath_segment_offset.front_stroke.intersections);
+        const end_front_stroke_intersection_offset = start_subpath_stroke_intersection_offest + (current_segment_offset.front_stroke.intersections - start_subpath_segment_offset.front_stroke.intersections);
+        const start_front_stroke_flat_segment_offset = start_subpath_stroke_flat_segment_offset + (previous_segment_offset.front_stroke.flat_segment - start_subpath_segment_offset.front_stroke.flat_segment);
+
+        start_subpath_stroke_line_offset += (end_subpath_segment_offset.front_stroke.line_offset - start_subpath_segment_offset.front_stroke.line_offset);
+        start_subpath_stroke_intersection_offest += (end_subpath_segment_offset.front_stroke.intersections - start_subpath_segment_offset.front_stroke.intersections);
+        start_subpath_stroke_flat_segment_offset += (end_subpath_segment_offset.front_stroke.flat_segment - start_subpath_segment_offset.front_stroke.flat_segment);
+
+        const start_back_stroke_line_offset = start_subpath_stroke_line_offset + (previous_segment_offset.back_stroke.line_offset - start_subpath_segment_offset.back_stroke.line_offset);
+        const end_back_stroke_line_offset = start_subpath_stroke_line_offset + (current_segment_offset.back_stroke.line_offset - start_subpath_segment_offset.back_stroke.line_offset);
+        const start_back_stroke_intersection_offset = start_subpath_stroke_intersection_offest + (previous_segment_offset.back_stroke.intersections - start_subpath_segment_offset.back_stroke.intersections);
+        const end_back_stroke_intersection_offset = start_subpath_stroke_intersection_offest + (current_segment_offset.back_stroke.intersections - start_subpath_segment_offset.back_stroke.intersections);
+        const start_back_stroke_flat_segment_offset = start_subpath_stroke_flat_segment_offset + (previous_segment_offset.back_stroke.flat_segment - start_subpath_segment_offset.back_stroke.flat_segment);
+
+        return @This(){
+            .fill_flat_segment_index = fill_flat_segment_index,
+            .start_fill_line_offset = start_fill_line_offset,
+            .end_fill_line_offset = end_fill_line_offset,
+            .start_fill_intersection_offset = start_fill_intersection_offset,
+            .end_fill_intersection_offset = end_fill_intersection_offset,
+
+            .front_stroke_flat_segment_index = start_front_stroke_flat_segment_offset,
+            .start_front_stroke_line_offset = start_front_stroke_line_offset,
+            .end_front_stroke_line_offset = end_front_stroke_line_offset,
+            .start_front_stroke_intersection_offset = start_front_stroke_intersection_offset,
+            .end_front_stroke_intersection_offset = end_front_stroke_intersection_offset,
+
+            .back_stroke_flat_segment_index = start_back_stroke_flat_segment_offset,
+            .start_back_stroke_line_offset = start_back_stroke_line_offset,
+            .end_back_stroke_line_offset = end_back_stroke_line_offset,
+            .start_back_stroke_intersection_offset = start_back_stroke_intersection_offset,
+            .end_back_stroke_intersection_offset = end_back_stroke_intersection_offset,
+        };
+    }
 };
 
 pub const FlatSegment = struct {
