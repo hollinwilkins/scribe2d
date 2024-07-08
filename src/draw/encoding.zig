@@ -696,6 +696,7 @@ pub const Path = struct {
 
     segment_index: u32 = 0,
     fill_bump: Bump = Bump{ .raw = 0 },
+    stroke_bump: Bump = Bump{ .raw = 0 },
 };
 
 pub const Subpath = struct {

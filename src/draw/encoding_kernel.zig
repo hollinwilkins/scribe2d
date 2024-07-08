@@ -1441,10 +1441,18 @@ pub const Rasterize = struct {
             );
         } else {
             const subpath_tag = path_tags[path_monoid.subpath_index];
+            // const front_flat_segments = flat_segments[subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset];
+            // const back_flat_segments = flat_segments[subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset];
 
             if (subpath_tag.segment.cap) {
                 // front/back stroke are a single subpath
             } else {
+                // var stroke_path_bump = BumpAllocator{
+                //     .start = path_offset.start_stroke_boundary_offset,
+                //     .end = path_offset.end_stroke_boundary_offset,
+                //     .offset = &path.stroke_bump,
+                // };
+
                 // front/back stroke are separate subpaths
                 // var front_stroke_path_bump = BumpAllocator
             }
