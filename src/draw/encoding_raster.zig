@@ -26,7 +26,6 @@ pub const CpuRasterizer = struct {
     const PathList = std.ArrayListUnmanaged(Path);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
-    const BumpAllocatorList = std.ArrayListUnmanaged(std.atomic.Value(u32));
     const Buffer = std.ArrayListUnmanaged(u8);
     // const LineList = std.ArrayListUnmanaged(LineF32);
     // const BoolList = std.ArrayListUnmanaged(bool);
@@ -42,7 +41,6 @@ pub const CpuRasterizer = struct {
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
     paths: PathList = PathList{},
-    path_bumps: BumpAllocatorList = BumpAllocatorList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segments: FlatSegmentList = FlatSegmentList{},
     line_data: Buffer = Buffer{},
@@ -64,7 +62,6 @@ pub const CpuRasterizer = struct {
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
         self.paths.deinit(self.allocator);
-        self.path_bumps.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
         self.flat_segments.deinit(self.allocator);
         self.line_data.deinit(self.allocator);
@@ -73,7 +70,6 @@ pub const CpuRasterizer = struct {
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
         self.paths.items.len = 0;
-        self.path_bumps.items.len = 0;
         self.segment_offsets.items.len = 0;
         self.flat_segments.items.len = 0;
         self.line_data.items.len = 0;
@@ -108,11 +104,6 @@ pub const CpuRasterizer = struct {
                     .segment_index = path_monoid.segment_index,
                 };
             }
-        }
-
-        const path_bumps = try self.path_bumps.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
-        for (path_bumps) |*bump| {
-            bump.raw = 0;
         }
     }
 
@@ -164,6 +155,7 @@ pub const CpuRasterizer = struct {
     //             self.config,
     //             self.encoding.path_tags,
     //             self.path_monoids.items,
+    //             self.paths.items,
     //             self.encoding.styles,
     //             self.encoding.transforms,
     //             self.encoding.segment_data,
