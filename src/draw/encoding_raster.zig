@@ -137,11 +137,11 @@ pub const CpuRasterizer = struct {
         const last_segment_offset = self.segment_offsets.getLast();
         const flat_segments = try self.flat_segments.addManyAsSlice(
             self.allocator,
-            last_segment_offset.flat_segment_offset,
+            last_segment_offset.sum.flat_segment,
         );
         const line_data = try self.line_data.addManyAsSlice(
             self.allocator,
-            last_segment_offset.sum().line_offset,
+            last_segment_offset.sum.line_offset,
         );
 
         const range = RangeU32{

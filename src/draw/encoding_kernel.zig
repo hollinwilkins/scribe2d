@@ -191,6 +191,7 @@ pub const Estimate = struct {
 
         if (style.isFill()) {
             fill = base;
+            fill.flat_segment = 1;
         }
 
         if (style.isStroke()) {
@@ -204,9 +205,11 @@ pub const Estimate = struct {
             const base_stroke = base.mulScalar(stroke_fudge);
             front_stroke = base_stroke.combine(cap).combine(join);
             back_stroke = base_stroke.combine(join);
+            front_stroke.flat_segment = 1;
+            back_stroke.flat_segment = 1;
         }
 
-        return SegmentOffset.create(style, fill, front_stroke, back_stroke);
+        return SegmentOffset.create(fill, front_stroke, back_stroke);
     }
 
     pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Offsets {
@@ -406,18 +409,18 @@ pub const Flatten = struct {
                 end_segment_offset = segment_offsets[segment_offsets.len - 1];
             }
 
-            var flat_segment_bump = BumpAllocator{
-                .start = start_segment_offset.flat_segment_offset,
-                .end = end_segment_offset.flat_segment_offset,
-                .offset = &path.bump0,
-            };
-            var line_bump = BumpAllocator{
-                .start = start_segment_offset.back_stroke.line_offset,
-                .end = end_segment_offset.back_stroke.line_offset,
-                .offset = &path.bump1,
-            };
-
             if (style.isFill()) {
+                var line_bump = BumpAllocator{
+                    .start = start_segment_offset.sum.line_offset,
+                    .end = start_segment_offset.sum.line_offset + end_segment_offset.fill.line_offset,
+                    .offset = &path.fill_line_bump,
+                };
+                var flat_segment_bump = BumpAllocator{
+                    .start = start_segment_offset.sum.flat_segment,
+                    .end = start_segment_offset.sum.flat_segment + end_segment_offset.fill.flat_segment,
+                    .offset = &path.fill_flat_segment_bump,
+                };
+
                 var start_line_offset: u32 = 0;
                 if (previous_segment_offset) |offset| {
                     start_line_offset = offset.fill.line_offset;

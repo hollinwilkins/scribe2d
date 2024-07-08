@@ -695,8 +695,12 @@ pub const Path = struct {
     pub const Bump = std.atomic.Value(u32);
 
     segment_index: u32 = 0,
-    bump0: Bump = Bump{ .raw = 0 },
-    bump1: Bump = Bump{ .raw = 0 },
+    fill_line_bump: Bump = Bump{ .raw = 0 },
+    fill_flat_segment_bump: Bump = Bump{ .raw = 0 },
+    front_stroke_bump: Bump = Bump{ .raw = 0 },
+    front_stroke_flat_segment_bump: Bump = Bump{ .raw = 0 },
+    back_stroke_bump: Bump = Bump{ .raw = 0 },
+    back_stroke_flat_segment_bump: Bump = Bump{ .raw = 0 },
 };
 
 pub const FlatSegment = struct {
@@ -713,6 +717,7 @@ pub const FlatSegment = struct {
 };
 
 pub const Offset = packed struct {
+    flat_segment: u32 = 0,
     lines: u32 = 0,
     line_offset: u32 = 0,
     intersections: u32 = 0,
@@ -743,6 +748,7 @@ pub const Offset = packed struct {
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
+            .flat_segment = self.flat_segment + other.flat_segment,
             .lines = self.lines + other.lines,
             .line_offset = self.line_offset + other.line_offset,
             .intersections = self.intersections + other.intersections,
@@ -761,10 +767,10 @@ pub const Offset = packed struct {
 };
 
 pub const SegmentOffset = packed struct {
-    flat_segment_offset: u32 = 0,
     fill: Offset = Offset{},
     front_stroke: Offset = Offset{},
     back_stroke: Offset = Offset{},
+    sum: Offset = Offset{},
 
     pub usingnamespace MonoidFunctions(@This(), @This());
 
@@ -773,38 +779,25 @@ pub const SegmentOffset = packed struct {
     }
 
     pub fn create(
-        style: Style,
         fill: Offset,
         front_stroke: Offset,
         back_stroke: Offset,
     ) @This() {
-        var flat_segment_offset: u32 = 0;
-        if (style.isFill()) {
-            flat_segment_offset += 1;
-        }
-        if (style.isStroke()) {
-            flat_segment_offset += 2;
-        }
-
         return @This(){
-            .flat_segment_offset = flat_segment_offset,
             .fill = fill,
             .front_stroke = front_stroke,
             .back_stroke = back_stroke,
+            .sum = fill.combine(front_stroke).combine(back_stroke),
         };
     }
 
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
-            .flat_segment_offset = self.flat_segment_offset + other.flat_segment_offset,
             .fill = self.fill.combine(other.fill),
             .front_stroke = self.front_stroke.combine(other.front_stroke),
             .back_stroke = self.back_stroke.combine(other.back_stroke),
+            .sum = self.sum.combine(other.sum),
         };
-    }
-
-    pub fn sum(self: @This()) Offset {
-        return self.fill.combine(self.front_stroke).combine(self.back_stroke);
     }
 };
 
