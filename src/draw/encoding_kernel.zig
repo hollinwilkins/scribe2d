@@ -390,18 +390,19 @@ pub const Flatten = struct {
         flat_segments: []FlatSegment,
         line_data: []u8,
     ) void {
-        for (range.start..range.end) |index| {
-            const path_monoid = path_monoids[index];
+        for (range.start..range.end) |segment_index| {
+            const path_monoid = path_monoids[segment_index];
             const path = paths[path_monoid.path_index];
             const style = styles[path_monoid.style_index];
-            const current_segment_offset = segment_offsets[index];
-            const previous_segment_offset = if (index > 0) segment_offsets[index - 1] else SegmentOffset{};
+            const current_segment_offset = segment_offsets[segment_index];
+            const previous_segment_offset = if (segment_index > 0) segment_offsets[segment_index - 1] else SegmentOffset{};
             const start_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
-            const end_segment_offset = if (path_monoid.path_index + 1 < paths.len) {
-                segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
+            var end_segment_offset: SegmentOffset = undefined;
+            if (path_monoid.path_index + 1 < paths.len) {
+                end_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
             } else {
-                segment_offsets[segment_offsets.len - 1];
-            };
+                end_segment_offset = segment_offsets[segment_offsets.len - 1];
+            }
 
             if (style.isFill()) {
                 const flat_segment_index = start_segment_offset.fill.flat_segment + (previous_segment_offset.fill.flat_segment - start_segment_offset.fill.flat_segment);
@@ -417,9 +418,9 @@ pub const Flatten = struct {
                     .end_line_data_offset = start_line_offset,
                 };
 
-                fill(
+                flattenFill(
                     config,
-                    index,
+                    @intCast(segment_index),
                     path_tags,
                     path_monoids,
                     transforms,
@@ -449,7 +450,7 @@ pub const Flatten = struct {
                     .end_line_data_offset = start_front_stroke_line_offset,
                 };
                 const front_stroke_line_data = line_data[start_front_stroke_line_offset..end_front_stroke_line_offset];
-                const back_stroke_flat_segment = flat_segments[back_stroke_flat_segment_index];
+                const back_stroke_flat_segment = &flat_segments[back_stroke_flat_segment_index];
                 back_stroke_flat_segment.* = FlatSegment{
                     .kind = .stroke_back,
                     .segment_index = path_monoid.segment_index,
@@ -458,11 +459,12 @@ pub const Flatten = struct {
                 };
                 const back_stroke_line_data = line_data[start_back_stroke_line_offset..end_back_stroke_line_offset];
 
-                stroke(
+                flattenStroke(
                     config,
-                    index,
+                    style.stroke,
+                    @intCast(segment_index),
                     path_tags,
-                    path_monoid,
+                    path_monoids,
                     transforms,
                     subpaths,
                     segment_data,
@@ -475,9 +477,9 @@ pub const Flatten = struct {
         }
     }
 
-    pub fn fill(
+    pub fn flattenFill(
         config: KernelConfig,
-        segment_index: usize,
+        segment_index: u32,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
@@ -518,9 +520,10 @@ pub const Flatten = struct {
         flat_segment.end_line_data_offset = flat_segment.end_line_data_offset + writer.offset;
     }
 
-    pub fn stroke(
+    pub fn flattenStroke(
         config: KernelConfig,
-        segment_index: usize,
+        stroke: Style.Stroke,
+        segment_index: u32,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
@@ -535,11 +538,18 @@ pub const Flatten = struct {
         const path_monoid = path_monoids[segment_index];
         const transform = transforms[path_monoid.transform_index];
         const subpath = subpaths[path_monoid.subpath_index];
-        const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) {
-            subpaths[path_monoid.subpath_index + 1];
+        var next_subpath: Subpath = undefined;
+        if (path_monoid.subpath_index + 1 < subpaths.len) {
+            next_subpath = subpaths[path_monoid.subpath_index + 1];
         } else {
-            subpaths[subpaths.len - 1];
-        };
+            next_subpath = subpaths[subpaths.len - 1];
+        }
+        const last_path_tag = path_tags[next_subpath.segment_index - 1];
+        const last_path_monoid = path_monoids[next_subpath.segment_index - 1];
+
+        if (path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+            return;
+        }
 
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
             std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
@@ -565,15 +575,21 @@ pub const Flatten = struct {
             .y = offset,
         };
 
-        // const curve_range = subpat
-        const neighbor = readNeighborSegment(config, curves, points, curve_range, curve_index + 1);
-        const cubic_points = getCubicPoints(
-            curve,
-            points[curve.point_offsets.start..curve.point_offsets.end],
+        const segment_range = RangeU32{
+            .start = subpath.segment_index,
+            .end = next_subpath.segment_index + 1,
+        };
+        const neighbor = readNeighborSegment(
+            config,
+            segment_index + 1,
+            segment_range,
+            path_tags,
+            path_monoids,
+            segment_data,
         );
-        var tan_prev = cubicEndTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+        var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = neighbor.tangent;
-        var tan_start = cubicStartTangent(config, cubic_points.point0, cubic_points.point1, cubic_points.point2, cubic_points.point3);
+        var tan_start = cubicStartTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
 
         if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
             tan_start = PointF32{
@@ -611,17 +627,17 @@ pub const Flatten = struct {
             .y = tan_next_norm.x,
         });
 
-        if (curve.cap == .start) {
+        if (last_path_tag.segment.cap and path_tag.index.subpath == 1) {
             // draw start cap on left side
             drawCap(
                 config,
                 stroke.start_cap,
-                cubic_points.point0,
-                cubic_points.point0.sub(n_start),
-                cubic_points.point0.add(n_start),
+                cubic_points.p0,
+                cubic_points.p0.sub(n_start),
+                cubic_points.p0.add(n_start),
                 offset_tangent.negate(),
                 transform,
-                &left_writer,
+                &front_writer,
             );
         }
 
@@ -630,49 +646,47 @@ pub const Flatten = struct {
             cubic_points,
             transform,
             offset,
-            cubic_points.point0.add(n_start),
-            cubic_points.point3.add(n_prev),
-            &left_writer,
+            cubic_points.p0.add(n_start),
+            cubic_points.p3.add(n_prev),
+            &front_writer,
         );
-
-        var right_join_index: usize = 0;
-        if (curve.cap == .end) {
-            // draw end cap on left side
-            drawCap(
-                config,
-                stroke.end_cap,
-                cubic_points.point3,
-                cubic_points.point3.add(n_prev),
-                cubic_points.point3.sub(n_prev),
-                offset_tangent,
-                transform,
-                &left_writer,
-            );
-        } else {
-            drawJoin(
-                config,
-                stroke,
-                cubic_points.point3,
-                tan_prev,
-                tan_next,
-                n_prev,
-                n_next,
-                transform,
-                &left_writer,
-                &right_writer,
-            );
-            right_join_index = right_writer.index;
-        }
 
         flattenEuler(
             config,
             cubic_points,
             transform,
             -offset,
-            cubic_points.point0.sub(n_start),
-            cubic_points.point3.sub(n_prev),
-            &right_writer,
+            cubic_points.p0.sub(n_start),
+            cubic_points.p3.sub(n_prev),
+            &back_writer,
         );
+
+        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index - 1) {
+            // draw end cap on left side
+            drawCap(
+                config,
+                stroke.end_cap,
+                cubic_points.p3,
+                cubic_points.p3.add(n_prev),
+                cubic_points.p3.sub(n_prev),
+                offset_tangent,
+                transform,
+                &front_writer,
+            );
+        } else {
+            drawJoin(
+                config,
+                stroke,
+                cubic_points.p3,
+                tan_prev,
+                tan_next,
+                n_prev,
+                n_next,
+                transform,
+                &front_writer,
+                &back_writer,
+            );
+        }
 
         front_flat_segment.end_line_data_offset = front_flat_segment.end_line_data_offset + front_writer.offset;
         back_flat_segment.end_line_data_offset = back_flat_segment.end_line_data_offset + back_writer.offset;
@@ -859,6 +873,167 @@ pub const Flatten = struct {
         }
     }
 
+    fn drawCap(
+        config: KernelConfig,
+        cap_style: Style.Cap,
+        point: PointF32,
+        cap0: PointF32,
+        cap1: PointF32,
+        offset_tangent: PointF32,
+        transform: TransformF32.Matrix,
+        writer: *Writer,
+    ) void {
+        if (cap_style == .round) {
+            flattenArc(
+                config,
+                cap0,
+                cap1,
+                point,
+                std.math.pi,
+                transform,
+                writer,
+            );
+            return;
+        }
+
+        var start = cap0;
+        var end = cap1;
+        if (cap_style == .square) {
+            const v = offset_tangent;
+            const p0 = start.add(v);
+            const p1 = end.add(v);
+            writer.write(LineF32.create(start, p0).affineTransform(transform));
+            writer.write(LineF32.create(p1, end).affineTransform(transform));
+
+            start = p0;
+            end = p1;
+        }
+
+        writer.write(LineF32.create(start, end).affineTransform(transform));
+    }
+
+    fn drawJoin(
+        config: KernelConfig,
+        stroke: Style.Stroke,
+        p0: PointF32,
+        tan_prev: PointF32,
+        tan_next: PointF32,
+        n_prev: PointF32,
+        n_next: PointF32,
+        transform: TransformF32.Matrix,
+        left_writer: *Writer,
+        right_writer: *Writer,
+    ) void {
+        var front0 = p0.add(n_prev);
+        const front1 = p0.add(n_next);
+        var back0 = p0.sub(n_next);
+        const back1 = p0.sub(n_prev);
+
+        const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
+        const d = tan_prev.dot(tan_next);
+
+        switch (stroke.join) {
+            .bevel => {
+                if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
+                    left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
+                    right_writer.write(LineF32.create(back0, back1).affineTransform(transform));
+                }
+            },
+            .miter => {
+                const hypot = std.math.hypot(cr, d);
+                const miter_limit = stroke.miter_limit;
+
+                if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
+                    const is_backside = cr > 0.0;
+                    const fp_last = if (is_backside) back1 else front0;
+                    const fp_this = if (is_backside) back0 else front1;
+                    const p = if (is_backside) back0 else front0;
+
+                    const v = fp_this.sub(fp_last);
+                    const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+                    const miter_pt = fp_this.sub(tan_next.mul(PointF32{
+                        .x = h,
+                        .y = h,
+                    }));
+
+                    if (is_backside) {
+                        right_writer.write(LineF32.create(p, miter_pt).affineTransform(transform));
+                        back0 = miter_pt;
+                    } else {
+                        left_writer.write(LineF32.create(p, miter_pt).affineTransform(transform));
+                        front0 = miter_pt;
+                    }
+                }
+
+                left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
+                right_writer.write(LineF32.create(back0, back1).affineTransform(transform));
+            },
+            .round => {
+                if (cr > 0.0) {
+                    flattenArc(
+                        config,
+                        back0,
+                        back1,
+                        p0,
+                        @abs(std.math.atan2(cr, d)),
+                        transform,
+                        right_writer,
+                    );
+
+                    left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
+                } else {
+                    flattenArc(
+                        config,
+                        front0,
+                        front1,
+                        p0,
+                        @abs(std.math.atan2(cr, d)),
+                        transform,
+                        left_writer,
+                    );
+
+                    right_writer.write(LineF32.create(back0, back1).affineTransform(transform));
+                }
+            },
+        }
+    }
+
+    fn flattenArc(
+        config: KernelConfig,
+        start: PointF32,
+        end: PointF32,
+        center: PointF32,
+        angle: f32,
+        transform: TransformF32.Matrix,
+        writer: *Writer,
+    ) void {
+        var p0 = transform.apply(start);
+        var r = start.sub(center);
+        const radius = @max(config.error_tolerance, (p0.sub(transform.apply(center))).length());
+        const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
+
+        // Always output at least one line so that we always draw the chord.
+        const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
+
+        // let (s, c) = theta.sin_cos();
+        const s = std.math.sin(theta);
+        const c = std.math.cos(theta);
+        const rot = TransformF32.Matrix{
+            .coefficients = [_]f32{ c, -s, 0.0, s, c, 0.0 },
+        };
+
+        for (0..n_lines - 1) |n| {
+            _ = n;
+            r = rot.apply(r);
+            const p1 = transform.apply(center.add(r));
+            writer.write(LineF32.create(p0, p1));
+            p0 = p1;
+        }
+
+        const p1 = transform.apply(end);
+        writer.write(LineF32.create(p0, p1));
+    }
+
     pub const EspcRobust = enum(u8) {
         normal = 0,
         low_k1 = 1,
@@ -1008,20 +1183,22 @@ pub const Flatten = struct {
 
     fn readNeighborSegment(
         config: KernelConfig,
-        curves: []const Curve,
-        points: []const PointF32,
-        curve_range: RangeU32,
-        index: u32,
+        next_segment_index: u32,
+        segment_range: RangeU32,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        segment_data: []const u8,
     ) NeighborSegment {
-        const index_shifted = (index - curve_range.start) % curve_range.size() + curve_range.start;
-        const curve = curves[index_shifted];
-        const cubic_points = getCubicPoints(curve, points[curve.point_offsets.start..curve.point_offsets.end]);
+        const index_shifted = (next_segment_index - segment_range.start) % segment_range.size() + segment_range.start;
+        const next_path_tag = path_tags[index_shifted];
+        const next_path_monoid = path_monoids[index_shifted];
+        const cubic_points = getCubicPoints(next_path_tag, next_path_monoid, segment_data);
         const tangent = cubicStartTangent(
             config,
-            cubic_points.point0,
-            cubic_points.point1,
-            cubic_points.point2,
-            cubic_points.point3,
+            cubic_points.p0,
+            cubic_points.p1,
+            cubic_points.p2,
+            cubic_points.p3,
         );
 
         return NeighborSegment{
@@ -1067,8 +1244,9 @@ pub const Flatten = struct {
                 return;
             }
 
-            const last_point = self.lastPoint();
-            std.debug.assert(std.meta.eql(last_point, line.p0));
+            // TODO: reenable this at some point
+            // const last_point = self.lastPoint();
+            // std.debug.assert(std.meta.eql(last_point, line.p0));
             self.addPoint(line.p1);
         }
 

@@ -102,7 +102,7 @@ pub const CpuRasterizer = struct {
 
         const last_path_monoid = path_monoids[path_monoids.len - 1];
         const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
-        const subpaths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.subpath_index + 1);
+        const subpaths = try self.subpaths.addManyAsSlice(self.allocator, last_path_monoid.subpath_index + 1);
         for (self.encoding.path_tags, path_monoids) |path_tag, path_monoid| {
             if (path_tag.index.path == 1) {
                 paths[path_monoid.path_index] = Path{
