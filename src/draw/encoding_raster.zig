@@ -24,6 +24,7 @@ const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const PathList = std.ArrayListUnmanaged(Path);
+    const SubpathList = std.ArrayListUnmanaged(Subpath);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
     const Buffer = std.ArrayListUnmanaged(u8);
@@ -41,6 +42,7 @@ pub const CpuRasterizer = struct {
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
     paths: PathList = PathList{},
+    subpaths: SubpathList = SubpathList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segments: FlatSegmentList = FlatSegmentList{},
     line_data: Buffer = Buffer{},
@@ -62,6 +64,7 @@ pub const CpuRasterizer = struct {
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
         self.paths.deinit(self.allocator);
+        self.subpaths.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
         self.flat_segments.deinit(self.allocator);
         self.line_data.deinit(self.allocator);
@@ -70,6 +73,7 @@ pub const CpuRasterizer = struct {
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
         self.paths.items.len = 0;
+        self.subpaths.items.len = 0;
         self.segment_offsets.items.len = 0;
         self.flat_segments.items.len = 0;
         self.line_data.items.len = 0;
@@ -98,9 +102,16 @@ pub const CpuRasterizer = struct {
 
         const last_path_monoid = path_monoids[path_monoids.len - 1];
         const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
+        const subpaths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.subpath_index + 1);
         for (self.encoding.path_tags, path_monoids) |path_tag, path_monoid| {
             if (path_tag.index.path == 1) {
                 paths[path_monoid.path_index] = Path{
+                    .segment_index = path_monoid.segment_index,
+                };
+            }
+
+            if (path_tag.index.subpath == 1) {
+                subpaths[path_monoid.subpath_index] = Subpath{
                     .segment_index = path_monoid.segment_index,
                 };
             }
@@ -157,9 +168,10 @@ pub const CpuRasterizer = struct {
                 self.path_monoids.items,
                 self.encoding.styles,
                 self.encoding.transforms,
+                self.paths.items,
+                self.subpaths.items,
                 self.encoding.segment_data,
                 chunk,
-                self.paths.items,
                 self.segment_offsets.items,
                 flat_segments,
                 line_data,

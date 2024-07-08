@@ -692,8 +692,10 @@ pub fn PathEncoder(comptime T: type) type {
 }
 
 pub const Path = struct {
-    pub const Bump = std.atomic.Value(u32);
+    segment_index: u32 = 0,
+};
 
+pub const Subpath = struct {
     segment_index: u32 = 0,
 };
 
