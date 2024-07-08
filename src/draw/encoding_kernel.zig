@@ -12,11 +12,15 @@ const Subpath = encoding_module.Subpath;
 const SegmentData = encoding_module.SegmentData;
 const FlatSegment = encoding_module.FlatSegment;
 const Style = encoding_module.Style;
+const LineIterator = encoding_module.LineIterator;
 const MonoidFunctions = encoding_module.MonoidFunctions;
 const Estimates = encoding_module.Estimates;
 const Offsets = encoding_module.Offset;
 const FlatSegmentOffset = encoding_module.FlatSegmentOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
+const GridIntersection = encoding_module.GridIntersection;
+const BoundaryFragment = encoding_module.BoundaryFragment;
+const MergeFragment = encoding_module.MergeFragment;
 const BumpAllocator = encoding_module.BumpAllocator;
 const TransformF32 = core.TransformF32;
 const IntersectionF32 = core.IntersectionF32;
@@ -408,6 +412,8 @@ pub const Flatten = struct {
                     .segment_index = path_monoid.segment_index,
                     .start_line_data_offset = flatten_offsets.start_fill_line_offset,
                     .end_line_data_offset = flatten_offsets.end_fill_line_offset,
+                    .start_intersection_offset = flatten_offsets.start_fill_intersection_offset,
+                    .end_intersection_offset = flatten_offsets.end_fill_intersection_offset,
                 };
 
                 flattenFill(
@@ -429,6 +435,8 @@ pub const Flatten = struct {
                     .segment_index = path_monoid.segment_index,
                     .start_line_data_offset = flatten_offsets.start_front_stroke_line_offset,
                     .end_line_data_offset = flatten_offsets.end_front_stroke_line_offset,
+                    .start_intersection_offset = flatten_offsets.start_front_stroke_intersection_offset,
+                    .end_intersection_offset = flatten_offsets.end_front_stroke_intersection_offset,
                 };
                 const back_stroke_flat_segment = &flat_segments[flatten_offsets.back_stroke_flat_segment_index];
                 back_stroke_flat_segment.* = FlatSegment{
@@ -436,6 +444,8 @@ pub const Flatten = struct {
                     .segment_index = path_monoid.segment_index,
                     .start_line_data_offset = flatten_offsets.start_back_stroke_line_offset,
                     .end_line_data_offset = flatten_offsets.end_back_stroke_line_offset,
+                    .start_intersection_offset = flatten_offsets.start_back_stroke_intersection_offset,
+                    .end_intersection_offset = flatten_offsets.end_back_stroke_intersection_offset,
                 };
 
                 flattenStroke(
@@ -1258,433 +1268,424 @@ pub const Flatten = struct {
     };
 };
 
-// pub const Rasterize = struct {
-//     const GRID_POINT_TOLERANCE: f32 = 1e-6;
+pub const Rasterize = struct {
+    const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
-//     pub fn intersect(
-//         flat_segment_data: []const u8,
-//         range: RangeU32,
-//         flat_segment_offsets: []SegmentOffsets,
-//         grid_intersections: []GridIntersection,
-//     ) void {
-//         for (range.start..range.end) |segment_index| {
-//             intersectSegment(
-//                 @intCast(segment_index),
-//                 flat_segment_data,
-//                 flat_segment_offsets,
-//                 grid_intersections,
-//             );
-//         }
-//     }
+    pub fn intersect(
+        line_data: []const u8,
+        range: RangeU32,
+        flat_segments: []FlatSegment,
+        grid_intersections: []GridIntersection,
+    ) void {
+        for (range.start..range.end) |flat_segment_index| {
+            intersectSegment(
+                @intCast(flat_segment_index),
+                line_data,
+                flat_segments,
+                grid_intersections,
+            );
+        }
+    }
 
-//     pub fn intersectSegment(
-//         segment_index: u32,
-//         flat_segment_data: []const u8,
-//         flat_segment_offsets: []SegmentOffsets,
-//         grid_intersections: []GridIntersection,
-//     ) void {
-//         const segment_offsets = &flat_segment_offsets[segment_index];
-//         const previous_segment_offsets = if (segment_index > 0) flat_segment_offsets[segment_index - 1] else null;
-//         var start_intersection_offset: u32 = 0;
-//         var start_line_offset: u32 = 0;
-//         if (previous_segment_offsets) |so| {
-//             start_intersection_offset = so.fill.intersection.capacity;
-//             start_line_offset = so.fill.line.capacity;
-//         }
-//         const end_intersection_offset = segment_offsets.fill.intersection.capacity;
-//         const end_line_offset = segment_offsets.fill.line.end;
+    pub fn intersectSegment(
+        flat_segment_index: u32,
+        line_data: []const u8,
+        flat_segments: []FlatSegment,
+        grid_intersections: []GridIntersection,
+    ) void {
+        const flat_segment = &flat_segments[flat_segment_index];
+        const intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
-//         const intersections = grid_intersections[start_intersection_offset..end_intersection_offset];
-//         var intersection_writer = IntersectionWriter{
-//             .slice = intersections,
-//         };
-//         const line_segments = flat_segment_data[start_line_offset..end_line_offset];
-//         var line_iter = LineIterator{
-//             .segment_data = line_segments,
-//         };
+        var intersection_writer = IntersectionWriter{
+            .slice = intersections,
+        };
+        const segment_line_data = line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset];
+        var line_iter = LineIterator{
+            .line_data = segment_line_data,
+        };
 
-//         while (line_iter.next()) |line| {
-//             const start_intersection_index = intersection_writer.index;
-//             const start_point: PointF32 = line.apply(0.0);
-//             const end_point: PointF32 = line.apply(1.0);
-//             const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
-//             const bounds: RectI32 = RectI32.create(PointI32{
-//                 .x = @intFromFloat(@ceil(bounds_f32.min.x)),
-//                 .y = @intFromFloat(@ceil(bounds_f32.min.y)),
-//             }, PointI32{
-//                 .x = @intFromFloat(@floor(bounds_f32.max.x)),
-//                 .y = @intFromFloat(@floor(bounds_f32.max.y)),
-//             });
-//             const scan_bounds = RectF32.create(PointF32{
-//                 .x = @floatFromInt(bounds.min.x - 1),
-//                 .y = @floatFromInt(bounds.min.y - 1),
-//             }, PointF32{
-//                 .x = @floatFromInt(bounds.max.x + 1),
-//                 .y = @floatFromInt(bounds.max.y + 1),
-//             });
+        while (line_iter.next()) |line| {
+            const start_intersection_index = intersection_writer.index;
+            const start_point: PointF32 = line.apply(0.0);
+            const end_point: PointF32 = line.apply(1.0);
+            const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+            const bounds: RectI32 = RectI32.create(PointI32{
+                .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+                .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+            }, PointI32{
+                .x = @intFromFloat(@floor(bounds_f32.max.x)),
+                .y = @intFromFloat(@floor(bounds_f32.max.y)),
+            });
+            const scan_bounds = RectF32.create(PointF32{
+                .x = @floatFromInt(bounds.min.x - 1),
+                .y = @floatFromInt(bounds.min.y - 1),
+            }, PointF32{
+                .x = @floatFromInt(bounds.max.x + 1),
+                .y = @floatFromInt(bounds.max.y + 1),
+            });
 
-//             intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
-//                 .t = 0.0,
-//                 .point = start_point,
-//             }).fitToGrid());
+            intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
+                .t = 0.0,
+                .point = start_point,
+            }).fitToGrid());
 
-//             for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
-//                 const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
-//                 try scanX(grid_x, line, scan_bounds, &intersection_writer);
-//             }
+            for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
+                const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
+                try scanX(grid_x, line, scan_bounds, &intersection_writer);
+            }
 
-//             for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
-//                 const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
-//                 try scanY(grid_y, line, scan_bounds, &intersection_writer);
-//             }
+            for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
+                const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
+                try scanY(grid_y, line, scan_bounds, &intersection_writer);
+            }
 
-//             intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
-//                 .t = 1.0,
-//                 .point = end_point,
-//             }).fitToGrid());
+            intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
+                .t = 1.0,
+                .point = end_point,
+            }).fitToGrid());
 
-//             const end_intersection_index = intersection_writer.index;
-//             const line_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
+            const end_intersection_index = intersection_writer.index;
+            const line_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
 
-//             // need to sort by T for each curve, in order
-//             std.mem.sort(
-//                 GridIntersection,
-//                 line_intersections,
-//                 @as(u32, 0),
-//                 gridIntersectionLessThan,
-//             );
-//         }
+            // need to sort by T for each curve, in order
+            std.mem.sort(
+                GridIntersection,
+                line_intersections,
+                @as(u32, 0),
+                gridIntersectionLessThan,
+            );
+        }
 
-//         segment_offsets.fill.intersection.end = start_intersection_offset + intersection_writer.index;
-//     }
+        flat_segment.end_intersection_offset = flat_segment.start_intersection_offset + intersection_writer.index;
+    }
 
-//     fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
-//         if (left.intersection.t < right.intersection.t) {
-//             return true;
-//         }
+    fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
+        if (left.intersection.t < right.intersection.t) {
+            return true;
+        }
 
-//         return false;
-//     }
+        return false;
+    }
 
-//     pub fn boundary(
-//         half_planes: HalfPlanesU16,
-//         path_monoids: []const PathMonoid,
-//         paths: []const Path,
-//         subpaths: []const Subpath,
-//         grid_intersections: []const GridIntersection,
-//         flat_segment_offsets: []const SegmentOffsets,
-//         range: RangeU32,
-//         path_bumps: []std.atomic.Value(u32),
-//         boundary_fragments: []BoundaryFragment,
-//     ) void {
-//         for (range.start..range.end) |segment_index| {
-//             boundarySegment(
-//                 @intCast(segment_index),
-//                 half_planes,
-//                 path_monoids,
-//                 paths,
-//                 subpaths,
-//                 grid_intersections,
-//                 flat_segment_offsets,
-//                 path_bumps,
-//                 boundary_fragments,
-//             );
-//         }
-//     }
+    // pub fn boundary(
+    //     half_planes: HalfPlanesU16,
+    //     path_monoids: []const PathMonoid,
+    //     paths: []const Path,
+    //     subpaths: []const Subpath,
+    //     grid_intersections: []const GridIntersection,
+    //     flat_segment_offsets: []const SegmentOffsets,
+    //     range: RangeU32,
+    //     path_bumps: []std.atomic.Value(u32),
+    //     boundary_fragments: []BoundaryFragment,
+    // ) void {
+    //     for (range.start..range.end) |segment_index| {
+    //         boundarySegment(
+    //             @intCast(segment_index),
+    //             half_planes,
+    //             path_monoids,
+    //             paths,
+    //             subpaths,
+    //             grid_intersections,
+    //             flat_segment_offsets,
+    //             path_bumps,
+    //             boundary_fragments,
+    //         );
+    //     }
+    // }
 
-//     pub fn boundarySegment(
-//         segment_index: u32,
-//         half_planes: HalfPlanesU16,
-//         path_monoids: []const PathMonoid,
-//         paths: []const Path,
-//         subpaths: []const Subpath,
-//         grid_intersections: []const GridIntersection,
-//         flat_segment_offsets: []const SegmentOffsets,
-//         path_bumps: []std.atomic.Value(u32),
-//         boundary_fragments: []BoundaryFragment,
-//     ) void {
-//         const path_monoid = path_monoids[segment_index];
-//         const path = paths[path_monoid.path_index];
-//         const subpath = subpaths[path_monoid.subpath_index];
+    // pub fn boundarySegment(
+    //     segment_index: u32,
+    //     half_planes: HalfPlanesU16,
+    //     path_monoids: []const PathMonoid,
+    //     paths: []const Path,
+    //     subpaths: []const Subpath,
+    //     grid_intersections: []const GridIntersection,
+    //     flat_segment_offsets: []const SegmentOffsets,
+    //     path_bumps: []std.atomic.Value(u32),
+    //     boundary_fragments: []BoundaryFragment,
+    // ) void {
+    //     const path_monoid = path_monoids[segment_index];
+    //     const path = paths[path_monoid.path_index];
+    //     const subpath = subpaths[path_monoid.subpath_index];
 
-//         var start_boundary_offset: u32 = 0;
-//         const previous_path = if (path_monoid.path_index > 0) paths[path_monoid.path_index - 1] else null;
-//         if (previous_path) |p| {
-//             start_boundary_offset = p.fill.boundary_fragment.capacity;
-//         }
-//         const end_boundary_offset = path.fill.boundary_fragment.capacity;
+    //     var start_boundary_offset: u32 = 0;
+    //     const previous_path = if (path_monoid.path_index > 0) paths[path_monoid.path_index - 1] else null;
+    //     if (previous_path) |p| {
+    //         start_boundary_offset = p.fill.boundary_fragment.capacity;
+    //     }
+    //     const end_boundary_offset = path.fill.boundary_fragment.capacity;
 
-//         const previous_subpath = if (path_monoid.subpath_index > 0) subpaths[path_monoid.subpath_index - 1] else null;
-//         var start_segment_offset: u32 = 0;
-//         if (previous_subpath) |s| {
-//             start_segment_offset = s.last_segment_offset;
-//         }
-//         const end_segment_offset = subpath.last_segment_offset;
-//         const previous_segment_offsets = if (segment_index > 0) flat_segment_offsets[segment_index - 1] else null;
-//         var start_intersection_offset: u32 = 0;
-//         if (previous_segment_offsets) |so| {
-//             start_intersection_offset = so.fill.intersection.capacity;
-//         }
-//         const end_intersection_offset = flat_segment_offsets[segment_index].fill.intersection.end;
+    //     const previous_subpath = if (path_monoid.subpath_index > 0) subpaths[path_monoid.subpath_index - 1] else null;
+    //     var start_segment_offset: u32 = 0;
+    //     if (previous_subpath) |s| {
+    //         start_segment_offset = s.last_segment_offset;
+    //     }
+    //     const end_segment_offset = subpath.last_segment_offset;
+    //     const previous_segment_offsets = if (segment_index > 0) flat_segment_offsets[segment_index - 1] else null;
+    //     var start_intersection_offset: u32 = 0;
+    //     if (previous_segment_offsets) |so| {
+    //         start_intersection_offset = so.fill.intersection.capacity;
+    //     }
+    //     const end_intersection_offset = flat_segment_offsets[segment_index].fill.intersection.end;
 
-//         var path_bump = BumpAllocator{
-//             .start = start_boundary_offset,
-//             .end = end_boundary_offset,
-//             .offset = &path_bumps[path_monoid.path_index],
-//         };
-//         const segment_grid_intersections = grid_intersections[start_intersection_offset..end_intersection_offset];
+    //     var path_bump = BumpAllocator{
+    //         .start = start_boundary_offset,
+    //         .end = end_boundary_offset,
+    //         .offset = &path_bumps[path_monoid.path_index],
+    //     };
+    //     const segment_grid_intersections = grid_intersections[start_intersection_offset..end_intersection_offset];
 
-//         if (segment_grid_intersections.len == 0) {
-//             return;
-//         }
+    //     if (segment_grid_intersections.len == 0) {
+    //         return;
+    //     }
 
-//         for (segment_grid_intersections, 0..) |*grid_intersection, index| {
-//             var next_grid_intersection: GridIntersection = undefined;
-//             const next_index = index + 1;
+    //     for (segment_grid_intersections, 0..) |*grid_intersection, index| {
+    //         var next_grid_intersection: GridIntersection = undefined;
+    //         const next_index = index + 1;
 
-//             if (next_index >= segment_grid_intersections.len) {
-//                 const next_segment_index = (segment_index + 1 - start_segment_offset) % (end_segment_offset - start_segment_offset) + start_segment_offset;
-//                 const previous_next_segment_offsets = if (next_segment_index > 0) flat_segment_offsets[next_segment_index - 1] else null;
-//                 var start_next_intersection_offset: u32 = 0;
-//                 if (previous_next_segment_offsets) |so| {
-//                     start_next_intersection_offset = so.fill.intersection.capacity;
-//                 }
+    //         if (next_index >= segment_grid_intersections.len) {
+    //             const next_segment_index = (segment_index + 1 - start_segment_offset) % (end_segment_offset - start_segment_offset) + start_segment_offset;
+    //             const previous_next_segment_offsets = if (next_segment_index > 0) flat_segment_offsets[next_segment_index - 1] else null;
+    //             var start_next_intersection_offset: u32 = 0;
+    //             if (previous_next_segment_offsets) |so| {
+    //                 start_next_intersection_offset = so.fill.intersection.capacity;
+    //             }
 
-//                 next_grid_intersection = grid_intersections[start_next_intersection_offset];
-//             } else {
-//                 next_grid_intersection = segment_grid_intersections[next_index];
-//             }
+    //             next_grid_intersection = grid_intersections[start_next_intersection_offset];
+    //         } else {
+    //             next_grid_intersection = segment_grid_intersections[next_index];
+    //         }
 
-//             if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
-//                 // skip if exactly the same point
-//                 continue;
-//             }
+    //         if (grid_intersection.intersection.point.approxEqAbs(next_grid_intersection.intersection.point, GRID_POINT_TOLERANCE)) {
+    //             // skip if exactly the same point
+    //             continue;
+    //         }
 
-//             {
-//                 const boundary_fragment_index = path_bump.bump(1);
-//                 boundary_fragments[boundary_fragment_index] = BoundaryFragment.create(
-//                     half_planes,
-//                     [_]*const GridIntersection{
-//                         grid_intersection,
-//                         &next_grid_intersection,
-//                     },
-//                 );
-//             }
-//         }
-//     }
+    //         {
+    //             const boundary_fragment_index = path_bump.bump(1);
+    //             boundary_fragments[boundary_fragment_index] = BoundaryFragment.create(
+    //                 half_planes,
+    //                 [_]*const GridIntersection{
+    //                     grid_intersection,
+    //                     &next_grid_intersection,
+    //                 },
+    //             );
+    //         }
+    //     }
+    // }
 
-//     pub fn merge(
-//         paths: []const Path,
-//         boundary_fragments: []const BoundaryFragment,
-//         range: RangeU32,
-//         path_bumps: []std.atomic.Value(u32),
-//         merge_fragments: []MergeFragment,
-//     ) void {
-//         for (range.start..range.end) |path_index| {
-//             mergePath(
-//                 @intCast(path_index),
-//                 paths,
-//                 boundary_fragments,
-//                 path_bumps,
-//                 merge_fragments,
-//             );
-//         }
-//     }
+    // pub fn merge(
+    //     paths: []const Path,
+    //     boundary_fragments: []const BoundaryFragment,
+    //     range: RangeU32,
+    //     path_bumps: []std.atomic.Value(u32),
+    //     merge_fragments: []MergeFragment,
+    // ) void {
+    //     for (range.start..range.end) |path_index| {
+    //         mergePath(
+    //             @intCast(path_index),
+    //             paths,
+    //             boundary_fragments,
+    //             path_bumps,
+    //             merge_fragments,
+    //         );
+    //     }
+    // }
 
-//     pub fn mergePath(
-//         path_index: u32,
-//         paths: []const Path,
-//         boundary_fragments: []const BoundaryFragment,
-//         path_bumps: []std.atomic.Value(u32),
-//         merge_fragments: []MergeFragment,
-//     ) void {
-//         const path = paths[path_index];
-//         var start_boundary_offset: u32 = 0;
-//         var start_merge_offset: u32 = 0;
-//         const previous_path = if (path_index > 0) paths[path_index - 1] else null;
-//         if (previous_path) |p| {
-//             start_boundary_offset = p.fill.boundary_fragment.capacity;
-//             start_merge_offset = p.fill.merge_fragment.capacity;
-//         }
-//         const end_boundary_offset = path.fill.boundary_fragment.end;
-//         const end_merge_offset = path.fill.merge_fragment.capacity;
-//         var bump = BumpAllocator{
-//             .start = start_merge_offset,
-//             .end = end_merge_offset,
-//             .offset = &path_bumps[path_index],
-//         };
-//         const path_boundary_fragments = boundary_fragments[start_boundary_offset..end_boundary_offset];
+    // pub fn mergePath(
+    //     path_index: u32,
+    //     paths: []const Path,
+    //     boundary_fragments: []const BoundaryFragment,
+    //     path_bumps: []std.atomic.Value(u32),
+    //     merge_fragments: []MergeFragment,
+    // ) void {
+    //     const path = paths[path_index];
+    //     var start_boundary_offset: u32 = 0;
+    //     var start_merge_offset: u32 = 0;
+    //     const previous_path = if (path_index > 0) paths[path_index - 1] else null;
+    //     if (previous_path) |p| {
+    //         start_boundary_offset = p.fill.boundary_fragment.capacity;
+    //         start_merge_offset = p.fill.merge_fragment.capacity;
+    //     }
+    //     const end_boundary_offset = path.fill.boundary_fragment.end;
+    //     const end_merge_offset = path.fill.merge_fragment.capacity;
+    //     var bump = BumpAllocator{
+    //         .start = start_merge_offset,
+    //         .end = end_merge_offset,
+    //         .offset = &path_bumps[path_index],
+    //     };
+    //     const path_boundary_fragments = boundary_fragments[start_boundary_offset..end_boundary_offset];
 
-//         var merge_fragment = &merge_fragments[bump.bump(1)];
-//         merge_fragment.* = MergeFragment{
-//             .pixel = boundary_fragments[start_boundary_offset].pixel,
-//         };
-//         for (path_boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
-//             if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
-//                 merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(boundary_fragment_index));
+    //     var merge_fragment = &merge_fragments[bump.bump(1)];
+    //     merge_fragment.* = MergeFragment{
+    //         .pixel = boundary_fragments[start_boundary_offset].pixel,
+    //     };
+    //     for (path_boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
+    //         if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
+    //             merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(boundary_fragment_index));
 
-//                 merge_fragment = &merge_fragments[bump.bump(1)];
-//                 merge_fragment.* = MergeFragment{
-//                     .pixel = boundary_fragment.pixel,
-//                 };
-//             }
-//         }
+    //             merge_fragment = &merge_fragments[bump.bump(1)];
+    //             merge_fragment.* = MergeFragment{
+    //                 .pixel = boundary_fragment.pixel,
+    //             };
+    //         }
+    //     }
 
-//         merge_fragment.boundary_offset = end_boundary_offset;
-//     }
+    //     merge_fragment.boundary_offset = end_boundary_offset;
+    // }
 
-//     pub fn mask(
-//         config: KernelConfig,
-//         paths: []const Path,
-//         boundary_fragments: []const BoundaryFragment,
-//         range: RangeU32,
-//         merge_fragments: []MergeFragment,
-//     ) void {
-//         for (range.start..range.end) |path_index| {
-//             const path = paths[path_index];
-//             var start_merge_offset: u32 = 0;
-//             const previous_path = if (path_index > 0) paths[path_index - 1] else null;
-//             if (previous_path) |p| {
-//                 start_merge_offset = p.fill.merge_fragment.capacity;
-//             }
-//             const end_merge_offset = path.fill.merge_fragment.end;
-//             const path_merge_fragments = merge_fragments[start_merge_offset..end_merge_offset];
-//             const merge_range = RangeU32{
-//                 .start = 0,
-//                 .end = end_merge_offset - start_merge_offset,
-//             };
+    // pub fn mask(
+    //     config: KernelConfig,
+    //     paths: []const Path,
+    //     boundary_fragments: []const BoundaryFragment,
+    //     range: RangeU32,
+    //     merge_fragments: []MergeFragment,
+    // ) void {
+    //     for (range.start..range.end) |path_index| {
+    //         const path = paths[path_index];
+    //         var start_merge_offset: u32 = 0;
+    //         const previous_path = if (path_index > 0) paths[path_index - 1] else null;
+    //         if (previous_path) |p| {
+    //             start_merge_offset = p.fill.merge_fragment.capacity;
+    //         }
+    //         const end_merge_offset = path.fill.merge_fragment.end;
+    //         const path_merge_fragments = merge_fragments[start_merge_offset..end_merge_offset];
+    //         const merge_range = RangeU32{
+    //             .start = 0,
+    //             .end = end_merge_offset - start_merge_offset,
+    //         };
 
-//             var chunk_iter = merge_range.chunkIterator(config.chunk_size);
+    //         var chunk_iter = merge_range.chunkIterator(config.chunk_size);
 
-//             while (chunk_iter.next()) |chunk| {
-//                 maskPath(
-//                     chunk,
-//                     boundary_fragments,
-//                     path_merge_fragments,
-//                 );
-//             }
-//         }
-//     }
+    //         while (chunk_iter.next()) |chunk| {
+    //             maskPath(
+    //                 chunk,
+    //                 boundary_fragments,
+    //                 path_merge_fragments,
+    //             );
+    //         }
+    //     }
+    // }
 
-//     pub fn maskPath(
-//         range: RangeU32,
-//         boundary_fragments: []const BoundaryFragment,
-//         merge_fragments: []MergeFragment,
-//     ) void {
-//         for (range.start..range.end) |merge_fragment_index| {
-//             maskFragment(
-//                 @intCast(merge_fragment_index),
-//                 boundary_fragments,
-//                 merge_fragments,
-//             );
-//         }
-//     }
+    // pub fn maskPath(
+    //     range: RangeU32,
+    //     boundary_fragments: []const BoundaryFragment,
+    //     merge_fragments: []MergeFragment,
+    // ) void {
+    //     for (range.start..range.end) |merge_fragment_index| {
+    //         maskFragment(
+    //             @intCast(merge_fragment_index),
+    //             boundary_fragments,
+    //             merge_fragments,
+    //         );
+    //     }
+    // }
 
-//     pub fn maskFragment(
-//         merge_fragment_index: u32,
-//         boundary_fragments: []const BoundaryFragment,
-//         merge_fragments: []MergeFragment,
-//     ) void {
-//         const merge_fragment = &merge_fragments[merge_fragment_index];
-//         var start_boundary_fragment_offset: u32 = 0;
-//         const previous_merge_fragment = if (merge_fragment_index > 0) merge_fragments[merge_fragment_index - 1] else null;
-//         if (previous_merge_fragment) |f| {
-//             start_boundary_fragment_offset = f.boundary_offset;
-//         }
-//         const end_boundary_fragment_offset = merge_fragment.boundary_offset;
-//         const merge_boundary_fragments = boundary_fragments[start_boundary_fragment_offset..end_boundary_fragment_offset];
+    // pub fn maskFragment(
+    //     merge_fragment_index: u32,
+    //     boundary_fragments: []const BoundaryFragment,
+    //     merge_fragments: []MergeFragment,
+    // ) void {
+    //     const merge_fragment = &merge_fragments[merge_fragment_index];
+    //     var start_boundary_fragment_offset: u32 = 0;
+    //     const previous_merge_fragment = if (merge_fragment_index > 0) merge_fragments[merge_fragment_index - 1] else null;
+    //     if (previous_merge_fragment) |f| {
+    //         start_boundary_fragment_offset = f.boundary_offset;
+    //     }
+    //     const end_boundary_fragment_offset = merge_fragment.boundary_offset;
+    //     const merge_boundary_fragments = boundary_fragments[start_boundary_fragment_offset..end_boundary_fragment_offset];
 
-//         // calculate main ray winding
-//         var main_ray_winding: f32 = 0.0;
-//         for (merge_boundary_fragments) |boundary_fragment| {
-//             main_ray_winding += boundary_fragment.calculateMainRayWinding();
-//         }
+    //     // calculate main ray winding
+    //     var main_ray_winding: f32 = 0.0;
+    //     for (merge_boundary_fragments) |boundary_fragment| {
+    //         main_ray_winding += boundary_fragment.calculateMainRayWinding();
+    //     }
 
-//         // calculate stencil mask
-//         for (0..16) |index| {
-//             const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-//             var bit_winding: f32 = main_ray_winding;
+    //     // calculate stencil mask
+    //     for (0..16) |index| {
+    //         const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+    //         var bit_winding: f32 = main_ray_winding;
 
-//             for (merge_boundary_fragments) |boundary_fragment| {
-//                 const masks = boundary_fragment.masks;
-//                 const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
-//                 const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
-//                 const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
-//                 bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
-//             }
+    //         for (merge_boundary_fragments) |boundary_fragment| {
+    //             const masks = boundary_fragment.masks;
+    //             const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
+    //             const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
+    //             const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
+    //             bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
+    //         }
 
-//             merge_fragment.stencil_mask = merge_fragment.stencil_mask | (@as(u16, @intFromBool(bit_winding != 0.0)) * bit_index);
-//         }
-//     }
+    //         merge_fragment.stencil_mask = merge_fragment.stencil_mask | (@as(u16, @intFromBool(bit_winding != 0.0)) * bit_index);
+    //     }
+    // }
 
-//     pub fn Writer(comptime T: type) type {
-//         return struct {
-//             slice: []T,
-//             index: u16 = 0,
+    pub fn Writer(comptime T: type) type {
+        return struct {
+            slice: []T,
+            index: u16 = 0,
 
-//             pub fn create(slice: []T) @This() {
-//                 return @This(){
-//                     .slice = slice,
-//                 };
-//             }
+            pub fn create(slice: []T) @This() {
+                return @This(){
+                    .slice = slice,
+                };
+            }
 
-//             pub fn addOne(self: *@This()) *T {
-//                 const item = &self.slice[self.index];
-//                 self.index += 1;
-//                 return item;
-//             }
+            pub fn addOne(self: *@This()) *T {
+                const item = &self.slice[self.index];
+                self.index += 1;
+                return item;
+            }
 
-//             pub fn toSlice(self: @This()) []T {
-//                 return self.slice[0..self.index];
-//             }
-//         };
-//     }
+            pub fn toSlice(self: @This()) []T {
+                return self.slice[0..self.index];
+            }
+        };
+    }
 
-//     const IntersectionWriter = Writer(GridIntersection);
-//     const BoundaryFragmentWriter = Writer(BoundaryFragment);
-//     const MergeFragmentWriter = Writer(MergeFragment);
+    const IntersectionWriter = Writer(GridIntersection);
+    // const BoundaryFragmentWriter = Writer(BoundaryFragment);
+    // const MergeFragmentWriter = Writer(MergeFragment);
 
-//     fn scanX(
-//         grid_x: f32,
-//         line: LineF32,
-//         scan_bounds: RectF32,
-//         intersection_writer: *IntersectionWriter,
-//     ) !void {
-//         const scan_line = LineF32.create(
-//             PointF32{
-//                 .x = grid_x,
-//                 .y = scan_bounds.min.y,
-//             },
-//             PointF32{
-//                 .x = grid_x,
-//                 .y = scan_bounds.max.y,
-//             },
-//         );
+    fn scanX(
+        grid_x: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.min.y,
+            },
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.max.y,
+            },
+        );
 
-//         if (line.intersectVerticalLine(scan_line)) |intersection| {
-//             intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
-//         }
-//     }
+        if (line.intersectVerticalLine(scan_line)) |intersection| {
+            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+        }
+    }
 
-//     fn scanY(
-//         grid_y: f32,
-//         line: LineF32,
-//         scan_bounds: RectF32,
-//         intersection_writer: *IntersectionWriter,
-//     ) !void {
-//         const scan_line = LineF32.create(
-//             PointF32{
-//                 .x = scan_bounds.min.x,
-//                 .y = grid_y,
-//             },
-//             PointF32{
-//                 .x = scan_bounds.max.x,
-//                 .y = grid_y,
-//             },
-//         );
+    fn scanY(
+        grid_y: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+        intersection_writer: *IntersectionWriter,
+    ) !void {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = scan_bounds.min.x,
+                .y = grid_y,
+            },
+            PointF32{
+                .x = scan_bounds.max.x,
+                .y = grid_y,
+            },
+        );
 
-//         if (line.intersectHorizontalLine(scan_line)) |intersection| {
-//             intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
-//         }
-//     }
-// };
+        if (line.intersectHorizontalLine(scan_line)) |intersection| {
+            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+        }
+    }
+};

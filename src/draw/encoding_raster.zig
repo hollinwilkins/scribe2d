@@ -19,6 +19,7 @@ const FlatPath = encoding_module.FlatPath;
 const FlatSubpath = encoding_module.FlatSubpath;
 const FlatSegment = encoding_module.FlatSegment;
 const SegmentOffset = encoding_module.SegmentOffset;
+const GridIntersection = encoding_module.GridIntersection;
 const Texture = texture_module.Texture;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
@@ -29,10 +30,10 @@ pub const CpuRasterizer = struct {
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
     const Buffer = std.ArrayListUnmanaged(u8);
+    const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     // const LineList = std.ArrayListUnmanaged(LineF32);
     // const BoolList = std.ArrayListUnmanaged(bool);
     // const SubpathList = std.ArrayListUnmanaged(Subpath);
-    // const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     // const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     // const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
     // const OffsetList = std.ArrayListUnmanaged(u32);
@@ -47,6 +48,7 @@ pub const CpuRasterizer = struct {
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segments: FlatSegmentList = FlatSegmentList{},
     line_data: Buffer = Buffer{},
+    grid_intersections: GridIntersectionList = GridIntersectionList{},
 
     pub fn init(
         allocator: Allocator,
@@ -69,6 +71,7 @@ pub const CpuRasterizer = struct {
         self.segment_offsets.deinit(self.allocator);
         self.flat_segments.deinit(self.allocator);
         self.line_data.deinit(self.allocator);
+        self.grid_intersections.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
@@ -78,6 +81,7 @@ pub const CpuRasterizer = struct {
         self.segment_offsets.items.len = 0;
         self.flat_segments.items.len = 0;
         self.line_data.items.len = 0;
+        self.grid_intersections.items.len = 0;
     }
 
     pub fn rasterize(self: *@This(), texture: *Texture) !void {
@@ -92,7 +96,7 @@ pub const CpuRasterizer = struct {
         // use the FlatEncoder to flatten the encoding
         try self.flatten();
         // calculate scanline encoding
-        // try self.kernelRasterize();
+        try self.kernelRasterize();
         // write scanline encoding to texture
         // self.flushTexture(texture);
     }
@@ -178,6 +182,97 @@ pub const CpuRasterizer = struct {
                 line_data,
             );
         }
+    }
+
+    fn kernelRasterize(self: *@This()) !void {
+        const rasterizer = kernel_module.Rasterize;
+        const last_segment_offset = self.segment_offsets.getLast();
+        // const last_path = self.paths.getLast();
+        // const path_bumps = try self.path_bumps.addManyAsSlice(self.allocator, self.paths.items.len);
+        // for (path_bumps) |*sb| {
+        //     sb.raw = 0;
+        // }
+        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
+        // const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_path.fill.boundary_fragment.capacity);
+        // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_path.fill.merge_fragment.capacity);
+
+        const flat_segment_range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.flat_segments.items.len),
+        };
+        // const path_range = RangeU32{
+        //     .start = 0,
+        //     .end = @intCast(self.paths.items.len),
+        // };
+
+        var chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.intersect(
+                self.line_data.items,
+                chunk,
+                self.flat_segments.items,
+                grid_intersections,
+            );
+        }
+
+        // chunk_iter = range.chunkIterator(self.config.chunk_size);
+        // while (chunk_iter.next()) |chunk| {
+        //     rasterizer.boundary(
+        //         self.half_planes,
+        //         self.path_monoids.items,
+        //         self.paths.items,
+        //         self.subpaths.items,
+        //         grid_intersections,
+        //         self.flat_segment_offsets.items,
+        //         chunk,
+        //         path_bumps,
+        //         boundary_fragments,
+        //     );
+        // }
+
+        // var start_boundary_fragment: u32 = 0;
+        // for (self.paths.items, path_bumps) |*path, bump| {
+        //     path.fill.boundary_fragment.end = start_boundary_fragment + bump.raw;
+        //     std.mem.sort(
+        //         BoundaryFragment,
+        //         self.boundary_fragments.items[start_boundary_fragment..path.fill.boundary_fragment.end],
+        //         @as(u32, 0),
+        //         boundaryFragmentLessThan,
+        //     );
+        //     start_boundary_fragment = path.fill.boundary_fragment.capacity;
+        // }
+
+        // for (self.path_bumps.items) |*bump| {
+        //     bump.raw = 0;
+        // }
+
+        // chunk_iter = path_range.chunkIterator(self.config.chunk_size);
+        // while (chunk_iter.next()) |chunk| {
+        //     rasterizer.merge(
+        //         self.paths.items,
+        //         self.boundary_fragments.items,
+        //         chunk,
+        //         self.path_bumps.items,
+        //         merge_fragments,
+        //     );
+        // }
+
+        // var start_merge_fragment: u32 = 0;
+        // for (self.paths.items, path_bumps) |*path, bump| {
+        //     path.fill.merge_fragment.end = start_merge_fragment + bump.raw;
+        //     start_merge_fragment = path.fill.merge_fragment.capacity;
+        // }
+
+        // chunk_iter = path_range.chunkIterator(self.config.chunk_size);
+        // while (chunk_iter.next()) |chunk| {
+        //     rasterizer.mask(
+        //         self.config,
+        //         self.paths.items,
+        //         self.boundary_fragments.items,
+        //         chunk,
+        //         self.merge_fragments.items,
+        //     );
+        // }
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
@@ -282,48 +377,6 @@ pub const CpuRasterizer = struct {
                 }
                 std.debug.print("-----------\n", .{});
             }
-
-            //     for (self.flat_segments.items) |flat_segment| {
-            //         std.debug.print("{s}:\n", .{@tagName(flat_segment.kind)});
-            //         const flat_segment_lines = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset];
-            //         var line_iter = encoding_module.LineIterator{
-            //             .line_data = flat_segment_lines,
-            //         };
-            //         while (line_iter.next()) |line| {
-            //             std.debug.print("{}\n", .{line});
-            //         }
-            //         std.debug.print("-----------\n", .{});
-            //     }
-            //     // var first_segment_offset: u32 = 0;
-            //     // for (self.subpaths.items) |subpath| {
-            //     //     const last_segment_offset = subpath.segment_index;
-            //     //     const first_path_monoid = self.path_monoids.items[first_segment_offset];
-            //     //     const segment_offsets = self.flat_segment_offsets.items[first_segment_offset..last_segment_offset];
-            //     //     var start_line_offset: u32 = 0;
-            //     //     const previous_segment_offsets = if (first_segment_offset > 0) self.flat_segment_offsets.items[first_segment_offset - 1] else null;
-            //     //     if (previous_segment_offsets) |so| {
-            //     //         start_line_offset = so.fill.line.capacity;
-            //     //     }
-
-            //     //     std.debug.print("--- Subpath({},{}) ---\n", .{ first_path_monoid.path_index, first_path_monoid.subpath_index });
-            //     //     // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
-            //     //     for (segment_offsets) |offsets| {
-            //     //         const end_line_offset = offsets.fill.line.capacity;
-            //     //         const line_data = self.flat_segment_data.items[start_line_offset..end_line_offset];
-            //     //         var line_iter = encoding_kernel.LineIterator{
-            //     //             .segment_data = line_data,
-            //     //         };
-
-            //     //         while (line_iter.next()) |line| {
-            //     //             std.debug.print("{}\n", .{line});
-            //     //         }
-
-            //     //         start_line_offset = offsets.fill.line.capacity;
-            //     //     }
-
-            //     //     first_segment_offset = subpath.last_segment_offset;
-            //     // }
-            //     std.debug.print("====================================\n", .{});
         }
 
         //         {
