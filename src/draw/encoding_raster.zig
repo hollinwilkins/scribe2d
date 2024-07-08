@@ -197,7 +197,7 @@ pub const CpuRasterizer = struct {
         //     sb.raw = 0;
         // }
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
+        // const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
         // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_path.fill.merge_fragment.capacity);
 
         const flat_segment_range = RangeU32{
@@ -219,20 +219,20 @@ pub const CpuRasterizer = struct {
             );
         }
 
-        chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
-        while (chunk_iter.next()) |chunk| {
-            rasterizer.boundary(
-                self.half_planes,
-                self.path_monoids.items,
-                self.subpaths.items,
-                self.flat_segments.items,
-                grid_intersections,
-                self.segment_offsets.items,
-                chunk,
-                self.paths.items,
-                boundary_fragments,
-            );
-        }
+        // chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
+        // while (chunk_iter.next()) |chunk| {
+        //     rasterizer.boundary(
+        //         self.half_planes,
+        //         self.path_monoids.items,
+        //         self.subpaths.items,
+        //         self.flat_segments.items,
+        //         grid_intersections,
+        //         self.segment_offsets.items,
+        //         chunk,
+        //         self.paths.items,
+        //         boundary_fragments,
+        //     );
+        // }
 
         // var start_boundary_fragment: u32 = 0;
         // for (self.paths.items, path_bumps) |*path, bump| {
@@ -383,39 +383,64 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        //         {
-        //             std.debug.print("============ Grid Intersections ============\n", .{});
-        //             var start_segment_offset: u32 = 0;
-        //             for (self.subpaths.items) |subpath| {
-        //                 const last_segment_offset = subpath.last_segment_offset;
-        //                 const first_path_monoid = self.path_monoids.items[start_segment_offset];
-        //                 const segment_offsets = self.flat_segment_offsets.items[start_segment_offset..last_segment_offset];
-        //                 var start_intersection_offset: u32 = 0;
-        //                 const previous_segment_offsets = if (start_segment_offset > 0) self.flat_segment_offsets.items[start_segment_offset - 1] else null;
-        //                 if (previous_segment_offsets) |so| {
-        //                     start_intersection_offset = so.fill.intersection.capacity;
-        //                 }
+        {
+            std.debug.print("============ Grid Intersections ============\n", .{});
+            for (self.subpaths.items, 0..) |subpath, subpath_index| {
+                const path_monoid = self.path_monoids.items[subpath.segment_index];
+                const subpath_offsets = SubpathOffset.create(
+                    @intCast(subpath_index),
+                    self.segment_offsets.items,
+                    self.subpaths.items,
+                );
 
-        //                 std.debug.print("--- Subpath({},{}) ---\n", .{
-        //                     first_path_monoid.path_index,
-        //                     first_path_monoid.subpath_index,
-        //                 });
-        //                 // var start_line_offset = self.flat_segment_offsets.items[first_segment_offset].fill.line.capacity;
-        //                 for (segment_offsets) |offsets| {
-        //                     const end_intersection_offset = offsets.fill.intersection.capacity;
-        //                     const grid_intersections = self.grid_intersections.items[start_intersection_offset..end_intersection_offset];
+                std.debug.print("Subpath({},{})\n", .{ path_monoid.path_index, subpath_index });
+                std.debug.print("Fill Grid Intersections\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (subpath_offsets.start_fill_flat_segment_offset..subpath_offsets.end_fill_flat_segment_offset) |flat_segment_index| {
+                    const flat_segment = self.flat_segments.items[flat_segment_index];
+                    const intersections = self.grid_intersections.items[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
-        //                     for (grid_intersections) |intersection| {
-        //                         std.debug.print("{}\n", .{intersection});
-        //                     }
+                    for (intersections) |intersection| {
+                        std.debug.print("Pixel({},{}), T({}), Intersection({},{})\n", .{
+                            intersection.pixel.x,
+                            intersection.pixel.y,
+                            intersection.intersection.t,
+                            intersection.intersection.point.x,
+                            intersection.intersection.point.y,
+                        });
+                    }
+                }
+                std.debug.print("-----------\n\n", .{});
 
-        //                     start_intersection_offset = offsets.fill.intersection.capacity;
-        //                 }
+                // std.debug.print("Front Grid Intersections\n", .{});
+                // std.debug.print("-----------\n", .{});
+                // for (subpath_offsets.start_front_stroke_flat_segment_offset..subpath_offsets.end_front_stroke_flat_segment_offset) |flat_segment_index| {
+                //     const flat_segment = self.flat_segments.items[flat_segment_index];
+                //     var line_iter = encoding_module.LineIterator{
+                //         .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                //     };
 
-        //                 start_segment_offset = subpath.last_segment_offset;
-        //             }
-        //             std.debug.print("===========================================\n", .{});
-        //         }
+                //     while (line_iter.next()) |line| {
+                //         std.debug.print("{}\n", .{line});
+                //     }
+                // }
+                // std.debug.print("-----------\n\n", .{});
+
+                // std.debug.print("Back Grid Intersections\n", .{});
+                // std.debug.print("-----------\n", .{});
+                // for (subpath_offsets.start_back_stroke_flat_segment_offset..subpath_offsets.end_back_stroke_flat_segment_offset) |flat_segment_index| {
+                //     const flat_segment = self.flat_segments.items[flat_segment_index];
+                //     var line_iter = encoding_module.LineIterator{
+                //         .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                //     };
+
+                //     while (line_iter.next()) |line| {
+                //         std.debug.print("{}\n", .{line});
+                //     }
+                // }
+                // std.debug.print("-----------\n", .{});
+            }
+        }
 
         //         {
         //             std.debug.print("============ Boundary Fragments ============\n", .{});
@@ -821,17 +846,17 @@ test "encoding path monoids" {
     _ = try path_encoder.lineTo(core.PointF32.create(10.0, 10.0));
     try path_encoder.finish();
 
-    var path_encoder2 = encoder.pathEncoder(i16);
-    try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    _ = try path_encoder2.cubicTo(
-        core.PointI16.create(120, 120),
-        core.PointI16.create(70, 130),
-        core.PointI16.create(22, 22),
-    );
-    try path_encoder2.finish();
+    // var path_encoder2 = encoder.pathEncoder(i16);
+    // try path_encoder2.moveTo(core.PointI16.create(10, 10));
+    // _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
+    // _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
+    // _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
+    // _ = try path_encoder2.cubicTo(
+    //     core.PointI16.create(120, 120),
+    //     core.PointI16.create(70, 130),
+    //     core.PointI16.create(22, 22),
+    // );
+    // try path_encoder2.finish();
 
     var half_planes = try HalfPlanesU16.init(std.testing.allocator);
     defer half_planes.deinit();
