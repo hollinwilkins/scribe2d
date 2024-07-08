@@ -1371,6 +1371,7 @@ pub const Rasterize = struct {
 
     pub fn boundary(
         half_planes: *const HalfPlanesU16,
+        path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         subpaths: []const Subpath,
         flat_segments: []const FlatSegment,
@@ -1384,6 +1385,7 @@ pub const Rasterize = struct {
             boundarySegment(
                 @intCast(flat_segment_index),
                 half_planes,
+                path_tags,
                 path_monoids,
                 subpaths,
                 flat_segments,
@@ -1398,6 +1400,7 @@ pub const Rasterize = struct {
     pub fn boundarySegment(
         flat_segment_index: u32,
         half_planes: *const HalfPlanesU16,
+        path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         subpaths: []const Subpath,
         flat_segments: []const FlatSegment,
@@ -1416,7 +1419,7 @@ pub const Rasterize = struct {
             var fill_path_bump = BumpAllocator{
                 .start = path_offset.start_fill_boundary_offset,
                 .end = path_offset.end_fill_boundary_offset,
-                .offset = &path.bump,
+                .offset = &path.fill_bump,
             };
             const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
 
@@ -1430,6 +1433,16 @@ pub const Rasterize = struct {
                 boundary_fragments,
             );
         } else {
+            const subpath_tag = path_tags[path_monoid.subpath_index];
+
+
+            if (subpath_tag.segment.cap) {
+                // front/back stroke are a single subpath
+            } else {
+                // front/back stroke are separate subpaths
+                // var front_stroke_path_bump = BumpAllocator
+            }
+
             // TODO: this section needs a bit of thought
             // var stroke_path_bump = BumpAllocator{
             //     .start = path_offset.start_stroke_boundary_offset,
@@ -1451,7 +1464,7 @@ pub const Rasterize = struct {
     ) void {
         const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
-        var intersection_reader = IntersectionReader{
+        var intersection_iter = IntersectionIterator{
             .flat_segment_index = flat_segment_index,
             .flat_segment = flat_segment,
             .subpath_flat_segments = flat_segments,
@@ -1460,7 +1473,7 @@ pub const Rasterize = struct {
         };
 
         var previous_grid_intersection: ?GridIntersection = null;
-        while (intersection_reader.next()) |grid_intersection| {
+        while (intersection_iter.next()) |grid_intersection| {
             if (previous_grid_intersection) |*previous| {
                 if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
                     // skip if exactly the same point
@@ -1658,7 +1671,7 @@ pub const Rasterize = struct {
     // const BoundaryFragmentWriter = Writer(BoundaryFragment);
     // const MergeFragmentWriter = Writer(MergeFragment);
 
-    pub const IntersectionReader = struct {
+    pub const IntersectionIterator = struct {
         index: u32 = 0,
         flat_segment_index: u32,
         flat_segment: FlatSegment,

@@ -695,7 +695,7 @@ pub const Path = struct {
     pub const Bump = std.atomic.Value(u32);
 
     segment_index: u32 = 0,
-    bump: Bump = Bump{ .raw = 0 },
+    fill_bump: Bump = Bump{ .raw = 0 },
 };
 
 pub const Subpath = struct {

@@ -223,6 +223,7 @@ pub const CpuRasterizer = struct {
         while (chunk_iter.next()) |chunk| {
             rasterizer.boundary(
                 self.half_planes,
+                self.encoding.path_tags,
                 self.path_monoids.items,
                 self.subpaths.items,
                 self.flat_segments.items,
