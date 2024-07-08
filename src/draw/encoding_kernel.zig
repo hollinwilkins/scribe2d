@@ -1616,6 +1616,8 @@ pub const Rasterize = struct {
                 };
             }
         }
+
+        merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(path_boundary_fragments.len));
     }
 
     pub fn mask(
@@ -1631,12 +1633,12 @@ pub const Rasterize = struct {
                 .start = 0,
                 .end = path.end_fill_merge_offset - path.start_fill_boundary_offset,
             };
-            // const stroke_merge_range = RangeU32{
-            //     .start = 0,
-            //     .end = path.end_stroke_merge_offset - path.start_stroke_boundary_offset,
-            // };
+            const stroke_merge_range = RangeU32{
+                .start = 0,
+                .end = path.end_stroke_merge_offset - path.start_stroke_boundary_offset,
+            };
             const fill_merge_fragments = merge_fragments[path.start_fill_boundary_offset..path.end_fill_merge_offset];
-            // const stroke_merge_fragments = merge_fragments[path.start_stroke_boundary_offset..path.end_stroke_merge_offset];
+            const stroke_merge_fragments = merge_fragments[path.start_stroke_boundary_offset..path.end_stroke_merge_offset];
 
             var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
             while (chunk_iter.next()) |chunk| {
@@ -1647,14 +1649,14 @@ pub const Rasterize = struct {
                 );
             }
 
-            // chunk_iter = stroke_merge_range.chunkIterator(config.chunk_size);
-            // while (chunk_iter.next()) |chunk| {
-            //     maskPath(
-            //         chunk,
-            //         boundary_fragments,
-            //         stroke_merge_fragments,
-            //     );
-            // }
+            chunk_iter = stroke_merge_range.chunkIterator(config.chunk_size);
+            while (chunk_iter.next()) |chunk| {
+                maskPath(
+                    chunk,
+                    boundary_fragments,
+                    stroke_merge_fragments,
+                );
+            }
         }
     }
 

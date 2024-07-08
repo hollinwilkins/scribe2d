@@ -282,12 +282,12 @@ pub const CpuRasterizer = struct {
             path.stroke_bump.raw = 0;
         }
 
-        // rasterizer.mask(
-        //     self.config,
-        //     self.paths.items,
-        //     self.boundary_fragments.items,
-        //     self.merge_fragments.items,
-        // );
+        rasterizer.mask(
+            self.config,
+            self.paths.items,
+            self.boundary_fragments.items,
+            self.merge_fragments.items,
+        );
     }
 
     fn boundaryFragmentLessThan(_: u32, left: BoundaryFragment, right: BoundaryFragment) bool {
@@ -441,33 +441,103 @@ pub const CpuRasterizer = struct {
                 }
                 std.debug.print("-----------\n\n", .{});
 
-                // std.debug.print("Front Grid Intersections\n", .{});
-                // std.debug.print("-----------\n", .{});
-                // for (subpath_offsets.start_front_stroke_flat_segment_offset..subpath_offsets.end_front_stroke_flat_segment_offset) |flat_segment_index| {
-                //     const flat_segment = self.flat_segments.items[flat_segment_index];
-                //     var line_iter = encoding_module.LineIterator{
-                //         .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
-                //     };
+                std.debug.print("Front Stroke Grid Intersections\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (subpath_offsets.start_front_stroke_flat_segment_offset..subpath_offsets.end_front_stroke_flat_segment_offset) |flat_segment_index| {
+                    const flat_segment = self.flat_segments.items[flat_segment_index];
+                    const intersections = self.grid_intersections.items[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
-                //     while (line_iter.next()) |line| {
-                //         std.debug.print("{}\n", .{line});
-                //     }
-                // }
-                // std.debug.print("-----------\n\n", .{});
+                    for (intersections) |intersection| {
+                        std.debug.print("Pixel({},{}), T({}), Intersection({},{})\n", .{
+                            intersection.pixel.x,
+                            intersection.pixel.y,
+                            intersection.intersection.t,
+                            intersection.intersection.point.x,
+                            intersection.intersection.point.y,
+                        });
+                    }
+                }
+                std.debug.print("-----------\n\n", .{});
 
-                // std.debug.print("Back Grid Intersections\n", .{});
-                // std.debug.print("-----------\n", .{});
-                // for (subpath_offsets.start_back_stroke_flat_segment_offset..subpath_offsets.end_back_stroke_flat_segment_offset) |flat_segment_index| {
-                //     const flat_segment = self.flat_segments.items[flat_segment_index];
-                //     var line_iter = encoding_module.LineIterator{
-                //         .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
-                //     };
+                std.debug.print("Back Stroke Grid Intersections\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (subpath_offsets.start_back_stroke_flat_segment_offset..subpath_offsets.end_back_stroke_flat_segment_offset) |flat_segment_index| {
+                    const flat_segment = self.flat_segments.items[flat_segment_index];
+                    const intersections = self.grid_intersections.items[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
-                //     while (line_iter.next()) |line| {
-                //         std.debug.print("{}\n", .{line});
-                //     }
-                // }
-                // std.debug.print("-----------\n", .{});
+                    for (intersections) |intersection| {
+                        std.debug.print("Pixel({},{}), T({}), Intersection({},{})\n", .{
+                            intersection.pixel.x,
+                            intersection.pixel.y,
+                            intersection.intersection.t,
+                            intersection.intersection.point.x,
+                            intersection.intersection.point.y,
+                        });
+                    }
+                }
+                std.debug.print("-----------\n\n", .{});
+            }
+        }
+
+        {
+            std.debug.print("============ Boundary Fragments ============\n", .{});
+            for (self.paths.items) |path| {
+                const path_monoid = self.path_monoids.items[path.segment_index];
+
+                std.debug.print("Path({})\n", .{path_monoid.path_index});
+                std.debug.print("Fill Boundary Fragments\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (path.start_fill_boundary_offset..path.end_fill_boundary_offset) |boundary_index| {
+                    const boundary_fragment = self.boundary_fragments.items[boundary_index];
+                    std.debug.print("Pixel({},{})\n", .{
+                        boundary_fragment.pixel.x,
+                        boundary_fragment.pixel.y,
+                    });
+                }
+                std.debug.print("-----------\n\n", .{});
+
+                std.debug.print("Stroke Boundary Fragments\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (path.start_stroke_boundary_offset..path.end_stroke_boundary_offset) |boundary_index| {
+                    const boundary_fragment = self.boundary_fragments.items[boundary_index];
+                    std.debug.print("Pixel({},{})\n", .{
+                        boundary_fragment.pixel.x,
+                        boundary_fragment.pixel.y,
+                    });
+                }
+                std.debug.print("-----------\n\n", .{});
+            }
+        }
+
+        {
+            std.debug.print("============ Merge Fragments ============\n", .{});
+            for (self.paths.items) |path| {
+                const path_monoid = self.path_monoids.items[path.segment_index];
+
+                std.debug.print("Path({})\n", .{path_monoid.path_index});
+                std.debug.print("Fill Merge Fragments\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (path.start_fill_boundary_offset..path.end_fill_merge_offset) |merge_index| {
+                    const merge_fragment = self.merge_fragments.items[merge_index];
+                    std.debug.print("Pixel({},{}), Offset({})\n", .{
+                        merge_fragment.pixel.x,
+                        merge_fragment.pixel.y,
+                        merge_fragment.boundary_offset,
+                    });
+                }
+                std.debug.print("-----------\n\n", .{});
+
+                std.debug.print("Stroke Merge Fragments\n", .{});
+                std.debug.print("-----------\n", .{});
+                for (path.start_stroke_boundary_offset..path.end_stroke_merge_offset) |merge_index| {
+                    const merge_fragment = self.merge_fragments.items[merge_index];
+                    std.debug.print("Pixel({},{}), Offset({})\n", .{
+                        merge_fragment.pixel.x,
+                        merge_fragment.pixel.y,
+                        merge_fragment.boundary_offset,
+                    });
+                }
+                std.debug.print("-----------\n\n", .{});
             }
         }
 
