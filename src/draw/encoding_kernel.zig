@@ -1428,15 +1428,23 @@ pub const Rasterize = struct {
                 .end = path_offset.end_fill_boundary_offset,
                 .offset = &path.fill_bump,
             };
+            const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_fill_flat_segment_offset;
             const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
+            const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
+
+            var intersection_iter = IntersectionIterator{
+                .flat_segment_index = subpath_flat_segment_index,
+                .flat_segment = flat_segment,
+                .subpath_flat_segments = subpath_flat_segments,
+                .segment_grid_intersections = segment_grid_intersections,
+                .grid_intersections = grid_intersections,
+            };
 
             boundarySegment2(
+                IntersectionIterator,
                 half_planes,
-                flat_segment_index - subpath_offset.start_fill_flat_segment_offset,
-                flat_segment,
-                subpath_flat_segments,
-                grid_intersections,
                 &fill_path_bump,
+                &intersection_iter,
                 boundary_fragments,
             );
         } else {
@@ -1468,24 +1476,12 @@ pub const Rasterize = struct {
     }
 
     pub fn boundarySegment2(
+        comptime T: type,
         half_planes: *const HalfPlanesU16,
-        flat_segment_index: u32,
-        flat_segment: FlatSegment,
-        flat_segments: []const FlatSegment,
-        grid_intersections: []const GridIntersection,
         bump: *BumpAllocator,
+        intersection_iter: *T,
         boundary_fragments: []BoundaryFragment,
     ) void {
-        const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
-
-        var intersection_iter = IntersectionIterator{
-            .flat_segment_index = flat_segment_index,
-            .flat_segment = flat_segment,
-            .subpath_flat_segments = flat_segments,
-            .segment_grid_intersections = segment_grid_intersections,
-            .grid_intersections = grid_intersections,
-        };
-
         var previous_grid_intersection: ?GridIntersection = null;
         while (intersection_iter.next()) |grid_intersection| {
             if (previous_grid_intersection) |*previous| {
