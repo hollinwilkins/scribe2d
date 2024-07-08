@@ -435,7 +435,7 @@ pub const Flatten = struct {
                     .kind = .fill,
                     .segment_index = path_monoid.segment_index,
                     .start_line_data_offset = start_line_data_offset,
-                    .end_line_data_offset = start_line_data_offset + line_data_size,
+                    .end_line_data_offset = start_line_data_offset,
                 };
 
                 fill(
@@ -494,7 +494,7 @@ pub const Flatten = struct {
         );
 
         // adjust lines to represent actual filled lines
-        flat_segment.end_line_data_offset = flat_segment.start_line_data_offset + writer.offset;
+        flat_segment.end_line_data_offset = flat_segment.end_line_data_offset + writer.offset;
     }
 
     fn flattenEuler(
