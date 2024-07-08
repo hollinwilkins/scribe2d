@@ -20,6 +20,7 @@ const FlatSubpath = encoding_module.FlatSubpath;
 const FlatSegment = encoding_module.FlatSegment;
 const SegmentOffset = encoding_module.SegmentOffset;
 const GridIntersection = encoding_module.GridIntersection;
+const BoundaryFragment = encoding_module.BoundaryFragment;
 const Texture = texture_module.Texture;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
@@ -31,15 +32,15 @@ pub const CpuRasterizer = struct {
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
     const Buffer = std.ArrayListUnmanaged(u8);
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
+    const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     // const LineList = std.ArrayListUnmanaged(LineF32);
     // const BoolList = std.ArrayListUnmanaged(bool);
     // const SubpathList = std.ArrayListUnmanaged(Subpath);
-    // const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
     // const MergeFragmentList = std.ArrayListUnmanaged(MergeFragment);
     // const OffsetList = std.ArrayListUnmanaged(u32);
 
     allocator: Allocator,
-    half_planes: HalfPlanesU16,
+    half_planes: *const HalfPlanesU16,
     config: KernelConfig,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
@@ -49,10 +50,11 @@ pub const CpuRasterizer = struct {
     flat_segments: FlatSegmentList = FlatSegmentList{},
     line_data: Buffer = Buffer{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
+    boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
 
     pub fn init(
         allocator: Allocator,
-        half_planes: HalfPlanesU16,
+        half_planes: *const HalfPlanesU16,
         config: KernelConfig,
         encoding: Encoding,
     ) @This() {
@@ -72,6 +74,7 @@ pub const CpuRasterizer = struct {
         self.flat_segments.deinit(self.allocator);
         self.line_data.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
+        self.boundary_fragments.deinit(self.allocator);
     }
 
     pub fn reset(self: *@This()) void {
@@ -82,6 +85,7 @@ pub const CpuRasterizer = struct {
         self.flat_segments.items.len = 0;
         self.line_data.items.len = 0;
         self.grid_intersections.items.len = 0;
+        self.boundary_fragments.items.len = 0;
     }
 
     pub fn rasterize(self: *@This(), texture: *Texture) !void {
@@ -193,7 +197,7 @@ pub const CpuRasterizer = struct {
         //     sb.raw = 0;
         // }
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
-        // const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_path.fill.boundary_fragment.capacity);
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
         // const merge_fragments = try self.merge_fragments.addManyAsSlice(self.allocator, last_path.fill.merge_fragment.capacity);
 
         const flat_segment_range = RangeU32{
@@ -215,20 +219,20 @@ pub const CpuRasterizer = struct {
             );
         }
 
-        // chunk_iter = range.chunkIterator(self.config.chunk_size);
-        // while (chunk_iter.next()) |chunk| {
-        //     rasterizer.boundary(
-        //         self.half_planes,
-        //         self.path_monoids.items,
-        //         self.paths.items,
-        //         self.subpaths.items,
-        //         grid_intersections,
-        //         self.flat_segment_offsets.items,
-        //         chunk,
-        //         path_bumps,
-        //         boundary_fragments,
-        //     );
-        // }
+        chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
+        while (chunk_iter.next()) |chunk| {
+            rasterizer.boundary(
+                self.half_planes,
+                self.path_monoids.items,
+                self.subpaths.items,
+                self.flat_segments.items,
+                grid_intersections,
+                self.segment_offsets.items,
+                chunk,
+                self.paths.items,
+                boundary_fragments,
+            );
+        }
 
         // var start_boundary_fragment: u32 = 0;
         // for (self.paths.items, path_bumps) |*path, bump| {
@@ -328,7 +332,7 @@ pub const CpuRasterizer = struct {
             std.debug.print("============ Flat Fill Lines ============\n", .{});
             for (self.subpaths.items, 0..) |subpath, subpath_index| {
                 const path_monoid = self.path_monoids.items[subpath.segment_index];
-                const subpath_offsets = SubpathOffset.FlatSegmentOffsets.create(
+                const subpath_offsets = SubpathOffset.create(
                     @intCast(subpath_index),
                     self.segment_offsets.items,
                     self.subpaths.items,
@@ -835,7 +839,7 @@ test "encoding path monoids" {
     const encoding = encoder.encode();
     var rasterizer = CpuRasterizer.init(
         std.testing.allocator,
-        half_planes,
+        &half_planes,
         kernel_module.KernelConfig.DEFAULT,
         encoding,
     );
