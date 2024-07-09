@@ -307,6 +307,16 @@ pub const Encoding = struct {
     pub fn getSegment(self: @This(), comptime T: type, path_monoid: PathMonoid) T {
         return std.mem.bytesToValue(T, self.segment_data[path_monoid.segment_offset - @sizeOf(T) .. path_monoid.segment_offset]);
     }
+
+    pub fn copyAlloc(self: @This(), allocator: Allocator) !@This() {
+        return @This() {
+            .path_tags = try allocator.dupe(PathTag, self.path_tags),
+            .transforms = try allocator.dupe(TransformF32.Affine, self.transforms),
+            .styles = try allocator.dupe(Style, self.styles),
+            .segment_data = try allocator.dupe(u8, self.segment_data),
+            .draw_data = try allocator.dupe(u8, self.draw_data),
+        };
+    }
 };
 
 // This encoding can get sent to kernels
@@ -699,6 +709,31 @@ pub fn PathEncoder(comptime T: type) type {
         }
     };
 }
+
+pub const EncodingCache = struct {
+    const EncodingList = std.ArrayListUnmanaged(Encoding);
+
+    arena: std.heap.ArenaAllocator,
+    encodings: EncodingList = EncodingList{},
+
+    pub fn init(allocator: Allocator) @This() {
+        return @This(){
+            .arena = std.heap.ArenaAllocator.init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.arena.deinit();
+    }
+
+    pub fn reset(self: *@This()) void {
+        self.arena.reset(.retain_capacity);
+    }
+
+    pub fn addEncoding(self: *@This(), encoding: Encoding) !void {
+        (try self.encodings.addOne(self.arena.allocator())).* = try encoding.copyAlloc(self.arena.allocator());
+    }
+};
 
 pub const Path = struct {
     pub const Bump = std.atomic.Value(u32);
