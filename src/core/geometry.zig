@@ -418,6 +418,8 @@ pub fn Transform(comptime T: type) type {
                 },
             };
         }
+
+        pub const toAffine = toMatrix;
     };
 }
 

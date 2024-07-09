@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
+const text_module = @import("../text/root.zig");
 const msaa_module = @import("./msaa.zig");
 const texture_module = @import("./texture.zig");
 const mem = std.mem;
@@ -14,6 +15,7 @@ const Line = core.Line;
 const Arc = core.Arc;
 const QuadraticBezier = core.QuadraticBezier;
 const CubicBezier = core.CubicBezier;
+const RectF32 = core.RectF32;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
 const PointI16 = core.PointI16;
@@ -25,6 +27,7 @@ const QuadraticBezierF32 = core.QuadraticBezierF32;
 const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
+const GlyphPen = text_module.GlyphPen;
 const Texture = texture_module.Texture;
 const Colors = texture_module.Colors;
 const ColorF32 = texture_module.ColorF32;
@@ -309,7 +312,7 @@ pub const Encoding = struct {
     }
 
     pub fn copyAlloc(self: @This(), allocator: Allocator) !@This() {
-        return @This() {
+        return @This(){
             .path_tags = try allocator.dupe(PathTag, self.path_tags),
             .transforms = try allocator.dupe(TransformF32.Affine, self.transforms),
             .styles = try allocator.dupe(Style, self.styles),
@@ -488,6 +491,7 @@ pub const Encoder = struct {
 };
 
 pub fn PathEncoder(comptime T: type) type {
+    const Self = @This();
     const PPoint = Point(T);
 
     // Extend structs used to extend an open subpath
@@ -590,6 +594,23 @@ pub fn PathEncoder(comptime T: type) type {
             }
 
             self.encoder.staged.subpath = false;
+        }
+
+        pub fn affineTransform(self: *@This(), transform: TransformF32.Affine) void {
+            const points = std.mem.bytesAsSlice(PPoint, self.encoder.segment_data.items[self.start_offset..]);
+
+            switch (T) {
+                f32 => {
+                    for (points) |*point| {
+                        point.* = point.affineTransform(transform);
+                    }
+                },
+                i16 => {
+                    for (points) |*point| {
+                        point.* = point.cast(f32).affineTransform(transform).cast(T);
+                    }
+                }
+            }
         }
 
         pub fn moveTo(self: *@This(), p0: PPoint) !void {
@@ -707,6 +728,81 @@ pub fn PathEncoder(comptime T: type) type {
                 },
             }
         }
+
+        pub fn glyphPen(self: *@This()) GlyphPen {
+            return GlyphPen{
+                .ptr = @ptrCast(self),
+                .vtable = GlyphPenVTable,
+            };
+        }
+
+        const GlyphPenVTable: *const GlyphPen.VTable = &.{
+            .moveTo = GlyphPenFunctions.moveTo,
+            .lineTo = GlyphPenFunctions.lineTo,
+            .quadTo = GlyphPenFunctions.quadTo,
+            .curveTo = GlyphPenFunctions.curveTo,
+            .open = GlyphPenFunctions.open,
+            .close = GlyphPenFunctions.close,
+        };
+
+        pub const GlyphPenFunctions = struct {
+            fn moveTo(ctx: *anyopaque, point: PointF32) void {
+                var b = @as(*Self, @alignCast(@ptrCast(ctx)));
+                b.moveTo(point) catch {
+                    unreachable;
+                };
+            }
+
+            fn lineTo(ctx: *anyopaque, point: PointF32) void {
+                var b = @as(*Self, @alignCast(@ptrCast(ctx)));
+                b.lineTo(point) catch {
+                    unreachable;
+                };
+            }
+
+            fn quadTo(ctx: *anyopaque, control: PointF32, point: PointF32) void {
+                var b = @as(*Self, @alignCast(@ptrCast(ctx)));
+                b.quadTo(control, point) catch {
+                    unreachable;
+                };
+            }
+
+            fn curveTo(_: *anyopaque, _: PointF32, _: PointF32, _: PointF32) void {
+                @panic("PathBuilder does not support curveTo\n");
+            }
+
+            fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
+                var b = @as(*Self, @alignCast(@ptrCast(ctx)));
+
+                const transform = TransformF32{
+                    .scale = PointF32{
+                        .x = ppem,
+                        .y = ppem,
+                    },
+                    .translate = PointF32{
+                        .x = -bounds.min.x,
+                        .y = -bounds.min.y,
+                    },
+                };
+                const bounds2 = bounds.transform(transform);
+
+                b.affineTransform(transform.toAffine());
+                b.affineTransform((TransformF32{
+                    .scale = PointF32{
+                        .x = 1.0,
+                        .y = -1.0,
+                    },
+                    .translate = PointF32{
+                        .x = -(bounds2.getWidth() / 2.0),
+                        .y = -(bounds2.getHeight() / 2.0),
+                    },
+                }).toAffine());
+
+                b.close() catch {
+                    unreachable;
+                };
+            }
+        };
     };
 }
 
