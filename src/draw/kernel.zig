@@ -1752,7 +1752,7 @@ pub const Rasterize = struct {
 
         // calculate main ray winding
         var main_ray_winding: f32 = merge_fragment.calculateMainRayWinding();
-        for (boundary_fragments[boundary_fragment_index + 1..]) |*boundary_fragment| {
+        for (boundary_fragments[boundary_fragment_index + 1 ..]) |*boundary_fragment| {
             if (boundary_fragment.is_scanline) {
                 break;
             }
@@ -1978,18 +1978,25 @@ pub const Blend = struct {
 
             if (merge_fragment.is_scanline and merge_fragment.pixel.y >= 0 and merge_fragment.pixel.y < texture.dimensions.height) {
                 const y: u32 = @intCast(merge_fragment.pixel.y);
+
                 var previous_merge_fragment = merge_fragment;
                 for (boundary_fragments[merge_index + 1 ..]) |current_merge_fragment| {
-                    if (!current_merge_fragment.is_merge) {
-                        break;
-                    }
-
                     if (current_merge_fragment.pixel.y != previous_merge_fragment.pixel.y) {
                         break;
                     }
 
-                    if (previous_merge_fragment.pixel.x + 1 == current_merge_fragment.pixel.x or current_merge_fragment.main_ray_winding != 0) {
-                        break;
+                    if (y == 19) {
+                        std.debug.assert(true);
+                        std.debug.assert(true);
+                    }
+
+                    if (!current_merge_fragment.is_merge) {
+                        continue;
+                    }
+
+                    if (previous_merge_fragment.pixel.x + 1 == current_merge_fragment.pixel.x or current_merge_fragment.main_ray_winding == 0) {
+                        previous_merge_fragment = current_merge_fragment;
+                        continue;
                     }
 
                     const start_x = previous_merge_fragment.pixel.x + 1;
