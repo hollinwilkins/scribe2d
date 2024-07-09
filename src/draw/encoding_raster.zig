@@ -301,10 +301,10 @@ pub const CpuRasterizer = struct {
                     self.path_monoids.items,
                     self.encoding.styles,
                     self.encoding.transforms,
-                    self.paths.items,
                     self.subpaths.items,
                     self.encoding.segment_data,
                     chunk,
+                    self.paths.items,
                     self.segment_offsets.items,
                     flat_segments,
                     line_data,
@@ -525,6 +525,16 @@ pub const CpuRasterizer = struct {
         }
 
         if (self.config.debugFlatten()) {
+            std.debug.print("================= Paths ==================\n", .{});
+            for (self.paths.items) |path| {
+                const path_monoid = self.path_monoids.items[path.segment_index];
+                std.debug.print("Path({})\n", .{path_monoid.path_index});
+                std.debug.print("Fill Bounds: {}\n", .{path.fill_bounds});
+                std.debug.print("Stroke Bounds: {}\n", .{path.stroke_bounds});
+                std.debug.print("---------------------\n", .{});
+            }
+            std.debug.print("==========================================\n", .{});
+
             if (self.config.runFlatten()) {
                 std.debug.print("============ Flat Fill Lines ============\n", .{});
                 for (self.subpaths.items) |subpath| {

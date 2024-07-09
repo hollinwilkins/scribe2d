@@ -848,12 +848,48 @@ pub const EncodingCache = struct {
     }
 };
 
+pub const AtomicBounds = struct {
+    const V = std.atomic.Value(u32);
+
+    min_x: V = V.init(@bitCast(std.math.floatMax(f32))),
+    min_y: V = V.init(@bitCast(std.math.floatMax(f32))),
+    max_x: V = V.init(@bitCast(std.math.floatMin(f32))),
+    max_y: V = V.init(@bitCast(std.math.floatMin(f32))),
+
+    pub fn createRect(rect: *RectF32) *AtomicBounds {
+        return std.mem.bytesAsValue(AtomicBounds, std.mem.asBytes(rect));
+    }
+
+    pub fn extendBy(self: *@This(), bounds: RectF32) void {
+        atomicMin(&self.min_x, bounds.min.x);
+        atomicMin(&self.min_y, bounds.min.y);
+        atomicMax(&self.max_x, bounds.max.x);
+        atomicMax(&self.max_y, bounds.max.y);
+    }
+
+    pub fn atomicMin(x: *V, y: f32) void {
+        var cur: u32 = x.load(.seq_cst);
+        while (true) {
+            const min = @min(@as(f32, @bitCast(cur)), y);
+            cur = x.cmpxchgWeak(cur, @bitCast(min), .seq_cst, .seq_cst) orelse return;
+        }
+    }
+
+    pub fn atomicMax(x: *V, y: f32) void {
+        var cur: u32 = x.load(.seq_cst);
+        while (true) {
+            const max = @max(@as(f32, @bitCast(cur)), y);
+            cur = x.cmpxchgWeak(cur, @bitCast(max), .seq_cst, .seq_cst) orelse return;
+        }
+    }
+};
+
 pub const Path = struct {
     pub const Bump = std.atomic.Value(u32);
 
     segment_index: u32 = 0,
-    fill_bounds: RectF32 = RectF32.NONE,
-    stroke_bounds: RectF32 = RectF32.NONE,
+    fill_bounds: RectF32 = RectF32{},
+    stroke_bounds: RectF32 = RectF32{},
     start_fill_boundary_offset: u32 = 0,
     end_fill_boundary_offset: u32 = 0,
     start_stroke_boundary_offset: u32 = 0,

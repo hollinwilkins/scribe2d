@@ -16,6 +16,7 @@ const FlatSegment = encoding_module.FlatSegment;
 const Style = encoding_module.Style;
 const LineIterator = encoding_module.LineIterator;
 const MonoidFunctions = encoding_module.MonoidFunctions;
+const AtomicBounds = encoding_module.AtomicBounds;
 const Estimates = encoding_module.Estimates;
 const Offsets = encoding_module.Offset;
 const PathOffset = encoding_module.PathOffset;
@@ -395,12 +396,12 @@ pub const Flatten = struct {
         path_monoids: []const PathMonoid,
         styles: []const Style,
         transforms: []const TransformF32.Affine,
-        paths: []const Path,
         subpaths: []const Subpath,
         segment_data: []const u8,
         range: RangeU32,
         // outputs
         // true if path is used, false to ignore
+        paths: []Path,
         segment_offsets: []SegmentOffset,
         flat_segments: []FlatSegment,
         line_data: []u8,
@@ -408,6 +409,7 @@ pub const Flatten = struct {
         for (range.start..range.end) |segment_index| {
             const path_monoid = path_monoids[segment_index];
             const style = styles[path_monoid.style_index];
+            const path = &paths[path_monoid.path_index];
             const flatten_offsets = FlatSegmentOffset.create(
                 @intCast(segment_index),
                 path_monoid,
@@ -439,6 +441,9 @@ pub const Flatten = struct {
                     line_data,
                     &fill_bounds,
                 );
+
+                var atomic_fill_bounds = AtomicBounds.createRect(&path.fill_bounds);
+                atomic_fill_bounds.extendBy(fill_bounds);
             }
 
             if (style.isStroke()) {
@@ -476,6 +481,9 @@ pub const Flatten = struct {
                     line_data,
                     &stroke_bounds,
                 );
+
+                var atomic_stroke_bounds = AtomicBounds.createRect(&path.stroke_bounds);
+                atomic_stroke_bounds.extendBy(stroke_bounds);
             }
         }
     }
@@ -1642,7 +1650,7 @@ pub const Rasterize = struct {
 
     pub fn maskPath(
         range: RangeU32,
-        boundary_fragments: [] BoundaryFragment,
+        boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |boundary_fragment_index| {
             maskFragment(
@@ -1654,7 +1662,7 @@ pub const Rasterize = struct {
 
     pub fn maskFragment(
         boundary_fragment_index: u32,
-        boundary_fragments: [] BoundaryFragment,
+        boundary_fragments: []BoundaryFragment,
     ) void {
         const merge_fragment = &boundary_fragments[boundary_fragment_index];
         const previous_boundary_fragment = if (boundary_fragment_index > 0) boundary_fragments[boundary_fragment_index - 1] else null;
