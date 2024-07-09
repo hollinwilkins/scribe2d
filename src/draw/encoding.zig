@@ -1328,6 +1328,7 @@ pub const BoundaryFragment = struct {
     masks: Masks,
     intersections: [2]IntersectionF32,
     is_merge: bool = false,
+    is_scanline: bool = false,
     main_ray_winding: f32 = 0,
     stencil_mask: u16 = 0,
 

@@ -1680,6 +1680,10 @@ pub const Rasterize = struct {
             if (!std.meta.eql(previous.pixel, merge_fragment.pixel)) {
                 merge_fragment.is_merge = true;
             }
+
+            if (previous.pixel.y != merge_fragment.pixel.y) {
+                merge_fragment.is_scanline = true;
+            }
         }
     }
 
@@ -1738,20 +1742,9 @@ pub const Rasterize = struct {
         boundary_fragments: []BoundaryFragment,
     ) void {
         const merge_fragment = &boundary_fragments[boundary_fragment_index];
-        const previous_boundary_fragment = if (boundary_fragment_index > 0) boundary_fragments[boundary_fragment_index - 1] else null;
 
-        if (previous_boundary_fragment) |previous| {
-            if (std.meta.eql(previous.pixel, merge_fragment.pixel)) {
-                // not the start of the merge section
-                return;
-            } else {
-                merge_fragment.is_merge = true;
-            }
-
-            if (previous.pixel.y == merge_fragment.pixel.y) {
-                // not start of the scanline
-                return;
-            }
+        if (!merge_fragment.is_scanline) {
+            return;
         }
 
         var end_boundary_offset = boundary_fragment_index + 1;
