@@ -35,26 +35,26 @@ pub fn main() !void {
 
     const outline_width = 1.0;
     var style = draw.Style{};
-    try encoder.encodeColor(draw.ColorU8{
-        .r = 0,
-        .g = 0,
-        .b = 0,
-        .a = 255,
-    });
-    style.setFill(draw.Style.Fill{
-        .brush = .color,
-    });
     // try encoder.encodeColor(draw.ColorU8{
-    //     .r = 255,
+    //     .r = 0,
     //     .g = 0,
     //     .b = 0,
     //     .a = 255,
     // });
-    // style.setStroke(draw.Style.Stroke{
+    // style.setFill(draw.Style.Fill{
     //     .brush = .color,
-    //     .join = .bevel,
-    //     .width = outline_width,
     // });
+    try encoder.encodeColor(draw.ColorU8{
+        .r = 255,
+        .g = 0,
+        .b = 0,
+        .a = 255,
+    });
+    style.setStroke(draw.Style.Stroke{
+        .brush = .color,
+        .join = .bevel,
+        .width = outline_width,
+    });
     try encoder.encodeStyle(style);
     try encoder.encodeTransform(core.TransformF32.Affine.IDENTITY);
 
