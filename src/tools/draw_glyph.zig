@@ -61,6 +61,7 @@ pub fn main() !void {
     const encoding = encoder.encode();
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
+        .kernel_config = draw.KernelConfig.SERIAL,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,

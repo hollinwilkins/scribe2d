@@ -1276,6 +1276,13 @@ pub const Flatten = struct {
         }
 
         fn addPoint(self: *@This(), point: PointF32) void {
+            const END_POINT = PointF32{.x = 8.9375e0, .y = 5.9375e-1};
+
+            if (std.meta.eql(point, END_POINT)) {
+                std.debug.assert(true);
+                std.debug.assert(true);
+            }
+
             self.bounds.extendByInPlace(point);
             std.mem.bytesAsValue(PointF32, self.line_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);

@@ -539,7 +539,7 @@ pub const CpuRasterizer = struct {
                 std.debug.print("============ Flat Fill Lines ============\n", .{});
                 for (self.subpaths.items) |subpath| {
                     const path_monoid = self.path_monoids.items[subpath.segment_index];
-                    const subpath_offsets = SubpathOffset.create(
+                    const subpath_offset = SubpathOffset.create(
                         subpath.segment_index,
                         self.path_monoids.items,
                         self.segment_offsets.items,
@@ -550,8 +550,9 @@ pub const CpuRasterizer = struct {
                     std.debug.print("Subpath({},{})\n", .{ path_monoid.path_index, path_monoid.subpath_index });
                     std.debug.print("Fill Lines\n", .{});
                     std.debug.print("-----------\n", .{});
-                    for (subpath_offsets.start_fill_flat_segment_offset..subpath_offsets.end_fill_flat_segment_offset) |flat_segment_index| {
+                    for (subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset) |flat_segment_index| {
                         const flat_segment = self.flat_segments.items[flat_segment_index];
+                        std.debug.print("--- Segment({}) ---\n", .{flat_segment.segment_index});
                         var line_iter = encoding_module.LineIterator{
                             .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
                         };
@@ -564,8 +565,9 @@ pub const CpuRasterizer = struct {
 
                     std.debug.print("Front Stroke Lines\n", .{});
                     std.debug.print("-----------\n", .{});
-                    for (subpath_offsets.start_front_stroke_flat_segment_offset..subpath_offsets.end_front_stroke_flat_segment_offset) |flat_segment_index| {
+                    for (subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset) |flat_segment_index| {
                         const flat_segment = self.flat_segments.items[flat_segment_index];
+                        std.debug.print("--- Segment({}) ---\n", .{flat_segment.segment_index});
                         var line_iter = encoding_module.LineIterator{
                             .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
                         };
@@ -578,8 +580,9 @@ pub const CpuRasterizer = struct {
 
                     std.debug.print("Back Stroke Lines\n", .{});
                     std.debug.print("-----------\n", .{});
-                    for (subpath_offsets.start_back_stroke_flat_segment_offset..subpath_offsets.end_back_stroke_flat_segment_offset) |flat_segment_index| {
+                    for (subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset) |flat_segment_index| {
                         const flat_segment = self.flat_segments.items[flat_segment_index];
+                        std.debug.print("--- Segment({}) ---\n", .{flat_segment.segment_index});
                         var line_iter = encoding_module.LineIterator{
                             .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
                         };
