@@ -41,7 +41,7 @@ const QuadraticBezierF32 = core.QuadraticBezierF32;
 const QuadraticBezierI16 = core.QuadraticBezierI16;
 const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
-const Texture = texture_module.Texture;
+const TextureUnmanaged = texture_module.TextureUnmanaged;
 const ColorF32 = texture_module.ColorF32;
 const ColorBlend = texture_module.ColorBlend;
 const CubicPoints = euler_module.CubicPoints;
@@ -1822,7 +1822,7 @@ pub const Blend = struct {
     pub fn fill(
         bundary_fragments: []const BoundaryFragment,
         range: RangeU32,
-        texture: *Texture,
+        texture: *TextureUnmanaged,
     ) void {
         const color_blend = ColorBlend.Alpha;
 

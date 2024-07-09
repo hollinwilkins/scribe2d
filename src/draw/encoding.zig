@@ -414,61 +414,7 @@ pub const Encoder = struct {
             tag2.index.transform = 1;
         }
 
-        self.extendBounds(tag2);
         (try self.path_tags.addOne(self.allocator)).* = tag2;
-    }
-
-    pub fn extendBounds(self: *@This(), path_tag: PathTag) void {
-        switch (path_tag.segment.kind) {
-            .line_f32 => {
-                const s = self.pathTailSegment(LineF32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-            },
-            .line_i16 => {
-                const s = self.pathTailSegment(LineI16).cast(f32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-            },
-            .arc_f32 => {
-                const s = self.pathTailSegment(ArcF32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-                self.bounds.extendByInPlace(s.p2);
-            },
-            .arc_i16 => {
-                const s = self.pathTailSegment(ArcI16).cast(f32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-                self.bounds.extendByInPlace(s.p2);
-            },
-            .quadratic_bezier_f32 => {
-                const s = self.pathTailSegment(QuadraticBezierF32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-                self.bounds.extendByInPlace(s.p2);
-            },
-            .quadratic_bezier_i16 => {
-                const s = self.pathTailSegment(QuadraticBezierI16).cast(f32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-                self.bounds.extendByInPlace(s.p2);
-            },
-            .cubic_bezier_f32 => {
-                const s = self.pathTailSegment(CubicBezierF32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-                self.bounds.extendByInPlace(s.p2);
-                self.bounds.extendByInPlace(s.p3);
-            },
-            .cubic_bezier_i16 => {
-                const s = self.pathTailSegment(CubicBezierI16).cast(f32);
-                self.bounds.extendByInPlace(s.p0);
-                self.bounds.extendByInPlace(s.p1);
-                self.bounds.extendByInPlace(s.p2);
-                self.bounds.extendByInPlace(s.p3);
-            },
-        }
     }
 
     pub fn currentTransform(self: *@This()) ?*TransformF32.Affine {

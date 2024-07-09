@@ -35,6 +35,7 @@ pub fn main() !void {
 
     _ = output_file;
 
+    const outline_width = 1.0;
     try encoder.encodeColor(draw.ColorU8{
         .r = 255,
         .g = 255,
@@ -42,18 +43,37 @@ pub fn main() !void {
         .a = 255,
     });
     var style = draw.Style{};
-    // style.setFill(draw.Style.Fill{
-    //     .brush = .color,
-    // });
+    style.setFill(draw.Style.Fill{
+        .brush = .color,
+    });
     style.setStroke(draw.Style.Stroke{
         .join = .bevel,
+        .width = outline_width,
     });
     try encoder.encodeStyle(style);
+    try encoder.encodeTransform(core.TransformF32.Affine.IDENTITY);
 
     var path_encoder = encoder.pathEncoder(f32);
 
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     _ = try face.outline(glyph_id, @floatFromInt(size), path_encoder.glyphPen());
+
+    const dimensions = core.DimensionsU32{
+        .width = 100,
+        .height = 100,
+    };
+
+    // const dimensions = core.DimensionsU32{
+    //     .width = @intFromFloat(@ceil(encoder.bounds.getWidth() + outline_width / 2.0 + 16.0)),
+    //     .height = @intFromFloat(@ceil(encoder.bounds.getHeight() + outline_width / 2.0 + 16.0)),
+    // };
+
+    // const translate_center = (core.TransformF32{
+    //     .translate = core.PointF32{
+    //         .x = @floatFromInt(dimensions.width / 2),
+    //         .y = @floatFromInt(dimensions.height / 2),
+    //     },
+    // });
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
@@ -71,11 +91,22 @@ pub fn main() !void {
     );
     defer rasterizer.deinit();
 
-    var texture = try draw.Texture.init(allocator, core.DimensionsU32{
-        .width = 50,
-        .height = 50,
-    }, draw.TextureFormat.RgbaU8);
-    defer texture.deinit();
+    zstbi.init(allocator);
+    defer zstbi.deinit();
+
+    var image = try zstbi.Image.createEmpty(
+        dimensions.width,
+        dimensions.height,
+        3,
+        .{},
+    );
+    defer image.deinit();
+
+    var texture = draw.TextureUnmanaged{
+        .dimensions = dimensions,
+        .format = draw.TextureFormat.SrgbU8,
+        .bytes = image.data,
+    };
     texture.clear(draw.Colors.WHITE);
 
     try rasterizer.rasterize(&texture);

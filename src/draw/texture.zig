@@ -113,7 +113,7 @@ pub const SrgbaColorCodec = struct {
     }
 
     pub fn toRgba(self: *const @This(), color: ColorF32) ColorF32 {
-        return Color{
+        return ColorF32{
             .r = self.toLinear(color.r),
             .g = self.toLinear(color.g),
             .b = self.toLinear(color.b),
@@ -122,7 +122,7 @@ pub const SrgbaColorCodec = struct {
     }
 
     pub fn fromRgba(self: *const @This(), color: ColorF32) ColorF32 {
-        return Color{
+        return ColorF32{
             .r = self.fromLinear(color.r),
             .g = self.fromLinear(color.g),
             .b = self.fromLinear(color.b),

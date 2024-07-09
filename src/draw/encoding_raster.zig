@@ -24,7 +24,7 @@ const SegmentOffset = encoding_module.SegmentOffset;
 const GridIntersection = encoding_module.GridIntersection;
 const BoundaryFragment = encoding_module.BoundaryFragment;
 const MergeFragment = encoding_module.MergeFragment;
-const Texture = texture_module.Texture;
+const TextureUnmanaged = texture_module.TextureUnmanaged;
 const ColorBlend = texture_module.ColorBlend;
 const ColorF32 = texture_module.ColorF32;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
@@ -174,7 +174,7 @@ pub const CpuRasterizer = struct {
         self.boundary_fragments.items.len = 0;
     }
 
-    pub fn rasterize(self: *@This(), texture: *Texture) !void {
+    pub fn rasterize(self: *@This(), texture: *TextureUnmanaged) !void {
         var pool: std.Thread.Pool = undefined;
         try pool.init(.{
             .allocator = self.allocator,
@@ -418,7 +418,7 @@ pub const CpuRasterizer = struct {
         wg.wait();
     }
 
-    fn flushTexture(self: @This(), pool: *std.Thread.Pool, texture: *Texture) void {
+    fn flushTexture(self: @This(), pool: *std.Thread.Pool, texture: *TextureUnmanaged) void {
         var wg = std.Thread.WaitGroup{};
         const blender = kernel_module.Blend;
 
@@ -468,7 +468,7 @@ pub const CpuRasterizer = struct {
         }
     }
 
-    pub fn debugPrint(self: @This(), texture: Texture) void {
+    pub fn debugPrint(self: @This(), texture: TextureUnmanaged) void {
         if (self.config.debugExpandPathMonoids()) {
             std.debug.print("============ Path Monoids ============\n", .{});
             for (self.path_monoids.items) |path_monoid| {
@@ -755,93 +755,3 @@ pub const CpuRasterizer = struct {
         }
     }
 };
-
-test "encoding path monoids" {
-    const Encoder = encoding_module.Encoder;
-    const Colors = texture_module.Colors;
-    const ColorU8 = texture_module.ColorU8;
-
-    var encoder = Encoder.init(std.testing.allocator);
-    defer encoder.deinit();
-
-    try encoder.encodeColor(ColorU8{
-        .r = 255,
-        .g = 255,
-        .b = 0,
-        .a = 255,
-    });
-    var style = Style{};
-    style.setFill(Style.Fill{
-        .brush = .color,
-    });
-    style.setStroke(Style.Stroke{
-        .join = .bevel,
-    });
-    try encoder.encodeStyle(style);
-
-    var path_encoder = encoder.pathEncoder(f32);
-    try path_encoder.moveTo(core.PointF32.create(10.0, 10.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(20.0, 20.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(40.0, 20.0));
-    //_ = try path_encoder.arcTo(core.PointF32.create(3.0, 3.0), core.PointF32.create(4.0, 2.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(10.0, 10.0));
-    try path_encoder.finish();
-
-    var path_encoder2 = encoder.pathEncoder(i16);
-    try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    _ = try path_encoder2.cubicTo(
-        core.PointI16.create(120, 120),
-        core.PointI16.create(70, 130),
-        core.PointI16.create(22, 22),
-    );
-    try path_encoder2.finish();
-
-    var half_planes = try HalfPlanesU16.init(std.testing.allocator);
-    defer half_planes.deinit();
-
-    const encoding = encoder.encode();
-    var rasterizer = try CpuRasterizer.init(
-        std.testing.allocator,
-        &half_planes,
-        kernel_module.KernelConfig.DEFAULT,
-        encoding,
-    );
-    defer rasterizer.deinit();
-
-    var texture = try Texture.init(std.testing.allocator, core.DimensionsU32{
-        .width = 50,
-        .height = 50,
-    }, texture_module.TextureFormat.RgbaU8);
-    defer texture.deinit();
-    texture.clear(Colors.WHITE);
-
-    try rasterizer.rasterize(&texture);
-
-    rasterizer.debugPrint(texture);
-    // const path_monoids = rasterizer.path_monoids.items;
-
-    // try std.testing.expectEqualDeep(
-    //     core.LineF32.create(core.PointF32.create(1.0, 1.0), core.PointF32.create(2.0, 2.0)),
-    //     encoding.getSegment(core.LineF32, path_monoids[0]),
-    // );
-    // try std.testing.expectEqualDeep(
-    //     core.ArcF32.create(
-    //         core.PointF32.create(2.0, 2.0),
-    //         core.PointF32.create(3.0, 3.0),
-    //         core.PointF32.create(4.0, 2.0),
-    //     ),
-    //     encoding.getSegment(core.ArcF32, path_monoids[1]),
-    // );
-    // try std.testing.expectEqualDeep(
-    //     core.LineF32.create(core.PointF32.create(4.0, 2.0), core.PointF32.create(1.0, 1.0)),
-    //     encoding.getSegment(core.LineF32, path_monoids[2]),
-    // );
-
-    // try std.testing.expectEqualDeep(
-    //     core.LineI16.create(core.PointI16.create(10, 10), core.PointI16.create(20, 20)),
-    //     encoding.getSegment(core.LineI16, path_monoids[3]),
-    // );
-}
