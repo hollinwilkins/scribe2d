@@ -506,37 +506,47 @@ pub const CpuRasterizer = struct {
 
         if (self.config.debugEstimateSegments()) {
             std.debug.print("============ Path Segments ============\n", .{});
-            for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
-                switch (path_tag.segment.kind) {
-                    .line_f32 => std.debug.print("LineF32: {}\n", .{
-                        self.encoding.getSegment(core.LineF32, path_monoid),
-                    }),
-                    .arc_f32 => std.debug.print("ArcF32: {}\n", .{
-                        self.encoding.getSegment(core.ArcF32, path_monoid),
-                    }),
-                    .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
-                        self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
-                    }),
-                    .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
-                        self.encoding.getSegment(core.CubicBezierF32, path_monoid),
-                    }),
-                    .line_i16 => std.debug.print("LineI16: {}\n", .{
-                        self.encoding.getSegment(core.LineI16, path_monoid),
-                    }),
-                    .arc_i16 => std.debug.print("ArcI16: {}\n", .{
-                        self.encoding.getSegment(core.ArcI16, path_monoid),
-                    }),
-                    .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
-                        self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
-                    }),
-                    .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
-                        self.encoding.getSegment(core.CubicBezierI16, path_monoid),
-                    }),
+            for (self.subpaths.items) |subpath| {
+                const subpath_path_monoid = self.path_monoids.items[subpath.segment_index];
+                var end_segment_offset: u32 = undefined;
+                if (subpath_path_monoid.subpath_index + 1 < self.subpaths.items.len) {
+                    end_segment_offset = self.subpaths.items[subpath_path_monoid.subpath_index + 1].segment_index;
+                } else {
+                    end_segment_offset = @intCast(self.encoding.path_tags.len);
                 }
 
-                const offset = self.segment_offsets.items[segment_index];
-                std.debug.print("Offset: {}\n", .{offset});
-                std.debug.print("----------\n", .{});
+                std.debug.print("Subpath({},{})\n", .{ subpath_path_monoid.path_index, subpath_path_monoid.subpath_index });
+                const subpath_path_tags = self.encoding.path_tags[subpath.segment_index..end_segment_offset];
+                const subpath_path_monoids = self.path_monoids.items[subpath.segment_index..end_segment_offset];
+                for (subpath_path_tags, subpath_path_monoids) |path_tag, path_monoid| {
+                    switch (path_tag.segment.kind) {
+                        .line_f32 => std.debug.print("LineF32: {}\n", .{
+                            self.encoding.getSegment(core.LineF32, path_monoid),
+                        }),
+                        .arc_f32 => std.debug.print("ArcF32: {}\n", .{
+                            self.encoding.getSegment(core.ArcF32, path_monoid),
+                        }),
+                        .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
+                            self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
+                        }),
+                        .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
+                            self.encoding.getSegment(core.CubicBezierF32, path_monoid),
+                        }),
+                        .line_i16 => std.debug.print("LineI16: {}\n", .{
+                            self.encoding.getSegment(core.LineI16, path_monoid),
+                        }),
+                        .arc_i16 => std.debug.print("ArcI16: {}\n", .{
+                            self.encoding.getSegment(core.ArcI16, path_monoid),
+                        }),
+                        .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
+                            self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
+                        }),
+                        .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
+                            self.encoding.getSegment(core.CubicBezierI16, path_monoid),
+                        }),
+                    }
+                }
+                std.debug.print("--------------------------------------\n", .{});
             }
             std.debug.print("======================================\n", .{});
         }

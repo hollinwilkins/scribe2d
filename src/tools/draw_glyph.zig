@@ -52,6 +52,7 @@ pub fn main() !void {
 
     var path_encoder = encoder.pathEncoder(f32);
 
+    _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     _ = try face.outline(glyph_id, @floatFromInt(size), path_encoder.glyphPen());
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);
@@ -59,7 +60,7 @@ pub fn main() !void {
 
     const encoding = encoder.encode();
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_BOUNDARY,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,

@@ -573,6 +573,8 @@ pub fn PathEncoder(comptime T: type) type {
             if (self.is_fill) {
                 _ = try self.close();
             }
+
+            self.encoder.staged.subpath = false;
         }
 
         pub fn close(self: *@This()) !void {
@@ -593,7 +595,7 @@ pub fn PathEncoder(comptime T: type) type {
                 }
             }
 
-            self.encoder.staged.subpath = false;
+            self.encoder.staged.subpath = true;
         }
 
         pub fn affineTransform(self: *@This(), transform: TransformF32.Affine) void {
@@ -777,33 +779,35 @@ pub fn PathEncoder(comptime T: type) type {
             }
 
             fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
+                _ = bounds;
+                _ = ppem;
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
 
-                const transform = (TransformF32{
-                    .scale = PointF32{
-                        .x = ppem,
-                        .y = ppem,
-                    },
-                    .translate = PointF32{
-                        .x = -bounds.min.x,
-                        .y = -bounds.min.y,
-                    },
-                }).toAffine();
-                const bounds2 = bounds.affineTransform(transform);
+                // const transform = (TransformF32{
+                //     .scale = PointF32{
+                //         .x = ppem,
+                //         .y = ppem,
+                //     },
+                //     .translate = PointF32{
+                //         .x = -bounds.min.x,
+                //         .y = -bounds.min.y,
+                //     },
+                // }).toAffine();
+                // const bounds2 = bounds.affineTransform(transform);
 
-                const transform2 = (TransformF32{
-                    .scale = PointF32{
-                        .x = 1.0,
-                        .y = -1.0,
-                    },
-                    .translate = PointF32{
-                        .x = -(bounds2.getWidth() / 2.0),
-                        .y = -(bounds2.getHeight() / 2.0),
-                    },
-                }).toAffine();
+                // const transform2 = (TransformF32{
+                //     .scale = PointF32{
+                //         .x = 1.0,
+                //         .y = -1.0,
+                //     },
+                //     .translate = PointF32{
+                //         .x = -(bounds2.getWidth() / 2.0),
+                //         .y = -(bounds2.getHeight() / 2.0),
+                //     },
+                // }).toAffine();
 
-                b.affineTransform(transform);
-                b.affineTransform(transform2);
+                // b.affineTransform(transform);
+                // b.affineTransform(transform2);
 
                 b.close() catch {
                     unreachable;
