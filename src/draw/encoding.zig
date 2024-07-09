@@ -547,8 +547,9 @@ pub fn PathEncoder(comptime T: type) type {
         const Self = @This();
 
         encoder: *Encoder,
-        start_path_index: usize,
-        start_offset: usize,
+        start_path_offset: usize,
+        start_subpath_index: usize,
+        start_subpath_offset: usize,
         is_fill: bool,
         state: State = .start,
 
@@ -556,13 +557,14 @@ pub fn PathEncoder(comptime T: type) type {
             return @This(){
                 .encoder = encoder,
                 .is_fill = is_fill,
-                .start_path_index = @intCast(encoder.path_tags.items.len),
-                .start_offset = @intCast(encoder.segment_data.items.len),
+                .start_path_offset = @intCast(encoder.segment_data.items.len),
+                .start_subpath_index = @intCast(encoder.path_tags.items.len),
+                .start_subpath_offset = @intCast(encoder.segment_data.items.len),
             };
         }
 
         pub fn isEmpty(self: @This()) bool {
-            return self.start_offset == self.encoder.segment_data.items.len;
+            return self.start_path_offset == self.encoder.segment_data.items.len;
         }
 
         pub fn finish(self: *@This()) !void {
@@ -585,21 +587,23 @@ pub fn PathEncoder(comptime T: type) type {
             if (self.is_fill) {
                 if (self.encoder.currentPathTag()) |tag| {
                     // ensure filled subpaths are closed
-                    const start_point = self.encoder.pathSegment(PPoint, self.start_offset).*;
+                    const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).*;
                     const closed = try self.lineTo(start_point);
 
                     if (closed) {
-                        self.encoder.path_tags.items[self.start_path_index].segment.cap = true;
+                        self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
                         tag.segment.cap = true;
                     }
                 }
             }
 
+            self.start_subpath_index = self.encoder.path_tags.items.len;
+            self.start_subpath_offset = self.encoder.segment_data.items.len;
             self.encoder.staged.subpath = true;
         }
 
         pub fn affineTransform(self: *@This(), transform: TransformF32.Affine) void {
-            const points = std.mem.bytesAsSlice(PPoint, self.encoder.segment_data.items[self.start_offset..]);
+            const points = std.mem.bytesAsSlice(PPoint, self.encoder.segment_data.items[self.start_path_offset..]);
 
             switch (T) {
                 f32 => {
@@ -779,35 +783,33 @@ pub fn PathEncoder(comptime T: type) type {
             }
 
             fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
-                _ = bounds;
-                _ = ppem;
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
 
-                // const transform = (TransformF32{
-                //     .scale = PointF32{
-                //         .x = ppem,
-                //         .y = ppem,
-                //     },
-                //     .translate = PointF32{
-                //         .x = -bounds.min.x,
-                //         .y = -bounds.min.y,
-                //     },
-                // }).toAffine();
-                // const bounds2 = bounds.affineTransform(transform);
+                const transform = (TransformF32{
+                    .scale = PointF32{
+                        .x = ppem,
+                        .y = ppem,
+                    },
+                    .translate = PointF32{
+                        .x = -bounds.min.x,
+                        .y = -bounds.min.y,
+                    },
+                }).toAffine();
+                const bounds2 = bounds.affineTransform(transform);
 
-                // const transform2 = (TransformF32{
-                //     .scale = PointF32{
-                //         .x = 1.0,
-                //         .y = -1.0,
-                //     },
-                //     .translate = PointF32{
-                //         .x = -(bounds2.getWidth() / 2.0),
-                //         .y = -(bounds2.getHeight() / 2.0),
-                //     },
-                // }).toAffine();
+                const transform2 = (TransformF32{
+                    .scale = PointF32{
+                        .x = 1.0,
+                        .y = -1.0,
+                    },
+                    .translate = PointF32{
+                        .x = -(bounds2.getWidth() / 2.0),
+                        .y = -(bounds2.getHeight() / 2.0),
+                    },
+                }).toAffine();
 
-                // b.affineTransform(transform);
-                // b.affineTransform(transform2);
+                b.affineTransform(transform);
+                b.affineTransform(transform2);
 
                 b.close() catch {
                     unreachable;
@@ -915,7 +917,7 @@ pub const SubpathOffset = struct {
         const subpath = subpaths[path_monoid.subpath_index];
         const start_path_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
         var end_path_segment_offset: SegmentOffset = undefined;
-        if (path_monoid.path_index + 1 < subpaths.len) {
+        if (path_monoid.path_index + 1 < paths.len) {
             end_path_segment_offset = segment_offsets[paths[path_monoid.path_index + 1].segment_index - 1];
         } else {
             end_path_segment_offset = segment_offsets[segment_offsets.len - 1];
@@ -979,7 +981,7 @@ pub const FlatSegmentOffset = struct {
         subpaths: []const Subpath,
     ) @This() {
         const path = paths[path_monoid.path_index];
-        const subpath = paths[path_monoid.subpath_index];
+        const subpath = subpaths[path_monoid.subpath_index];
         const current_segment_offset = segment_offsets[segment_index];
         const previous_segment_offset = if (segment_index > 0) segment_offsets[segment_index - 1] else SegmentOffset{};
         const start_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
