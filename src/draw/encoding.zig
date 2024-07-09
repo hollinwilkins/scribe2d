@@ -856,10 +856,8 @@ pub const Path = struct {
     stroke_bounds: RectF32 = RectF32.NONE,
     start_fill_boundary_offset: u32 = 0,
     end_fill_boundary_offset: u32 = 0,
-    end_fill_merge_offset: u32 = 0,
     start_stroke_boundary_offset: u32 = 0,
     end_stroke_boundary_offset: u32 = 0,
-    end_stroke_merge_offset: u32 = 0,
     fill_bump: Bump = Bump{ .raw = 0 },
     stroke_bump: Bump = Bump{ .raw = 0 },
 };
@@ -1193,6 +1191,8 @@ pub const BoundaryFragment = struct {
     pixel: PointI32,
     masks: Masks,
     intersections: [2]IntersectionF32,
+    is_merge: bool = false,
+    stencil_mask: u16 = 0,
 
     pub fn create(half_planes: *const HalfPlanesU16, grid_intersections: [2]*const GridIntersection) @This() {
         const pixel = grid_intersections[0].pixel.min(grid_intersections[1].pixel);
@@ -1310,12 +1310,6 @@ pub const BoundaryFragment = struct {
 
         return 0.0;
     }
-};
-
-pub const MergeFragment = struct {
-    pixel: PointI32,
-    stencil_mask: u16 = 0,
-    boundary_offset: u32 = 0,
 
     pub fn getIntensity(self: @This()) f32 {
         return @as(f32, @floatFromInt(@popCount(self.stencil_mask))) / 16.0;

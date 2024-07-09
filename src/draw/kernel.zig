@@ -491,8 +491,7 @@ pub const Flatten = struct {
         const transform = transforms[path_monoid.transform_index];
 
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
-            std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
-            return;
+            @panic("Cannot flatten ArcF32 yet.\n");
         }
 
         var writer = Writer{
@@ -1597,121 +1596,31 @@ pub const Rasterize = struct {
         return false;
     }
 
-    pub fn merge(
-        boundary_fragments: []const BoundaryFragment,
-        range: RangeU32,
-        paths: []Path,
-        merge_fragments: []MergeFragment,
-    ) void {
-        for (range.start..range.end) |path_index| {
-            mergePath(
-                @intCast(path_index),
-                boundary_fragments,
-                paths,
-                merge_fragments,
-            );
-
-            const path = &paths[path_index];
-            path.end_fill_merge_offset = path.start_fill_boundary_offset + path.fill_bump.raw;
-            path.end_stroke_merge_offset = path.start_stroke_boundary_offset + path.stroke_bump.raw;
-            path.fill_bump.raw = 0;
-            path.stroke_bump.raw = 0;
-        }
-    }
-
-    pub fn mergePath(
-        path_index: u32,
-        boundary_fragments: []const BoundaryFragment,
-        paths: []Path,
-        merge_fragments: []MergeFragment,
-    ) void {
-        const path = &paths[path_index];
-
-        var fill_bump = BumpAllocator{
-            .start = path.start_fill_boundary_offset,
-            .end = path.end_fill_boundary_offset,
-            .offset = &path.fill_bump,
-        };
-        var stroke_bump = BumpAllocator{
-            .start = path.start_stroke_boundary_offset,
-            .end = path.end_stroke_boundary_offset,
-            .offset = &path.stroke_bump,
-        };
-
-        mergePath2(
-            path.start_fill_boundary_offset,
-            path.end_fill_boundary_offset,
-            boundary_fragments,
-            &fill_bump,
-            merge_fragments,
-        );
-
-        mergePath2(
-            path.start_stroke_boundary_offset,
-            path.end_stroke_boundary_offset,
-            boundary_fragments,
-            &stroke_bump,
-            merge_fragments,
-        );
-    }
-
-    pub fn mergePath2(
-        start_boundary_offset: u32,
-        end_boundary_offset: u32,
-        boundary_fragments: []const BoundaryFragment,
-        bump: *BumpAllocator,
-        merge_fragments: []MergeFragment,
-    ) void {
-        const path_boundary_fragments = boundary_fragments[start_boundary_offset..end_boundary_offset];
-        if (path_boundary_fragments.len == 0) {
-            return;
-        }
-
-        var merge_fragment = &merge_fragments[bump.bump(1)];
-        merge_fragment.* = MergeFragment{
-            .pixel = boundary_fragments[start_boundary_offset].pixel,
-        };
-        for (path_boundary_fragments, 0..) |*boundary_fragment, boundary_fragment_index| {
-            if (boundary_fragment.pixel.x != merge_fragment.pixel.x or boundary_fragment.pixel.y != merge_fragment.pixel.y) {
-                merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(boundary_fragment_index));
-
-                merge_fragment = &merge_fragments[bump.bump(1)];
-                merge_fragment.* = MergeFragment{
-                    .pixel = boundary_fragment.pixel,
-                };
-            }
-        }
-
-        merge_fragment.boundary_offset = start_boundary_offset + @as(u32, @intCast(path_boundary_fragments.len));
-    }
-
     pub fn mask(
         config: KernelConfig,
         paths: []const Path,
         range: RangeU32,
-        boundary_fragments: []const BoundaryFragment,
-        merge_fragments: []MergeFragment,
+        boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |path_index| {
             const path = paths[path_index];
 
             const fill_merge_range = RangeU32{
                 .start = 0,
-                .end = path.end_fill_merge_offset - path.start_fill_boundary_offset,
+                .end = path.end_fill_boundary_offset - path.start_fill_boundary_offset,
             };
             const stroke_merge_range = RangeU32{
                 .start = 0,
-                .end = path.end_stroke_merge_offset - path.start_stroke_boundary_offset,
+                .end = path.end_stroke_boundary_offset - path.start_stroke_boundary_offset,
             };
-            const fill_merge_fragments = merge_fragments[path.start_fill_boundary_offset..path.end_fill_merge_offset];
-            const stroke_merge_fragments = merge_fragments[path.start_stroke_boundary_offset..path.end_stroke_merge_offset];
+            const fill_boundary_fragments = boundary_fragments[path.start_fill_boundary_offset..path.end_fill_boundary_offset];
+            const stroke_boundary_fragments = boundary_fragments[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset];
 
             var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
             while (chunk_iter.next()) |chunk| {
                 maskPath(
                     chunk,
-                    boundary_fragments,
-                    fill_merge_fragments,
+                    fill_boundary_fragments,
                 );
             }
 
@@ -1719,8 +1628,7 @@ pub const Rasterize = struct {
             while (chunk_iter.next()) |chunk| {
                 maskPath(
                     chunk,
-                    boundary_fragments,
-                    stroke_merge_fragments,
+                    stroke_boundary_fragments,
                 );
             }
         }
@@ -1728,31 +1636,41 @@ pub const Rasterize = struct {
 
     pub fn maskPath(
         range: RangeU32,
-        boundary_fragments: []const BoundaryFragment,
-        merge_fragments: []MergeFragment,
+        boundary_fragments: [] BoundaryFragment,
     ) void {
-        for (range.start..range.end) |merge_fragment_index| {
+        for (range.start..range.end) |boundary_fragment_index| {
             maskFragment(
-                @intCast(merge_fragment_index),
+                @intCast(boundary_fragment_index),
                 boundary_fragments,
-                merge_fragments,
             );
         }
     }
 
     pub fn maskFragment(
-        merge_fragment_index: u32,
-        boundary_fragments: []const BoundaryFragment,
-        merge_fragments: []MergeFragment,
+        boundary_fragment_index: u32,
+        boundary_fragments: [] BoundaryFragment,
     ) void {
-        const merge_fragment = &merge_fragments[merge_fragment_index];
-        var start_boundary_fragment_offset: u32 = 0;
-        const previous_merge_fragment = if (merge_fragment_index > 0) merge_fragments[merge_fragment_index - 1] else null;
-        if (previous_merge_fragment) |f| {
-            start_boundary_fragment_offset = f.boundary_offset;
+        const merge_fragment = &boundary_fragments[boundary_fragment_index];
+        const previous_boundary_fragment = if (boundary_fragment_index > 0) boundary_fragments[boundary_fragment_index - 1] else null;
+
+        if (previous_boundary_fragment) |previous| {
+            if (std.meta.eql(previous.pixel, merge_fragment.pixel)) {
+                // not the start of the merge section
+                return;
+            }
         }
-        const end_boundary_fragment_offset = merge_fragment.boundary_offset;
-        const merge_boundary_fragments = boundary_fragments[start_boundary_fragment_offset..end_boundary_fragment_offset];
+
+        merge_fragment.is_merge = true;
+        var end_boundary_offset = boundary_fragment_index + 1;
+        for (boundary_fragments[end_boundary_offset..]) |next_boundary_fragment| {
+            if (!std.meta.eql(merge_fragment.pixel, next_boundary_fragment.pixel)) {
+                break;
+            }
+
+            end_boundary_offset += 1;
+        }
+
+        const merge_boundary_fragments = boundary_fragments[boundary_fragment_index..end_boundary_offset];
 
         // calculate main ray winding
         var main_ray_winding: f32 = 0.0;
@@ -1881,14 +1799,19 @@ pub const Rasterize = struct {
 
 pub const Blend = struct {
     pub fn fill(
-        merge_fragments: []const MergeFragment,
+        bundary_fragments: []const BoundaryFragment,
         range: RangeU32,
         texture: *Texture,
     ) void {
         const color_blend = ColorBlend.Alpha;
 
         for (range.start..range.end) |merge_index| {
-            const merge_fragment = merge_fragments[merge_index];
+            const merge_fragment = bundary_fragments[merge_index];
+
+            if (!merge_fragment.is_merge) {
+                continue;
+            }
+
             const pixel = merge_fragment.pixel;
             if (pixel.x < 0 or pixel.y < 0 or pixel.x >= texture.dimensions.width or pixel.y >= texture.dimensions.height) {
                 continue;
