@@ -230,7 +230,7 @@ pub const PathMonoid = extern struct {
             .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
         };
         var path_offset: u32 = 0;
-        if (index.path == 1) {
+        if (index.path == 1 or index.subpath == 1) {
             path_offset += switch (segment.kind) {
                 .line_f32 => @sizeOf(PointF32),
                 .line_i16 => @sizeOf(PointI16),
