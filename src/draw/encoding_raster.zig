@@ -324,7 +324,7 @@ pub const CpuRasterizer = struct {
         const rasterizer = kernel_module.Rasterize;
         const last_segment_offset = self.segment_offsets.getLast();
         const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.boundary_fragments);
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
 
         const flat_segment_range = RangeU32{
             .start = 0,

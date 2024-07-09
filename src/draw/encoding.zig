@@ -886,11 +886,11 @@ pub const PathOffset = struct {
             end_path_segment_offset = segment_offsets[segment_offsets.len - 1];
         }
 
-        const start_fill_boundary_offset = start_path_segment_offset.sum.boundary_fragments;
-        const end_fill_boundary_offset = start_path_segment_offset.sum.boundary_fragments + (end_path_segment_offset.fill.boundary_fragments - start_path_segment_offset.fill.boundary_fragments);
+        const start_fill_boundary_offset = start_path_segment_offset.sum.intersections;
+        const end_fill_boundary_offset = start_path_segment_offset.sum.intersections + (end_path_segment_offset.fill.intersections - start_path_segment_offset.fill.intersections);
 
         const start_stroke_boundary_offset = end_fill_boundary_offset;
-        const end_stroke_boundary_offset = end_path_segment_offset.sum.boundary_fragments;
+        const end_stroke_boundary_offset = end_path_segment_offset.sum.intersections;
 
         return @This(){
             .start_fill_boundary_offset = start_fill_boundary_offset,
@@ -1081,8 +1081,6 @@ pub const Offset = struct {
     lines: u32 = 0,
     line_offset: u32 = 0,
     intersections: u32 = 0,
-    boundary_fragments: u32 = 0,
-    merge_fragments: u32 = 0,
 
     pub fn create(lines: u32, intersections: u32) @This() {
         std.debug.assert(intersections > 4);
@@ -1090,8 +1088,6 @@ pub const Offset = struct {
             .lines = lines,
             .line_offset = lineOffset(lines),
             .intersections = intersections,
-            .boundary_fragments = intersections,
-            .merge_fragments = intersections,
         };
     }
 
@@ -1102,8 +1098,6 @@ pub const Offset = struct {
             .lines = n_lines,
             .line_offset = lineOffset(n_lines),
             .intersections = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.intersections)) * scalar)),
-            .boundary_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.boundary_fragments)) * scalar)),
-            .merge_fragments = @intFromFloat(@ceil(@as(f32, @floatFromInt(self.merge_fragments)) * scalar)),
         };
     }
 
@@ -1113,8 +1107,6 @@ pub const Offset = struct {
             .lines = self.lines + other.lines,
             .line_offset = self.line_offset + other.line_offset,
             .intersections = self.intersections + other.intersections,
-            .boundary_fragments = self.boundary_fragments + other.boundary_fragments,
-            .merge_fragments = self.merge_fragments + other.merge_fragments,
         };
     }
 
