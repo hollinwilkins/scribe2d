@@ -770,9 +770,10 @@ pub const CpuRasterizer = struct {
                 for (path.start_fill_boundary_offset..path.end_fill_boundary_offset) |merge_index| {
                     const merge_fragment = self.boundary_fragments.items[merge_index];
                     if (merge_fragment.is_merge) {
-                        std.debug.print("Pixel({},{}), Stencil({b:0>16})\n", .{
+                        std.debug.print("Pixel({},{}), MainRayWinding({}), Stencil({b:0>16})\n", .{
                             merge_fragment.pixel.x,
                             merge_fragment.pixel.y,
+                            merge_fragment.main_ray_winding,
                             merge_fragment.stencil_mask,
                         });
                     }
@@ -784,9 +785,10 @@ pub const CpuRasterizer = struct {
                 for (path.start_stroke_boundary_offset..path.end_stroke_boundary_offset) |merge_index| {
                     const merge_fragment = self.boundary_fragments.items[merge_index];
                     if (merge_fragment.is_merge) {
-                        std.debug.print("Pixel({},{}), Stencil({b:0>16}\n", .{
+                        std.debug.print("Pixel({},{}), MainRayWinding({}), Stencil({b:0>16}\n", .{
                             merge_fragment.pixel.x,
                             merge_fragment.pixel.y,
+                            merge_fragment.main_ray_winding,
                             merge_fragment.stencil_mask,
                         });
                     }

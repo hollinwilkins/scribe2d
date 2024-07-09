@@ -1761,6 +1761,11 @@ pub const Rasterize = struct {
 
         const scanline_boundary_fragments = boundary_fragments[boundary_fragment_index..end_boundary_offset];
 
+        if (merge_fragment.pixel.y == 18) {
+            std.debug.assert(true);
+            std.debug.assert(true);
+        }
+
         // calculate main ray winding
         var main_ray_winding: f32 = 0.0;
         var current_merge_fragment = merge_fragment;
