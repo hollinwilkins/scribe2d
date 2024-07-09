@@ -51,26 +51,26 @@ pub fn moveTo(self: *@This(), point: PointF32) void {
     self.pen.moveTo(point2);
 }
 
-pub fn lineTo(self: *@This(), end: PointF32) void {
-    var end2 = end;
+pub fn lineTo(self: *@This(), p1: PointF32) void {
+    var end2 = p1;
     if (!self.is_default_transform) {
-        end2 = self.transform.apply(end);
+        end2 = self.transform.apply(p1);
     }
 
     self.bounds = self.bounds.extendBy(end2);
     self.pen.lineTo(end2);
 }
 
-pub fn quadTo(self: *@This(), end: PointF32, control: PointF32) void {
-    var end2 = end;
-    var control2 = control;
+pub fn quadTo(self: *@This(), p1: PointF32, p2: PointF32) void {
+    var p1_2 = p1;
+    var p2_2 = p2;
     if (!self.is_default_transform) {
-        end2 = self.transform.apply(end);
-        control2 = self.transform.apply(control);
+        p1_2 = self.transform.apply(p1);
+        p2_2 = self.transform.apply(p2);
     }
 
-    self.bounds = self.bounds.extendBy(end2).extendBy(control2);
-    self.pen.quadTo(end2, control2);
+    self.bounds = self.bounds.extendBy(p1_2).extendBy(p2_2);
+    self.pen.quadTo(p1_2, p2_2);
 }
 
 pub fn getBounds(self: @This()) RectF32 {

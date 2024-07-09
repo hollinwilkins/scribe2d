@@ -13,16 +13,16 @@ pub fn moveTo(self: @This(), point: PointF32) void {
     self.vtable.moveTo(self.ptr, point);
 }
 
-pub fn lineTo(self: @This(), point: PointF32) void {
-    self.vtable.lineTo(self.ptr, point);
+pub fn lineTo(self: @This(), p1: PointF32) void {
+    self.vtable.lineTo(self.ptr, p1);
 }
 
-pub fn quadTo(self: @This(), end: PointF32, control: PointF32) void {
-    self.vtable.quadTo(self.ptr, end, control);
+pub fn quadTo(self: @This(), p1: PointF32, p2: PointF32) void {
+    self.vtable.quadTo(self.ptr, p1, p2);
 }
 
-pub fn curveTo(self: @This(), end: PointF32, control1: PointF32, control2: PointF32) void {
-    self.vtable.curveTo(self.ptr, end, control1, control2);
+pub fn curveTo(self: @This(), p1: PointF32, p2: PointF32, p3: PointF32) void {
+    self.vtable.curveTo(self.ptr, p1, p2, p3);
 }
 
 pub fn open(self: @This()) void {
@@ -35,9 +35,9 @@ pub fn close(self: @This(), bounds: RectF32, ppem: f32) void {
 
 pub const VTable = struct {
     moveTo: *const fn (ctx: *anyopaque, point: PointF32) void,
-    lineTo: *const fn (ctx: *anyopaque, end: PointF32) void,
-    quadTo: *const fn (ctx: *anyopaque, end: PointF32, control: PointF32) void,
-    curveTo: *const fn (ctx: *anyopaque, end: PointF32, control1: PointF32, control2: PointF32) void,
+    lineTo: *const fn (ctx: *anyopaque, p1: PointF32) void,
+    quadTo: *const fn (ctx: *anyopaque, p1: PointF32, p2: PointF32) void,
+    curveTo: *const fn (ctx: *anyopaque, p1: PointF32, p2: PointF32, p3: PointF32) void,
     open: *const fn (ctx: *anyopaque) void,
     close: *const fn (ctx: *anyopaque, bounds: RectF32, ppem: f32) void,
 };
@@ -61,16 +61,16 @@ pub const Debug = struct {
         std.debug.print("Outliner.Debug.moveTo({})\n", .{point});
     }
 
-    pub fn lineTo(_: *anyopaque, end: PointF32) void {
-        std.debug.print("Outliner.Debug.lineTo({})\n", .{end});
+    pub fn lineTo(_: *anyopaque, p1: PointF32) void {
+        std.debug.print("Outliner.Debug.lineTo({})\n", .{p1});
     }
 
-    pub fn quadTo(_: *anyopaque, end: PointF32, control: PointF32) void {
-        std.debug.print("Outliner.Debug.quadTo({}, {})\n", .{ end, control });
+    pub fn quadTo(_: *anyopaque, p1: PointF32, p2: PointF32) void {
+        std.debug.print("Outliner.Debug.quadTo({}, {})\n", .{ p1, p2 });
     }
 
-    pub fn curveTo(_: *anyopaque, end: PointF32, control1: PointF32, control2: PointF32) void {
-        std.debug.print("Outliner.Debug.curveTo({}, {}, {})\n", .{ end, control1, control2 });
+    pub fn curveTo(_: *anyopaque, p1: PointF32, p2: PointF32, p3: PointF32) void {
+        std.debug.print("Outliner.Debug.curveTo({}, {}, {})\n", .{ p1, p2, p3 });
     }
 
     pub fn open(_: *anyopaque) void {

@@ -39,40 +39,76 @@ pub const CpuRasterizer = struct {
         pub const RUN_FLAG_MERGE: u8 = 0b00100000;
         pub const RUN_FLAG_MASK: u8 = 0b01000000;
         pub const RUN_FLAG_FLUSH_TEXTURE: u8 = 0b10000000;
+        pub const RUN_FLAG_ALL = RUN_FLAG_EXPAND_PATH_MONOIDS | RUN_FLAG_ESTIMATE_SEGMENTS |
+            RUN_FLAG_FLATTEN | RUN_FLAG_INTERSECT | RUN_FLAG_BOUNDARY |
+            RUN_FLAG_MERGE | RUN_FLAG_MASK | RUN_FLAG_FLUSH_TEXTURE;
 
         run_flags: u8 = RUN_FLAG_FLUSH_TEXTURE,
+        debug_flags: u8 = RUN_FLAG_ALL,
         kernel_config: KernelConfig = KernelConfig.DEFAULT,
 
         pub fn runExpandPathMonoids(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_EXPAND_PATH_MONOIDS;
         }
 
+        pub fn debugExpandPathMonoids(self: @This()) bool {
+            return self.runExpandPathMonoids() and self.debug_flags & RUN_FLAG_EXPAND_PATH_MONOIDS > 0;
+        }
+
         pub fn runEstimateSegments(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_ESTIMATE_SEGMENTS;
+        }
+
+        pub fn debugEstimateSegments(self: @This()) bool {
+            return self.runEstimateSegments() and self.debug_flags & RUN_FLAG_ESTIMATE_SEGMENTS > 0;
         }
 
         pub fn runFlatten(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_FLATTEN;
         }
 
+        pub fn debugFlatten(self: @This()) bool {
+            return self.runFlatten() and self.debug_flags & RUN_FLAG_FLATTEN > 0;
+        }
+
         pub fn runIntersect(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_INTERSECT;
+        }
+
+        pub fn debugIntersect(self: @This()) bool {
+            return self.runIntersect() and self.debug_flags & RUN_FLAG_INTERSECT > 0;
         }
 
         pub fn runBoundary(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_BOUNDARY;
         }
 
+        pub fn debugBoundary(self: @This()) bool {
+            return self.runBoundary() and self.debug_flags & RUN_FLAG_BOUNDARY > 0;
+        }
+
         pub fn runMerge(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_MERGE;
+        }
+
+        pub fn debugMerge(self: @This()) bool {
+            return self.runMerge() and self.debug_flags & RUN_FLAG_MERGE > 0;
         }
 
         pub fn runMask(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_MASK;
         }
 
+        pub fn debugMask(self: @This()) bool {
+            return self.runMask() and self.debug_flags & RUN_FLAG_MASK > 0;
+        }
+
         pub fn runFlushTexture(self: @This()) bool {
             return self.run_flags >= RUN_FLAG_FLUSH_TEXTURE;
+        }
+
+        pub fn debugFlushTexture(self: @This()) bool {
+            return self.runFlushTexture() and self.debug_flags & RUN_FLAG_FLUSH_TEXTURE > 0;
         }
     };
 
@@ -460,107 +496,111 @@ pub const CpuRasterizer = struct {
     }
 
     pub fn debugPrint(self: @This(), texture: Texture) void {
-        std.debug.print("============ Path Monoids ============\n", .{});
-        for (self.path_monoids.items) |path_monoid| {
-            std.debug.print("{}\n", .{path_monoid});
-        }
-        std.debug.print("======================================\n", .{});
-
-        std.debug.print("============ Path Segments ============\n", .{});
-        for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
-            switch (path_tag.segment.kind) {
-                .line_f32 => std.debug.print("LineF32: {}\n", .{
-                    self.encoding.getSegment(core.LineF32, path_monoid),
-                }),
-                .arc_f32 => std.debug.print("ArcF32: {}\n", .{
-                    self.encoding.getSegment(core.ArcF32, path_monoid),
-                }),
-                .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
-                }),
-                .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierF32, path_monoid),
-                }),
-                .line_i16 => std.debug.print("LineI16: {}\n", .{
-                    self.encoding.getSegment(core.LineI16, path_monoid),
-                }),
-                .arc_i16 => std.debug.print("ArcI16: {}\n", .{
-                    self.encoding.getSegment(core.ArcI16, path_monoid),
-                }),
-                .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
-                }),
-                .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
-                    self.encoding.getSegment(core.CubicBezierI16, path_monoid),
-                }),
+        if (self.config.debugExpandPathMonoids()) {
+            std.debug.print("============ Path Monoids ============\n", .{});
+            for (self.path_monoids.items) |path_monoid| {
+                std.debug.print("{}\n", .{path_monoid});
             }
+            std.debug.print("======================================\n", .{});
+        }
 
-            if (self.config.runEstimateSegments()) {
+        if (self.config.debugEstimateSegments()) {
+            std.debug.print("============ Path Segments ============\n", .{});
+            for (self.encoding.path_tags, self.path_monoids.items, 0..) |path_tag, path_monoid, segment_index| {
+                switch (path_tag.segment.kind) {
+                    .line_f32 => std.debug.print("LineF32: {}\n", .{
+                        self.encoding.getSegment(core.LineF32, path_monoid),
+                    }),
+                    .arc_f32 => std.debug.print("ArcF32: {}\n", .{
+                        self.encoding.getSegment(core.ArcF32, path_monoid),
+                    }),
+                    .quadratic_bezier_f32 => std.debug.print("QuadraticBezierF32: {}\n", .{
+                        self.encoding.getSegment(core.QuadraticBezierF32, path_monoid),
+                    }),
+                    .cubic_bezier_f32 => std.debug.print("CubicBezierF32: {}\n", .{
+                        self.encoding.getSegment(core.CubicBezierF32, path_monoid),
+                    }),
+                    .line_i16 => std.debug.print("LineI16: {}\n", .{
+                        self.encoding.getSegment(core.LineI16, path_monoid),
+                    }),
+                    .arc_i16 => std.debug.print("ArcI16: {}\n", .{
+                        self.encoding.getSegment(core.ArcI16, path_monoid),
+                    }),
+                    .quadratic_bezier_i16 => std.debug.print("QuadraticBezierI16: {}\n", .{
+                        self.encoding.getSegment(core.QuadraticBezierI16, path_monoid),
+                    }),
+                    .cubic_bezier_i16 => std.debug.print("CubicBezierI16: {}\n", .{
+                        self.encoding.getSegment(core.CubicBezierI16, path_monoid),
+                    }),
+                }
+
                 const offset = self.segment_offsets.items[segment_index];
                 std.debug.print("Offset: {}\n", .{offset});
                 std.debug.print("----------\n", .{});
             }
+            std.debug.print("======================================\n", .{});
         }
-        std.debug.print("======================================\n", .{});
 
-        if (self.config.runFlatten()) {
-            std.debug.print("============ Flat Fill Lines ============\n", .{});
-            for (self.subpaths.items) |subpath| {
-                const path_monoid = self.path_monoids.items[subpath.segment_index];
-                const subpath_offsets = SubpathOffset.create(
-                    subpath.segment_index,
-                    self.path_monoids.items,
-                    self.segment_offsets.items,
-                    self.paths.items,
-                    self.subpaths.items,
-                );
+        if (self.config.debugFlatten()) {
+            if (self.config.runFlatten()) {
+                std.debug.print("============ Flat Fill Lines ============\n", .{});
+                for (self.subpaths.items) |subpath| {
+                    const path_monoid = self.path_monoids.items[subpath.segment_index];
+                    const subpath_offsets = SubpathOffset.create(
+                        subpath.segment_index,
+                        self.path_monoids.items,
+                        self.segment_offsets.items,
+                        self.paths.items,
+                        self.subpaths.items,
+                    );
 
-                std.debug.print("Subpath({},{})\n", .{ path_monoid.path_index, path_monoid.subpath_index });
-                std.debug.print("Fill Lines\n", .{});
-                std.debug.print("-----------\n", .{});
-                for (subpath_offsets.start_fill_flat_segment_offset..subpath_offsets.end_fill_flat_segment_offset) |flat_segment_index| {
-                    const flat_segment = self.flat_segments.items[flat_segment_index];
-                    var line_iter = encoding_module.LineIterator{
-                        .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
-                    };
+                    std.debug.print("Subpath({},{})\n", .{ path_monoid.path_index, path_monoid.subpath_index });
+                    std.debug.print("Fill Lines\n", .{});
+                    std.debug.print("-----------\n", .{});
+                    for (subpath_offsets.start_fill_flat_segment_offset..subpath_offsets.end_fill_flat_segment_offset) |flat_segment_index| {
+                        const flat_segment = self.flat_segments.items[flat_segment_index];
+                        var line_iter = encoding_module.LineIterator{
+                            .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                        };
 
-                    while (line_iter.next()) |line| {
-                        std.debug.print("{}\n", .{line});
+                        while (line_iter.next()) |line| {
+                            std.debug.print("{}\n", .{line});
+                        }
                     }
-                }
-                std.debug.print("-----------\n\n", .{});
+                    std.debug.print("-----------\n\n", .{});
 
-                std.debug.print("Front Stroke Lines\n", .{});
-                std.debug.print("-----------\n", .{});
-                for (subpath_offsets.start_front_stroke_flat_segment_offset..subpath_offsets.end_front_stroke_flat_segment_offset) |flat_segment_index| {
-                    const flat_segment = self.flat_segments.items[flat_segment_index];
-                    var line_iter = encoding_module.LineIterator{
-                        .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
-                    };
+                    std.debug.print("Front Stroke Lines\n", .{});
+                    std.debug.print("-----------\n", .{});
+                    for (subpath_offsets.start_front_stroke_flat_segment_offset..subpath_offsets.end_front_stroke_flat_segment_offset) |flat_segment_index| {
+                        const flat_segment = self.flat_segments.items[flat_segment_index];
+                        var line_iter = encoding_module.LineIterator{
+                            .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                        };
 
-                    while (line_iter.next()) |line| {
-                        std.debug.print("{}\n", .{line});
+                        while (line_iter.next()) |line| {
+                            std.debug.print("{}\n", .{line});
+                        }
                     }
-                }
-                std.debug.print("-----------\n\n", .{});
+                    std.debug.print("-----------\n\n", .{});
 
-                std.debug.print("Back Stroke Lines\n", .{});
-                std.debug.print("-----------\n", .{});
-                for (subpath_offsets.start_back_stroke_flat_segment_offset..subpath_offsets.end_back_stroke_flat_segment_offset) |flat_segment_index| {
-                    const flat_segment = self.flat_segments.items[flat_segment_index];
-                    var line_iter = encoding_module.LineIterator{
-                        .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
-                    };
+                    std.debug.print("Back Stroke Lines\n", .{});
+                    std.debug.print("-----------\n", .{});
+                    for (subpath_offsets.start_back_stroke_flat_segment_offset..subpath_offsets.end_back_stroke_flat_segment_offset) |flat_segment_index| {
+                        const flat_segment = self.flat_segments.items[flat_segment_index];
+                        var line_iter = encoding_module.LineIterator{
+                            .line_data = self.line_data.items[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
+                        };
 
-                    while (line_iter.next()) |line| {
-                        std.debug.print("{}\n", .{line});
+                        while (line_iter.next()) |line| {
+                            std.debug.print("{}\n", .{line});
+                        }
                     }
+                    std.debug.print("-----------\n", .{});
                 }
-                std.debug.print("-----------\n", .{});
             }
         }
 
-        if (self.config.runIntersect()) {
+        if (self.config.debugIntersect()) {
             std.debug.print("============ Grid Intersections ============\n", .{});
             for (self.subpaths.items) |subpath| {
                 const path_monoid = self.path_monoids.items[subpath.segment_index];
@@ -629,7 +669,7 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        if (self.config.runBoundary()) {
+        if (self.config.debugBoundary()) {
             std.debug.print("============ Boundary Fragments ============\n", .{});
             for (self.paths.items) |path| {
                 const path_monoid = self.path_monoids.items[path.segment_index];
@@ -659,7 +699,7 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        if (self.config.runMerge()) {
+        if (self.config.debugMerge()) {
             std.debug.print("============ Merge Fragments ============\n", .{});
             for (self.paths.items) |path| {
                 const path_monoid = self.path_monoids.items[path.segment_index];
@@ -691,7 +731,7 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        if (self.config.runFlushTexture()) {
+        if (self.config.debugFlushTexture()) {
             std.debug.print("\n============== Boundary Texture\n\n", .{});
             for (0..texture.dimensions.height) |y| {
                 std.debug.print("{:0>4}: ", .{y});

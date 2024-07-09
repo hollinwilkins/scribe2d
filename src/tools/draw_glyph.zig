@@ -45,9 +45,9 @@ pub fn main() !void {
     style.setFill(draw.Style.Fill{
         .brush = .color,
     });
-    style.setStroke(draw.Style.Stroke{
-        .join = .bevel,
-    });
+    // style.setStroke(draw.Style.Stroke{
+    //     .join = .bevel,
+    // });
     try encoder.encodeStyle(style);
 
     var path_encoder = encoder.pathEncoder(f32);
@@ -59,7 +59,7 @@ pub fn main() !void {
 
     const encoding = encoder.encode();
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_BOUNDARY,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,
