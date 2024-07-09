@@ -33,13 +33,11 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    _ = output_file;
-
     const outline_width = 1.0;
     var style = draw.Style{};
     try encoder.encodeColor(draw.ColorU8{
-        .r = 255,
-        .g = 255,
+        .r = 0,
+        .g = 0,
         .b = 0,
         .a = 255,
     });
@@ -49,10 +47,11 @@ pub fn main() !void {
     try encoder.encodeColor(draw.ColorU8{
         .r = 255,
         .g = 0,
-        .b = 255,
+        .b = 0,
         .a = 255,
     });
     style.setStroke(draw.Style.Stroke{
+        .brush = .color,
         .join = .bevel,
         .width = outline_width,
     });
@@ -117,6 +116,8 @@ pub fn main() !void {
     try rasterizer.rasterize(&texture);
 
     rasterizer.debugPrint(texture);
+
+    try image.writeToFile(output_file, .png);
 
     // var args = std.process.args();
 
@@ -379,5 +380,4 @@ pub fn main() !void {
 
     //     std.debug.print("==============\n", .{});
     // }
-    // try image.writeToFile(output_file, .png);
 }
