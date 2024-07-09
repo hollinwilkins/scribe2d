@@ -1,12 +1,11 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
-const curve = @import("./curve.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const PointF32 = core.PointF32;
 const PointU32 = core.PointU32;
+const LineF32 = core.LineF32;
 const DimensionsU32 = core.DimensionsU32;
-const Line = curve.Line;
 
 const DEGREE_45: f32 = (2 * std.math.pi) / 8.0;
 
@@ -49,14 +48,14 @@ pub fn HalfPlanes(comptime T: type, points: []const PointF32) type {
             if (p0.y > p1.y) {
                 std.mem.swap(PointF32, &p0, &p1);
             }
-            const line = Line.create(p0, p1).translate(PointF32{
+            const line = LineF32.create(p0, p1).translate(PointF32{
                 .x = -0.5,
                 .y = -0.5,
             });
 
-            if (line.getNormal().normalize()) |n_n| {
+            if (line.normal().normalize()) |n_n| {
                 var n = n_n;
-                var c = n.dot(line.start);
+                var c = n.dot(line.p0);
 
                 if (c < 0) {
                     c = -c;

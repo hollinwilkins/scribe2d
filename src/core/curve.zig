@@ -64,10 +64,24 @@ pub fn Line(comptime T: type) type {
             };
         }
 
+        pub fn normal(self: @This()) P {
+            return P{
+                .x = -(self.p1.y - self.p0.y),
+                .y = self.p1.x - self.p0.x,
+            };
+        }
+
         pub fn affineTransform(self: @This(), affine: Transform(T).Affine) @This() {
             return @This(){
                 .p0 = self.p0.affineTransform(affine),
                 .p1 = self.p1.affineTransform(affine),
+            };
+        }
+
+        pub fn translate(self: @This(), t: P) @This() {
+            return @This(){
+                .p0 = self.p0.add(t),
+                .p1 = self.p1.add(t),
             };
         }
 
