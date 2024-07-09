@@ -1485,8 +1485,8 @@ pub const Rasterize = struct {
                 };
 
                 if (flat_segment.kind == .stroke_front) {
-                    const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_fill_flat_segment_offset;
-                    const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
+                    const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_front_stroke_flat_segment_offset;
+                    const subpath_flat_segments = flat_segments[subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset];
                     const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                     var intersection_iter = IntersectionIterator{
                         .flat_segment_index = subpath_flat_segment_index,
@@ -1504,8 +1504,8 @@ pub const Rasterize = struct {
                         boundary_fragments,
                     );
                 } else if (flat_segment.kind == .stroke_back) {
-                    const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_fill_flat_segment_offset;
-                    const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
+                    const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_back_stroke_flat_segment_offset;
+                    const subpath_flat_segments = flat_segments[subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset];
                     const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                     var intersection_iter = IntersectionIterator{
                         .flat_segment_index = subpath_flat_segment_index,

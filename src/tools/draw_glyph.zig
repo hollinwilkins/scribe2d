@@ -42,9 +42,9 @@ pub fn main() !void {
         .a = 255,
     });
     var style = draw.Style{};
-    style.setFill(draw.Style.Fill{
-        .brush = .color,
-    });
+    // style.setFill(draw.Style.Fill{
+    //     .brush = .color,
+    // });
     style.setStroke(draw.Style.Stroke{
         .join = .bevel,
     });
@@ -60,7 +60,7 @@ pub fn main() !void {
 
     const encoding = encoder.encode();
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .kernel_config = draw.KernelConfig.SERIAL,
     };
     var rasterizer = try draw.CpuRasterizer.init(
