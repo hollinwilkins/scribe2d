@@ -754,16 +754,16 @@ pub fn PathEncoder(comptime T: type) type {
                 };
             }
 
-            fn lineTo(ctx: *anyopaque, point: PointF32) void {
+            fn lineTo(ctx: *anyopaque, p1: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                _ = b.lineTo(point) catch {
+                _ = b.lineTo(p1) catch {
                     unreachable;
                 };
             }
 
-            fn quadTo(ctx: *anyopaque, control: PointF32, point: PointF32) void {
+            fn quadTo(ctx: *anyopaque, p1: PointF32, p2: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                _ = b.quadTo(control, point) catch {
+                _ = b.quadTo(p1, p2) catch {
                     unreachable;
                 };
             }
@@ -779,7 +779,7 @@ pub fn PathEncoder(comptime T: type) type {
             fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
 
-                const transform = TransformF32{
+                const transform = (TransformF32{
                     .scale = PointF32{
                         .x = ppem,
                         .y = ppem,
@@ -788,11 +788,10 @@ pub fn PathEncoder(comptime T: type) type {
                         .x = -bounds.min.x,
                         .y = -bounds.min.y,
                     },
-                };
-                const bounds2 = bounds.transform(transform);
+                }).toAffine();
+                const bounds2 = bounds.affineTransform(transform);
 
-                b.affineTransform(transform.toAffine());
-                b.affineTransform((TransformF32{
+                const transform2 = (TransformF32{
                     .scale = PointF32{
                         .x = 1.0,
                         .y = -1.0,
@@ -801,7 +800,10 @@ pub fn PathEncoder(comptime T: type) type {
                         .x = -(bounds2.getWidth() / 2.0),
                         .y = -(bounds2.getHeight() / 2.0),
                     },
-                }).toAffine());
+                }).toAffine();
+
+                b.affineTransform(transform);
+                b.affineTransform(transform2);
 
                 b.close() catch {
                     unreachable;

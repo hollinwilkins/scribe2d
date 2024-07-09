@@ -314,6 +314,13 @@ pub fn Rect(comptime T: type) type {
             };
         }
 
+        pub fn affineTransform(self: @This(), t: Transform(T).Affine) @This() {
+            return @This(){
+                .min = self.min.affineTransform(t),
+                .max = self.max.affineTransform(t),
+            };
+        }
+
         pub fn transformMatrixInPlace(self: *@This(), t: Transform(T).Matrix) void {
             const p0 = t.apply(self.min);
             const p1 = t.apply(self.max);
