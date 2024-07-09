@@ -1865,7 +1865,7 @@ fn getStyle(styles: []const Style, style_index: i32) Style {
 }
 
 fn getTransform(transforms: []const TransformF32.Affine, transform_index: i32) TransformF32.Affine {
-    if (transforms.len > 0 and transform_index > 0) {
+    if (transforms.len > 0 and transform_index >= 0) {
         return transforms[@intCast(transform_index)];
     }
 

@@ -306,6 +306,69 @@ pub const Encoding = struct {
     segment_data: []const u8,
     draw_data: []const u8,
 
+    pub fn calculateBounds(self: @This()) RectF32 {
+        var bounds = RectF32.NONE;
+        var path_monoid = PathMonoid{};
+
+        for (self.path_tags) |path_tag| {
+            path_monoid = path_monoid.combine(PathMonoid.createTag(path_tag));
+            const transform = self.getTransform(path_monoid.transform_index - 1);
+
+            switch (path_tag.segment.kind) {
+                .line_f32 => {
+                    const s = self.getSegment(LineF32, path_monoid).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                },
+                .line_i16 => {
+                    const s = self.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                },
+                .arc_f32 => {
+                    const s = self.getSegment(ArcF32, path_monoid).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                    bounds.extendByInPlace(s.p2);
+                },
+                .arc_i16 => {
+                    const s = self.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                    bounds.extendByInPlace(s.p2);
+                },
+                .quadratic_bezier_f32 => {
+                    const s = self.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                    bounds.extendByInPlace(s.p2);
+                },
+                .quadratic_bezier_i16 => {
+                    const s = self.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                    bounds.extendByInPlace(s.p2);
+                },
+                .cubic_bezier_f32 => {
+                    const s = self.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                    bounds.extendByInPlace(s.p2);
+                    bounds.extendByInPlace(s.p3);
+                },
+                .cubic_bezier_i16 => {
+                    const s = self.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
+                    bounds.extendByInPlace(s.p0);
+                    bounds.extendByInPlace(s.p1);
+                    bounds.extendByInPlace(s.p2);
+                    bounds.extendByInPlace(s.p3);
+                },
+            }
+        }
+
+        return bounds;
+    }
+
     pub fn createFromBytes(bytes: []const u8) Encoding {
         _ = bytes;
         @panic("TODO: implement this for GPU kernels");
@@ -313,6 +376,22 @@ pub const Encoding = struct {
 
     pub fn getSegment(self: @This(), comptime T: type, path_monoid: PathMonoid) T {
         return std.mem.bytesToValue(T, self.segment_data[path_monoid.segment_offset - @sizeOf(T) .. path_monoid.segment_offset]);
+    }
+
+    fn getStyle(self: @This(), style_index: i32) Style {
+        if (self.styles.len > 0 and style_index >= 0) {
+            return self.styles[@intCast(style_index)];
+        }
+
+        return Style{};
+    }
+
+    fn getTransform(self: @This(), transform_index: i32) TransformF32.Affine {
+        if (self.transforms.len > 0 and transform_index >= 0) {
+            return self.transforms[@intCast(transform_index)];
+        }
+
+        return TransformF32.Affine.IDENTITY;
     }
 
     pub fn copyAlloc(self: @This(), allocator: Allocator) !@This() {
@@ -379,6 +458,10 @@ pub const Encoder = struct {
             .segment_data = self.segment_data.items,
             .draw_data = self.draw_data.items,
         };
+    }
+
+    pub fn calculateBounds(self: @This()) RectF32 {
+        return self.encode().calculateBounds();
     }
 
     pub fn currentPathTag(self: *@This()) ?*PathTag {

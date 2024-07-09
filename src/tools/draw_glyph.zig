@@ -46,10 +46,10 @@ pub fn main() !void {
     style.setFill(draw.Style.Fill{
         .brush = .color,
     });
-    style.setStroke(draw.Style.Stroke{
-        .join = .bevel,
-        .width = outline_width,
-    });
+    // style.setStroke(draw.Style.Stroke{
+    //     .join = .bevel,
+    //     .width = outline_width,
+    // });
     try encoder.encodeStyle(style);
     try encoder.encodeTransform(core.TransformF32.Affine.IDENTITY);
 
@@ -58,27 +58,26 @@ pub fn main() !void {
     _ = try face.outline(glyph_id, @floatFromInt(size), text.GlyphPen.Debug.Instance);
     _ = try face.outline(glyph_id, @floatFromInt(size), path_encoder.glyphPen());
 
+    const bounds = encoder.calculateBounds();
+
     const dimensions = core.DimensionsU32{
-        .width = 100,
-        .height = 100,
+        .width = @intFromFloat(@ceil(bounds.getWidth() + outline_width / 2.0 + 16.0)),
+        .height = @intFromFloat(@ceil(bounds.getHeight() + outline_width / 2.0 + 16.0)),
     };
 
-    // const dimensions = core.DimensionsU32{
-    //     .width = @intFromFloat(@ceil(encoder.bounds.getWidth() + outline_width / 2.0 + 16.0)),
-    //     .height = @intFromFloat(@ceil(encoder.bounds.getHeight() + outline_width / 2.0 + 16.0)),
-    // };
+    const translate_center = (core.TransformF32{
+        .translate = core.PointF32{
+            .x = @floatFromInt(dimensions.width / 2),
+            .y = @floatFromInt(dimensions.height / 2),
+        },
+    }).toAffine();
+    encoder.transforms.items[0] = translate_center;
 
-    // const translate_center = (core.TransformF32{
-    //     .translate = core.PointF32{
-    //         .x = @floatFromInt(dimensions.width / 2),
-    //         .y = @floatFromInt(dimensions.height / 2),
-    //     },
-    // });
+    const encoding = encoder.encode();
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
 
-    const encoding = encoder.encode();
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .kernel_config = draw.KernelConfig.SERIAL,
