@@ -794,28 +794,31 @@ pub fn PathEncoder(comptime T: type) type {
                         .y = ppem,
                     },
                 }).toAffine();
-                const translate = (TransformF32{
+                const translate_origin = (TransformF32{
                     .translate = PointF32{
                         .x = -bounds.min.x,
                         .y = -bounds.min.y,
                     },
                 }).toAffine();
-                const bounds2 = bounds.affineTransform(translate).affineTransform(scale);
+                const bounds2 = bounds.affineTransform(translate_origin).affineTransform(scale);
 
-                const transform2 = (TransformF32{
+                const invert_y = (TransformF32{
                     .scale = PointF32{
                         .x = 1.0,
                         .y = -1.0,
                     },
+                }).toAffine();
+                const translate_center = (TransformF32{
                     .translate = PointF32{
                         .x = -(bounds2.getWidth() / 2.0),
                         .y = -(bounds2.getHeight() / 2.0),
                     },
                 }).toAffine();
 
-                b.affineTransform(translate);
+                b.affineTransform(translate_origin);
                 b.affineTransform(scale);
-                b.affineTransform(transform2);
+                b.affineTransform(translate_center);
+                b.affineTransform(invert_y);
             }
         };
     };
