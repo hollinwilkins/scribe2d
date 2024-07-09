@@ -1750,32 +1750,18 @@ pub const Rasterize = struct {
             return;
         }
 
-        var end_boundary_offset = boundary_fragment_index + 1;
-        for (boundary_fragments[end_boundary_offset..]) |next_boundary_fragment| {
-            if (next_boundary_fragment.is_scanline) {
+        // calculate main ray winding
+        var main_ray_winding: f32 = merge_fragment.calculateMainRayWinding();
+        for (boundary_fragments[boundary_fragment_index + 1..]) |*boundary_fragment| {
+            if (boundary_fragment.is_scanline) {
                 break;
             }
 
-            end_boundary_offset += 1;
-        }
-
-        const scanline_boundary_fragments = boundary_fragments[boundary_fragment_index..end_boundary_offset];
-
-        if (merge_fragment.pixel.y == 18) {
-            std.debug.assert(true);
-            std.debug.assert(true);
-        }
-
-        // calculate main ray winding
-        var main_ray_winding: f32 = 0.0;
-        var current_merge_fragment = merge_fragment;
-        for (scanline_boundary_fragments) |*boundary_fragment| {
-            main_ray_winding += boundary_fragment.calculateMainRayWinding();
-
             if (boundary_fragment.is_merge) {
-                current_merge_fragment.main_ray_winding = main_ray_winding;
-                current_merge_fragment = boundary_fragment;
+                boundary_fragment.main_ray_winding = main_ray_winding;
             }
+
+            main_ray_winding += boundary_fragment.calculateMainRayWinding();
         }
     }
 
