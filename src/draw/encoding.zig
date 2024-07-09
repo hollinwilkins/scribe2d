@@ -190,8 +190,8 @@ pub fn MonoidFunctions(comptime T: type, comptime M: type) type {
                 expanded_monoid.* = monoid;
             }
 
-            if (std.meta.hasFn(M, "fixExpansion")) {
-                M.fixExpansion(expanded);
+            if (std.meta.hasFn(M, "reexpand")) {
+                M.reexpand(expanded);
             }
         }
 
@@ -266,7 +266,7 @@ pub const PathMonoid = extern struct {
         };
     }
 
-    pub fn fixExpansion(expanded: []@This()) void {
+    pub fn reexpand(expanded: []@This()) void {
         for (expanded) |*monoid| {
             std.debug.assert(monoid.path_index > 0);
             std.debug.assert(monoid.subpath_index > 0);
