@@ -1278,7 +1278,7 @@ pub const Flatten = struct {
         }
 
         fn addPoint(self: *@This(), point: PointF32) void {
-            const END_POINT = PointF32{.x = 8.9375e0, .y = 5.9375e-1};
+            const END_POINT = PointF32{ .x = 8.9375e0, .y = 5.9375e-1 };
 
             if (std.meta.eql(point, END_POINT)) {
                 std.debug.assert(true);
@@ -1619,6 +1619,164 @@ pub const Rasterize = struct {
         return false;
     }
 
+    pub fn merge(
+        config: KernelConfig,
+        paths: []const Path,
+        range: RangeU32,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        for (range.start..range.end) |path_index| {
+            const path = paths[path_index];
+
+            const fill_merge_range = RangeU32{
+                .start = 0,
+                .end = path.end_fill_boundary_offset - path.start_fill_boundary_offset,
+            };
+            const stroke_merge_range = RangeU32{
+                .start = 0,
+                .end = path.end_stroke_boundary_offset - path.start_stroke_boundary_offset,
+            };
+            const fill_boundary_fragments = boundary_fragments[path.start_fill_boundary_offset..path.end_fill_boundary_offset];
+            const stroke_boundary_fragments = boundary_fragments[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset];
+
+            var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
+            while (chunk_iter.next()) |chunk| {
+                mergePath(
+                    chunk,
+                    fill_boundary_fragments,
+                );
+            }
+
+            chunk_iter = stroke_merge_range.chunkIterator(config.chunk_size);
+            while (chunk_iter.next()) |chunk| {
+                mergePath(
+                    chunk,
+                    stroke_boundary_fragments,
+                );
+            }
+        }
+    }
+
+    pub fn mergePath(
+        range: RangeU32,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        for (range.start..range.end) |boundary_fragment_index| {
+            mergeFragment(
+                @intCast(boundary_fragment_index),
+                boundary_fragments,
+            );
+        }
+    }
+
+    pub fn mergeFragment(
+        boundary_fragment_index: u32,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        const merge_fragment = &boundary_fragments[boundary_fragment_index];
+        const previous_boundary_fragment = if (boundary_fragment_index > 0) boundary_fragments[boundary_fragment_index - 1] else null;
+
+        if (previous_boundary_fragment) |previous| {
+            if (!std.meta.eql(previous.pixel, merge_fragment.pixel)) {
+                merge_fragment.is_merge = true;
+            }
+        }
+    }
+
+    pub fn windMainRay(
+        config: KernelConfig,
+        paths: []const Path,
+        range: RangeU32,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        for (range.start..range.end) |path_index| {
+            const path = paths[path_index];
+
+            const fill_merge_range = RangeU32{
+                .start = 0,
+                .end = path.end_fill_boundary_offset - path.start_fill_boundary_offset,
+            };
+            const stroke_merge_range = RangeU32{
+                .start = 0,
+                .end = path.end_stroke_boundary_offset - path.start_stroke_boundary_offset,
+            };
+            const fill_boundary_fragments = boundary_fragments[path.start_fill_boundary_offset..path.end_fill_boundary_offset];
+            const stroke_boundary_fragments = boundary_fragments[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset];
+
+            var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
+            while (chunk_iter.next()) |chunk| {
+                windMainRayPath(
+                    chunk,
+                    fill_boundary_fragments,
+                );
+            }
+
+            chunk_iter = stroke_merge_range.chunkIterator(config.chunk_size);
+            while (chunk_iter.next()) |chunk| {
+                windMainRayPath(
+                    chunk,
+                    stroke_boundary_fragments,
+                );
+            }
+        }
+    }
+
+    pub fn windMainRayPath(
+        range: RangeU32,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        for (range.start..range.end) |boundary_fragment_index| {
+            maskFragment(
+                @intCast(boundary_fragment_index),
+                boundary_fragments,
+            );
+        }
+    }
+
+    pub fn windMainRayFragment(
+        boundary_fragment_index: u32,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        const merge_fragment = &boundary_fragments[boundary_fragment_index];
+        const previous_boundary_fragment = if (boundary_fragment_index > 0) boundary_fragments[boundary_fragment_index - 1] else null;
+
+        if (previous_boundary_fragment) |previous| {
+            if (std.meta.eql(previous.pixel, merge_fragment.pixel)) {
+                // not the start of the merge section
+                return;
+            } else {
+                merge_fragment.is_merge = true;
+            }
+
+            if (previous.pixel.y == merge_fragment.pixel.y) {
+                // not start of the scanline
+                return;
+            }
+        }
+
+        var end_boundary_offset = boundary_fragment_index + 1;
+        for (boundary_fragments[end_boundary_offset..]) |next_boundary_fragment| {
+            if (merge_fragment.pixe.y != next_boundary_fragment.pixel.y) {
+                break;
+            }
+
+            end_boundary_offset += 1;
+        }
+
+        const scanline_boundary_fragments = boundary_fragments[boundary_fragment_index..end_boundary_offset];
+
+        // calculate main ray winding
+        var main_ray_winding: f32 = 0.0;
+        for (scanline_boundary_fragments) |boundary_fragment| {
+            if (!boundary_fragment.is_merge) {
+                continue;
+            }
+
+            main_ray_winding += boundary_fragment.calculateMainRayWinding();
+            boundary_fragment.main_ray_winding = main_ray_winding;
+        }
+    }
+
     pub fn mask(
         config: KernelConfig,
         paths: []const Path,
@@ -1695,16 +1853,10 @@ pub const Rasterize = struct {
 
         const merge_boundary_fragments = boundary_fragments[boundary_fragment_index..end_boundary_offset];
 
-        // calculate main ray winding
-        var main_ray_winding: f32 = 0.0;
-        for (merge_boundary_fragments) |boundary_fragment| {
-            main_ray_winding += boundary_fragment.calculateMainRayWinding();
-        }
-
         // calculate stencil mask
         for (0..16) |index| {
             const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-            var bit_winding: f32 = main_ray_winding;
+            var bit_winding: f32 = merge_fragment.main_ray_winding;
 
             for (merge_boundary_fragments) |boundary_fragment| {
                 const masks = boundary_fragment.masks;
@@ -1864,8 +2016,8 @@ pub const Blend = struct {
 };
 
 fn getColor(draw_data: []const u8, offset: u32) ColorF32 {
-    const color_u8 = std.mem.bytesToValue(ColorU8, draw_data[offset..offset + @sizeOf(ColorU8)]);
-    return ColorF32 {
+    const color_u8 = std.mem.bytesToValue(ColorU8, draw_data[offset .. offset + @sizeOf(ColorU8)]);
+    return ColorF32{
         .r = @as(f32, @floatFromInt(color_u8.r)) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
         .g = @as(f32, @floatFromInt(color_u8.g)) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
         .b = @as(f32, @floatFromInt(color_u8.b)) / @as(f32, @floatFromInt(std.math.maxInt(u8))),

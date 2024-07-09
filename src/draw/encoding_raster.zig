@@ -401,9 +401,47 @@ pub const CpuRasterizer = struct {
         wg.wait();
         wg.reset();
 
+        if (!self.config.runMerge()) {
+            return;
+        }
+
+        chunk_iter.reset();
+        while (chunk_iter.next()) |chunk| {
+            pool.spawnWg(
+                &wg,
+                rasterizer.merge,
+                .{
+                    self.config.kernel_config,
+                    self.paths.items,
+                    chunk,
+                    self.boundary_fragments.items,
+                },
+            );
+        }
+
+        wg.wait();
+        wg.reset();
+
         if (!self.config.runMask()) {
             return;
         }
+
+        chunk_iter.reset();
+        while (chunk_iter.next()) |chunk| {
+            pool.spawnWg(
+                &wg,
+                rasterizer.windMainRay,
+                .{
+                    self.config.kernel_config,
+                    self.paths.items,
+                    chunk,
+                    self.boundary_fragments.items,
+                },
+            );
+        }
+
+        wg.wait();
+        wg.reset();
 
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
