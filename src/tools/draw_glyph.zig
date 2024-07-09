@@ -46,16 +46,16 @@ pub fn main() !void {
     style.setFill(draw.Style.Fill{
         .brush = .color,
     });
-    // try encoder.encodeColor(draw.ColorU8{
-    //     .r = 255,
-    //     .g = 0,
-    //     .b = 255,
-    //     .a = 255,
-    // });
-    // style.setStroke(draw.Style.Stroke{
-    //     .join = .bevel,
-    //     .width = outline_width,
-    // });
+    try encoder.encodeColor(draw.ColorU8{
+        .r = 255,
+        .g = 0,
+        .b = 255,
+        .a = 255,
+    });
+    style.setStroke(draw.Style.Stroke{
+        .join = .bevel,
+        .width = outline_width,
+    });
     try encoder.encodeStyle(style);
     try encoder.encodeTransform(core.TransformF32.Affine.IDENTITY);
 
