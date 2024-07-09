@@ -33,17 +33,17 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    const outline_width = 1.0;
+    const outline_width = 4.0;
     var style = draw.Style{};
-    try encoder.encodeColor(draw.ColorU8{
-        .r = 0,
-        .g = 0,
-        .b = 0,
-        .a = 255,
-    });
-    style.setFill(draw.Style.Fill{
-        .brush = .color,
-    });
+    // try encoder.encodeColor(draw.ColorU8{
+    //     .r = 0,
+    //     .g = 0,
+    //     .b = 0,
+    //     .a = 255,
+    // });
+    // style.setFill(draw.Style.Fill{
+    //     .brush = .color,
+    // });
     try encoder.encodeColor(draw.ColorU8{
         .r = 255,
         .g = 0,
@@ -84,7 +84,7 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
         .kernel_config = draw.KernelConfig.SERIAL,
     };
     var rasterizer = try draw.CpuRasterizer.init(

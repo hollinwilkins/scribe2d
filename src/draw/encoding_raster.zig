@@ -677,6 +677,7 @@ pub const CpuRasterizer = struct {
                 std.debug.print("-----------\n", .{});
                 for (subpath_offsets.start_fill_flat_segment_offset..subpath_offsets.end_fill_flat_segment_offset) |flat_segment_index| {
                     const flat_segment = self.flat_segments.items[flat_segment_index];
+                    std.debug.print("--- Segment({}) ---\n", .{flat_segment.segment_index});
                     const intersections = self.grid_intersections.items[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
                     for (intersections) |intersection| {
@@ -695,6 +696,7 @@ pub const CpuRasterizer = struct {
                 std.debug.print("-----------\n", .{});
                 for (subpath_offsets.start_front_stroke_flat_segment_offset..subpath_offsets.end_front_stroke_flat_segment_offset) |flat_segment_index| {
                     const flat_segment = self.flat_segments.items[flat_segment_index];
+                    std.debug.print("--- Segment({}) ---\n", .{flat_segment.segment_index});
                     const intersections = self.grid_intersections.items[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
                     for (intersections) |intersection| {
@@ -713,6 +715,7 @@ pub const CpuRasterizer = struct {
                 std.debug.print("-----------\n", .{});
                 for (subpath_offsets.start_back_stroke_flat_segment_offset..subpath_offsets.end_back_stroke_flat_segment_offset) |flat_segment_index| {
                     const flat_segment = self.flat_segments.items[flat_segment_index];
+                    std.debug.print("--- Segment({}) ---\n", .{flat_segment.segment_index});
                     const intersections = self.grid_intersections.items[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
                     for (intersections) |intersection| {
