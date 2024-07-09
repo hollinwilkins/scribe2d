@@ -10,8 +10,30 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    var args = std.process.args();
+
+    _ = args.skip();
+    const font_file = args.next() orelse @panic("need to provide a font file");
+    const codepoint_str = args.next() orelse @panic("need to provide a codepoint string");
+    // const codepoint: u32 = @intCast(codepoint_str[0]);
+    const glyph_id: u16 = try std.fmt.parseInt(u16, codepoint_str, 10);
+    const size_str = args.next() orelse "16";
+    const size = try std.fmt.parseInt(u32, size_str, 10);
+    const output_file = args.next() orelse @panic("need to provide output file");
+
+    var face = try text.Face.initFile(allocator, font_file);
+    defer face.deinit();
+
+    std.debug.print("Font Info: {s}\n", .{font_file});
+    var rt_iter = face.unmanaged.raw_tables.table.iterator();
+    while (rt_iter.next()) |table| {
+        std.debug.print("Table: {s}\n", .{table.tag.toBytes()});
+    }
+
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
+
+    _ = output_file;
 
     try encoder.encodeColor(draw.ColorU8{
         .r = 255,
@@ -29,38 +51,22 @@ pub fn main() !void {
     try encoder.encodeStyle(style);
 
     var path_encoder = encoder.pathEncoder(f32);
-    try path_encoder.moveTo(core.PointF32.create(10.0, 10.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(20.0, 20.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(40.0, 20.0));
-    //_ = try path_encoder.arcTo(core.PointF32.create(3.0, 3.0), core.PointF32.create(4.0, 2.0));
-    _ = try path_encoder.lineTo(core.PointF32.create(10.0, 10.0));
-    try path_encoder.finish();
 
-    var path_encoder2 = encoder.pathEncoder(i16);
-    try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    _ = try path_encoder2.cubicTo(
-        core.PointI16.create(120, 120),
-        core.PointI16.create(70, 130),
-        core.PointI16.create(22, 22),
-    );
-    try path_encoder2.finish();
+    _ = try face.outline(glyph_id, @floatFromInt(size), path_encoder.glyphPen());
 
-    var half_planes = try draw.HalfPlanesU16.init(std.testing.allocator);
+    var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
 
     const encoding = encoder.encode();
     var rasterizer = try draw.CpuRasterizer.init(
-        std.testing.allocator,
+        allocator,
         &half_planes,
         draw.KernelConfig.DEFAULT,
         encoding,
     );
     defer rasterizer.deinit();
 
-    var texture = try draw.Texture.init(std.testing.allocator, core.DimensionsU32{
+    var texture = try draw.Texture.init(allocator, core.DimensionsU32{
         .width = 50,
         .height = 50,
     }, draw.TextureFormat.RgbaU8);

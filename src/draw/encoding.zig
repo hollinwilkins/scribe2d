@@ -397,7 +397,6 @@ pub const Encoder = struct {
         if (self.staged.path) {
             self.staged.path = false;
             tag2.index.path = 1;
-            (try self.path_offsets.addOne(self.allocator)).* = @intCast(self.path_tags.len);
         }
 
         if (self.staged.subpath) {
@@ -491,7 +490,6 @@ pub const Encoder = struct {
 };
 
 pub fn PathEncoder(comptime T: type) type {
-    const Self = @This();
     const PPoint = Point(T);
 
     // Extend structs used to extend an open subpath
@@ -546,6 +544,8 @@ pub fn PathEncoder(comptime T: type) type {
     };
 
     return struct {
+        const Self = @This();
+
         encoder: *Encoder,
         start_path_index: usize,
         start_offset: usize,
@@ -609,7 +609,8 @@ pub fn PathEncoder(comptime T: type) type {
                     for (points) |*point| {
                         point.* = point.cast(f32).affineTransform(transform).cast(T);
                     }
-                }
+                },
+                else => unreachable,
             }
         }
 
@@ -755,20 +756,24 @@ pub fn PathEncoder(comptime T: type) type {
 
             fn lineTo(ctx: *anyopaque, point: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                b.lineTo(point) catch {
+                _ = b.lineTo(point) catch {
                     unreachable;
                 };
             }
 
             fn quadTo(ctx: *anyopaque, control: PointF32, point: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                b.quadTo(control, point) catch {
+                _ = b.quadTo(control, point) catch {
                     unreachable;
                 };
             }
 
             fn curveTo(_: *anyopaque, _: PointF32, _: PointF32, _: PointF32) void {
                 @panic("PathBuilder does not support curveTo\n");
+            }
+
+            fn open(_: *anyopaque) void {
+                // do nothing
             }
 
             fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
