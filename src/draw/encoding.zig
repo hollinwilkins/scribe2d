@@ -1069,7 +1069,6 @@ pub const FlatSegment = struct {
 
     kind: Kind,
     segment_index: u32 = 0,
-    bounds: RectF32 = RectF32.NONE,
     start_line_data_offset: u32 = 0,
     end_line_data_offset: u32 = 0,
     start_intersection_offset: u32 = 0,
