@@ -315,10 +315,10 @@ pub fn Rect(comptime T: type) type {
         }
 
         pub fn affineTransform(self: @This(), t: Transform(T).Affine) @This() {
-            return @This(){
-                .min = self.min.affineTransform(t),
-                .max = self.max.affineTransform(t),
-            };
+            const p0 = self.min.affineTransform(t);
+            const p1 = self.max.affineTransform(t);
+
+            return @This().create(p0, p1);
         }
 
         pub fn transformMatrixInPlace(self: *@This(), t: Transform(T).Matrix) void {
@@ -367,8 +367,8 @@ pub fn Transform(comptime T: type) type {
 
             pub fn apply(self: @This(), point: P) P {
                 const z = self.coefficients;
-                const x = z[0] * point.x + z[3] * point.y + z[2];
-                const y = z[1] * point.x + z[4] * point.y + z[5];
+                const x = z[0] * point.x + z[1] * point.y + z[2];
+                const y = z[3] * point.x + z[4] * point.y + z[5];
 
                 return P{
                     .x = x,
@@ -427,13 +427,15 @@ pub fn Transform(comptime T: type) type {
         }
 
         pub fn toMatrix(self: @This()) Matrix {
-            const c = std.math.cos(self.rotate);
-            const s = std.math.sin(self.rotate);
+            const cos = std.math.cos(self.rotate);
+            const sin = std.math.sin(self.rotate);
+            const s = self.scale;
+            const t = self.translate;
 
             return Matrix{
                 .coefficients = [_]T{
-                    c * self.scale.x, -(s * self.scale.y), self.translate.x,
-                    s * self.scale.x, c * self.scale.y,    self.translate.y,
+                    cos * s.x, -sin * s.y, cos * s.x * t.x - sin * s.y * t.y,
+                    sin * s.x, cos * s.y, sin * s.x * t.x + cos * s.y * t.y,
                 },
             };
         }

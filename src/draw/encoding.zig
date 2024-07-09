@@ -800,14 +800,15 @@ pub fn PathEncoder(comptime T: type) type {
                         .y = -bounds.min.y,
                     },
                 }).toAffine();
-                const bounds2 = bounds.affineTransform(translate_origin).affineTransform(scale);
+                const t1 = scale.mul(translate_origin);
+                const bounds2 = bounds.affineTransform(t1);
 
-                const invert_y = (TransformF32{
-                    .scale = PointF32{
-                        .x = 1.0,
-                        .y = -1.0,
-                    },
-                }).toAffine();
+                // const invert_y = (TransformF32{
+                //     .scale = PointF32{
+                //         .x = 1.0,
+                //         .y = -1.0,
+                //     },
+                // }).toAffine();
                 const translate_center = (TransformF32{
                     .translate = PointF32{
                         .x = -(bounds2.getWidth() / 2.0),
@@ -815,10 +816,10 @@ pub fn PathEncoder(comptime T: type) type {
                     },
                 }).toAffine();
 
-                b.affineTransform(translate_origin);
-                b.affineTransform(scale);
-                b.affineTransform(translate_center);
-                b.affineTransform(invert_y);
+
+                // b.affineTransform(t1);
+                b.affineTransform(translate_center.mul(t1));
+                // b.affineTransform(invert_y);
             }
         };
     };
