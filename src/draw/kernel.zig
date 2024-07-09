@@ -141,8 +141,8 @@ pub const Estimate = struct {
         for (range.start..range.end) |index| {
             const path_tag = path_tags[index];
             const path_monoid = path_monoids[index];
-            const style = styles[path_monoid.style_index];
-            const transform = transforms[path_monoid.transform_index];
+            const style = getStyle(styles, path_monoid.style_index);
+            const transform = getTransform(transforms, path_monoid.transform_index);
             const sd = SegmentData{
                 .segment_data = segment_data,
             };
@@ -408,7 +408,7 @@ pub const Flatten = struct {
     ) void {
         for (range.start..range.end) |segment_index| {
             const path_monoid = path_monoids[segment_index];
-            const style = styles[path_monoid.style_index];
+            const style = getStyle(styles, path_monoid.style_index);
             const path = &paths[path_monoid.path_index];
             const flatten_offsets = FlatSegmentOffset.create(
                 @intCast(segment_index),
@@ -501,7 +501,7 @@ pub const Flatten = struct {
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
-        const transform = transforms[path_monoid.transform_index];
+        const transform = getTransform(transforms, path_monoid.transform_index);
 
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
             @panic("Cannot flatten ArcF32 yet.\n");
@@ -548,7 +548,7 @@ pub const Flatten = struct {
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
-        const transform = transforms[path_monoid.transform_index];
+        const transform = getTransform(transforms, path_monoid.transform_index);
         const subpath = subpaths[path_monoid.subpath_index];
         var next_subpath: Subpath = undefined;
         if (path_monoid.subpath_index + 1 < subpaths.len) {
@@ -1855,3 +1855,19 @@ pub const Blend = struct {
         }
     }
 };
+
+fn getStyle(styles: []const Style, style_index: i32) Style {
+    if (styles.len > 0 and style_index >= 0) {
+        return styles[@intCast(style_index)];
+    }
+
+    return Style{};
+}
+
+fn getTransform(transforms: []const TransformF32.Affine, transform_index: i32) TransformF32.Affine {
+    if (transforms.len > 0 and transform_index > 0) {
+        return transforms[@intCast(transform_index)];
+    }
+
+    return TransformF32.Affine.IDENTITY;
+}

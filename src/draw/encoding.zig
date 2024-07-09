@@ -213,8 +213,8 @@ pub const PathMonoid = extern struct {
     subpath_index: u32 = 0,
     segment_index: u32 = 0,
     segment_offset: u32 = 0,
-    transform_index: u32 = 0,
-    style_index: u32 = 0,
+    transform_index: i32 = 0,
+    style_index: i32 = 0,
     brush_offset: u32 = 0,
 
     pub usingnamespace MonoidFunctions(PathTag, @This());
@@ -268,11 +268,15 @@ pub const PathMonoid = extern struct {
 
     pub fn fixExpansion(expanded: []@This()) void {
         for (expanded) |*monoid| {
+            std.debug.assert(monoid.path_index > 0);
+            std.debug.assert(monoid.subpath_index > 0);
+            std.debug.assert(monoid.segment_index > 0);
+
             monoid.path_index -= 1;
             monoid.subpath_index -= 1;
             monoid.segment_index -= 1;
-            monoid.transform_index -= 1;
             monoid.style_index -= 1;
+            monoid.transform_index -= 1;
         }
     }
 
@@ -389,11 +393,6 @@ pub const Encoder = struct {
         std.debug.assert(self.styles.items.len > 0);
 
         var tag2 = tag;
-
-        if (self.transforms.items.len == 0) {
-            // need to make sure each segment has an associated transform, even if it's just the identity transform
-            try self.encodeTransform(TransformF32.Affine.IDENTITY);
-        }
 
         if (self.staged.path) {
             self.staged.path = false;
