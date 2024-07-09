@@ -496,6 +496,7 @@ pub const Flatten = struct {
         }
 
         var writer = Writer{
+            .flat_segment = flat_segment,
             .line_data = line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
         };
 
@@ -562,9 +563,11 @@ pub const Flatten = struct {
         }
 
         var front_writer = Writer{
+            .flat_segment = front_flat_segment,
             .line_data = line_data[front_flat_segment.start_line_data_offset..front_flat_segment.end_line_data_offset],
         };
         var back_writer = Writer{
+            .flat_segment = back_flat_segment,
             .line_data = line_data[back_flat_segment.start_line_data_offset..back_flat_segment.end_line_data_offset],
         };
 
@@ -1240,6 +1243,7 @@ pub const Flatten = struct {
 
     const Writer = struct {
         line_data: []u8,
+        flat_segment: *FlatSegment,
         offset: u32 = 0,
 
         pub fn write(self: *@This(), line: LineF32) void {
@@ -1251,20 +1255,6 @@ pub const Flatten = struct {
 
             const last_point = self.lastPoint();
             std.debug.assert(std.meta.eql(last_point, line.p0));
-            // if (!std.meta.eql(last_point, line.p0)) {
-            //     var line_iter = encoding_module.LineIterator{
-            //         .line_data = self.line_data[0..self.offset],
-            //     };
-
-            //     std.debug.print("=========== Bad Line Data =============:\n", .{});
-            //     while (line_iter.next()) |l| {
-            //         std.debug.print("{}\n", .{l});
-            //     }
-            //     std.debug.print("--------\n", .{});
-            //     std.debug.print("Bad Line: {}\n", .{line});
-            //     std.debug.print("=================================\n", .{});
-            //     std.debug.assert(false);
-            // }
             self.addPoint(line.p1);
         }
 
@@ -1273,6 +1263,7 @@ pub const Flatten = struct {
         }
 
         fn addPoint(self: *@This(), point: PointF32) void {
+            self.flat_segment.bounds.extendByInPlace(point);
             std.mem.bytesAsValue(PointF32, self.line_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
         }

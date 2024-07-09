@@ -852,6 +852,8 @@ pub const Path = struct {
     pub const Bump = std.atomic.Value(u32);
 
     segment_index: u32 = 0,
+    fill_bounds: RectF32 = RectF32.NONE,
+    stroke_bounds: RectF32 = RectF32.NONE,
     start_fill_boundary_offset: u32 = 0,
     end_fill_boundary_offset: u32 = 0,
     end_fill_merge_offset: u32 = 0,
@@ -1069,6 +1071,7 @@ pub const FlatSegment = struct {
 
     kind: Kind,
     segment_index: u32 = 0,
+    bounds: RectF32 = RectF32.NONE,
     start_line_data_offset: u32 = 0,
     end_line_data_offset: u32 = 0,
     start_intersection_offset: u32 = 0,
