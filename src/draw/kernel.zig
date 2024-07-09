@@ -509,7 +509,7 @@ pub const Flatten = struct {
             @panic("Cannot flatten ArcF32 yet.\n");
         }
 
-        var writer = Writer{
+        var writer = LineWriter{
             .bounds = bounds,
             .line_data = line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset],
         };
@@ -577,11 +577,11 @@ pub const Flatten = struct {
             return;
         }
 
-        var front_writer = Writer{
+        var front_writer = LineWriter{
             .bounds = bounds,
             .line_data = line_data[front_flat_segment.start_line_data_offset..front_flat_segment.end_line_data_offset],
         };
-        var back_writer = Writer{
+        var back_writer = LineWriter{
             .bounds = bounds,
             .line_data = line_data[back_flat_segment.start_line_data_offset..back_flat_segment.end_line_data_offset],
         };
@@ -722,7 +722,7 @@ pub const Flatten = struct {
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
-        writer: *Writer,
+        writer: *LineWriter,
     ) void {
         const p0 = cubic_points.p0;
         const p1 = cubic_points.p1;
@@ -904,7 +904,7 @@ pub const Flatten = struct {
         cap1: PointF32,
         offset_tangent: PointF32,
         transform: TransformF32.Matrix,
-        writer: *Writer,
+        writer: *LineWriter,
     ) void {
         if (cap_style == .round) {
             flattenArc(
@@ -944,8 +944,8 @@ pub const Flatten = struct {
         n_prev: PointF32,
         n_next: PointF32,
         transform: TransformF32.Matrix,
-        left_writer: *Writer,
-        right_writer: *Writer,
+        left_writer: *LineWriter,
+        right_writer: *LineWriter,
     ) void {
         var front0 = p0.add(n_prev);
         const front1 = p0.add(n_next);
@@ -957,10 +957,8 @@ pub const Flatten = struct {
 
         switch (stroke.join) {
             .bevel => {
-                if (!std.meta.eql(front0, front1) and !std.meta.eql(back0, back1)) {
-                    left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
-                    right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
-                }
+                left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
+                right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
             },
             .miter => {
                 const hypot = std.math.hypot(cr, d);
@@ -1028,7 +1026,7 @@ pub const Flatten = struct {
         center: PointF32,
         angle: f32,
         transform: TransformF32.Matrix,
-        writer: *Writer,
+        writer: *LineWriter,
     ) void {
         var p0 = transform.apply(start);
         var r = start.sub(center);
@@ -1256,12 +1254,16 @@ pub const Flatten = struct {
         }
     }
 
-    const Writer = struct {
+    const LineWriter = struct {
         bounds: *RectF32,
         line_data: []u8,
         offset: u32 = 0,
 
         pub fn write(self: *@This(), line: LineF32) void {
+            if (std.meta.eql(line.p0, line.p1)) {
+                return;
+            }
+
             if (self.offset == 0) {
                 self.addPoint(line.p0);
                 self.addPoint(line.p1);
@@ -1278,7 +1280,7 @@ pub const Flatten = struct {
         }
 
         fn addPoint(self: *@This(), point: PointF32) void {
-            const END_POINT = PointF32{ .x = 8.9375e0, .y = 5.9375e-1 };
+            const END_POINT = PointF32{ .x = 2.3140625e1, .y = 3.021875e1 };
 
             if (std.meta.eql(point, END_POINT)) {
                 std.debug.assert(true);
