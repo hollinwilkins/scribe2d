@@ -429,8 +429,8 @@ pub const CpuRasterizer = struct {
         for (0..self.paths.items.len) |path_index| {
             const path = self.paths.items[path_index];
             const path_monoid = self.path_monoids.items[path.segment_index];
-            const style = self.encoding.styles[path_monoid.style_index];
-            const style_offset = self.style_offsets.items[path_monoid.style_index];
+            const style = self.encoding.getStyle(path_monoid.style_index);
+            const style_offset = self.getStyleOffset(path_monoid.style_index);
 
             if (style.isFill()) {
                 const fill_range = RangeU32{
@@ -484,6 +484,14 @@ pub const CpuRasterizer = struct {
                 wg.reset();
             }
         }
+    }
+
+    pub fn getStyleOffset(self: @This(), style_index: i32) StyleOffset {
+        if (self.style_offsets.items.len > 0 and style_index >= 0) {
+            return self.style_offsets.items[@intCast(style_index)];
+        }
+
+        return StyleOffset{};
     }
 
     pub fn debugPrint(self: @This(), texture: TextureUnmanaged) void {

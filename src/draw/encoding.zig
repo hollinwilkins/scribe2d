@@ -400,7 +400,7 @@ pub const Encoding = struct {
         return std.mem.bytesToValue(T, self.segment_data[path_monoid.segment_offset - @sizeOf(T) .. path_monoid.segment_offset]);
     }
 
-    fn getStyle(self: @This(), style_index: i32) Style {
+    pub fn getStyle(self: @This(), style_index: i32) Style {
         if (self.styles.len > 0 and style_index >= 0) {
             return self.styles[@intCast(style_index)];
         }
@@ -408,7 +408,7 @@ pub const Encoding = struct {
         return Style{};
     }
 
-    fn getTransform(self: @This(), transform_index: i32) TransformF32.Affine {
+    pub fn getTransform(self: @This(), transform_index: i32) TransformF32.Affine {
         if (self.transforms.len > 0 and transform_index >= 0) {
             return self.transforms[@intCast(transform_index)];
         }

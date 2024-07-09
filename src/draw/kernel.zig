@@ -44,6 +44,7 @@ const CubicBezierF32 = core.CubicBezierF32;
 const CubicBezierI16 = core.CubicBezierI16;
 const TextureUnmanaged = texture_module.TextureUnmanaged;
 const ColorF32 = texture_module.ColorF32;
+const ColorU8 = texture_module.ColorU8;
 const ColorBlend = texture_module.ColorBlend;
 const CubicPoints = euler_module.CubicPoints;
 const CubicParams = euler_module.CubicParams;
@@ -1828,6 +1829,7 @@ pub const Blend = struct {
         range: RangeU32,
         texture: *TextureUnmanaged,
     ) void {
+        _ = brush; // only color for now
         const color_blend = ColorBlend.Alpha;
 
         for (range.start..range.end) |merge_index| {
@@ -1847,11 +1849,12 @@ pub const Blend = struct {
                 .x = @intCast(pixel.x),
                 .y = @intCast(pixel.y),
             };
+            const brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
             const fragment_color = ColorF32{
-                .r = 0.0,
-                .g = 0.0,
-                .b = 0.0,
-                .a = intensity,
+                .r = brush_color.r,
+                .g = brush_color.g,
+                .b = brush_color.b,
+                .a = brush_color.a * intensity,
             };
             const texture_color = texture.getPixelUnsafe(texture_pixel);
             const blend_color = color_blend.blend(fragment_color, texture_color);
@@ -1861,7 +1864,13 @@ pub const Blend = struct {
 };
 
 fn getColor(draw_data: []const u8, offset: u32) ColorF32 {
-    return std.mem.bytesToValue(ColorF32, draw_data[offset..offset + @sizeOf(ColorF32)]);
+    const color_u8 = std.mem.bytesToValue(ColorU8, draw_data[offset..offset + @sizeOf(ColorU8)]);
+    return ColorF32 {
+        .r = @as(f32, @floatFromInt(color_u8.r)) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
+        .g = @as(f32, @floatFromInt(color_u8.g)) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
+        .b = @as(f32, @floatFromInt(color_u8.b)) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
+        .a = @as(f32, @floatFromInt(color_u8.a)) / @as(f32, @floatFromInt(std.math.maxInt(u8))),
+    };
 }
 
 fn getStyle(styles: []const Style, style_index: i32) Style {
