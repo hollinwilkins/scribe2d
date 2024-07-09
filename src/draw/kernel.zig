@@ -14,6 +14,7 @@ const Subpath = encoding_module.Subpath;
 const SegmentData = encoding_module.SegmentData;
 const FlatSegment = encoding_module.FlatSegment;
 const Style = encoding_module.Style;
+const StyleOffset = encoding_module.StyleOffset;
 const LineIterator = encoding_module.LineIterator;
 const MonoidFunctions = encoding_module.MonoidFunctions;
 const AtomicBounds = encoding_module.AtomicBounds;
@@ -1820,7 +1821,10 @@ pub const Rasterize = struct {
 
 pub const Blend = struct {
     pub fn fill(
+        brush: Style.Brush,
+        brush_offset: u32,
         bundary_fragments: []const BoundaryFragment,
+        draw_data: []const u8,
         range: RangeU32,
         texture: *TextureUnmanaged,
     ) void {
@@ -1855,6 +1859,10 @@ pub const Blend = struct {
         }
     }
 };
+
+fn getColor(draw_data: []const u8, offset: u32) ColorF32 {
+    return std.mem.bytesToValue(ColorF32, draw_data[offset..offset + @sizeOf(ColorF32)]);
+}
 
 fn getStyle(styles: []const Style, style_index: i32) Style {
     if (styles.len > 0 and style_index >= 0) {

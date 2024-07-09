@@ -36,16 +36,22 @@ pub fn main() !void {
     _ = output_file;
 
     const outline_width = 1.0;
+    var style = draw.Style{};
     try encoder.encodeColor(draw.ColorU8{
         .r = 255,
         .g = 255,
         .b = 0,
         .a = 255,
     });
-    var style = draw.Style{};
     style.setFill(draw.Style.Fill{
         .brush = .color,
     });
+    // try encoder.encodeColor(draw.ColorU8{
+    //     .r = 255,
+    //     .g = 0,
+    //     .b = 255,
+    //     .a = 255,
+    // });
     // style.setStroke(draw.Style.Stroke{
     //     .join = .bevel,
     //     .width = outline_width,

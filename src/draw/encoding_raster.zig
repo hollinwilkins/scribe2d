@@ -11,6 +11,7 @@ const LineF32 = core.LineF32;
 const PointU32 = core.PointU32;
 const KernelConfig = kernel_module.KernelConfig;
 const Style = encoding_module.Style;
+const StyleOffset = encoding_module.StyleOffset;
 const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
 const Path = encoding_module.Path;
@@ -31,7 +32,7 @@ const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
     pub const Config = struct {
-        pub const RUN_FLAG_EXPAND_PATH_MONOIDS: u8 = 0b00000001;
+        pub const RUN_FLAG_EXPAND_MONOIDS: u8 = 0b00000001;
         pub const RUN_FLAG_ESTIMATE_SEGMENTS: u8 = 0b00000010;
         pub const RUN_FLAG_FLATTEN: u8 = 0b00000100;
         pub const RUN_FLAG_INTERSECT: u8 = 0b00001000;
@@ -39,7 +40,7 @@ pub const CpuRasterizer = struct {
         pub const RUN_FLAG_MERGE: u8 = 0b00100000;
         pub const RUN_FLAG_MASK: u8 = 0b01000000;
         pub const RUN_FLAG_FLUSH_TEXTURE: u8 = 0b10000000;
-        pub const RUN_FLAG_ALL = RUN_FLAG_EXPAND_PATH_MONOIDS | RUN_FLAG_ESTIMATE_SEGMENTS |
+        pub const RUN_FLAG_ALL = RUN_FLAG_EXPAND_MONOIDS | RUN_FLAG_ESTIMATE_SEGMENTS |
             RUN_FLAG_FLATTEN | RUN_FLAG_INTERSECT | RUN_FLAG_BOUNDARY |
             RUN_FLAG_MERGE | RUN_FLAG_MASK | RUN_FLAG_FLUSH_TEXTURE;
 
@@ -47,12 +48,12 @@ pub const CpuRasterizer = struct {
         debug_flags: u8 = RUN_FLAG_ALL,
         kernel_config: KernelConfig = KernelConfig.DEFAULT,
 
-        pub fn runExpandPathMonoids(self: @This()) bool {
-            return self.run_flags >= RUN_FLAG_EXPAND_PATH_MONOIDS;
+        pub fn runExpandMonoids(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_EXPAND_MONOIDS;
         }
 
-        pub fn debugExpandPathMonoids(self: @This()) bool {
-            return self.runExpandPathMonoids() and self.debug_flags & RUN_FLAG_EXPAND_PATH_MONOIDS > 0;
+        pub fn debugExpandMonoids(self: @This()) bool {
+            return self.runExpandMonoids() and self.debug_flags & RUN_FLAG_EXPAND_MONOIDS > 0;
         }
 
         pub fn runEstimateSegments(self: @This()) bool {
@@ -113,6 +114,7 @@ pub const CpuRasterizer = struct {
     };
 
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
+    const StyleOffsetList = std.ArrayListUnmanaged(StyleOffset);
     const PathList = std.ArrayListUnmanaged(Path);
     const SubpathList = std.ArrayListUnmanaged(Subpath);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
@@ -120,16 +122,13 @@ pub const CpuRasterizer = struct {
     const Buffer = std.ArrayListUnmanaged(u8);
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
-    // const LineList = std.ArrayListUnmanaged(LineF32);
-    // const BoolList = std.ArrayListUnmanaged(bool);
-    // const SubpathList = std.ArrayListUnmanaged(Subpath);
-    // const OffsetList = std.ArrayListUnmanaged(u32);
 
     allocator: Allocator,
     half_planes: *const HalfPlanesU16,
     config: Config,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
+    style_offsets: StyleOffsetList = StyleOffsetList{},
     paths: PathList = PathList{},
     subpaths: SubpathList = SubpathList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
@@ -154,6 +153,7 @@ pub const CpuRasterizer = struct {
 
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
+        self.style_offsets.deinit(self.allocator);
         self.paths.deinit(self.allocator);
         self.subpaths.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
@@ -165,6 +165,7 @@ pub const CpuRasterizer = struct {
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
+        self.style_offsets.items.len = 0;
         self.paths.items.len = 0;
         self.subpaths.items.len = 0;
         self.segment_offsets.items.len = 0;
@@ -185,12 +186,12 @@ pub const CpuRasterizer = struct {
         // reset the rasterizer
         self.reset();
 
-        if (!self.config.runExpandPathMonoids()) {
+        if (!self.config.runExpandMonoids()) {
             return;
         }
 
         // expand path monoids
-        try self.expandPathMonoids();
+        try self.expandMonoids();
 
         if (!self.config.runEstimateSegments()) {
             return;
@@ -218,7 +219,7 @@ pub const CpuRasterizer = struct {
         self.flushTexture(&pool, texture);
     }
 
-    fn expandPathMonoids(self: *@This()) !void {
+    fn expandMonoids(self: *@This()) !void {
         const path_monoids = try self.path_monoids.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
         PathMonoid.expand(self.encoding.path_tags, path_monoids);
 
@@ -238,6 +239,9 @@ pub const CpuRasterizer = struct {
                 };
             }
         }
+
+        const style_offsets = try self.style_offsets.addManyAsSlice(self.allocator, self.encoding.styles.len);
+        StyleOffset.expand(self.encoding.styles, style_offsets);
     }
 
     fn estimateSegments(self: *@This(), pool: *std.Thread.Pool) !void {
@@ -424,52 +428,66 @@ pub const CpuRasterizer = struct {
 
         for (0..self.paths.items.len) |path_index| {
             const path = self.paths.items[path_index];
-            const fill_range = RangeU32{
-                .start = path.start_fill_boundary_offset,
-                .end = path.end_fill_boundary_offset,
-            };
+            const path_monoid = self.path_monoids.items[path.segment_index];
+            const style = self.encoding.styles[path_monoid.style_index];
+            const style_offset = self.style_offsets.items[path_monoid.style_index];
 
-            var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
-            while (chunk_iter.next()) |chunk| {
-                pool.spawnWg(
-                    &wg,
-                    blender.fill,
-                    .{
-                        self.boundary_fragments.items,
-                        chunk,
-                        texture,
-                    },
-                );
+            if (style.isFill()) {
+                const fill_range = RangeU32{
+                    .start = path.start_fill_boundary_offset,
+                    .end = path.end_fill_boundary_offset,
+                };
+
+                var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
+                while (chunk_iter.next()) |chunk| {
+                    pool.spawnWg(
+                        &wg,
+                        blender.fill,
+                        .{
+                            style.fill.brush,
+                            style_offset.fill_brush_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
+                        },
+                    );
+                }
+
+                wg.wait();
+                wg.reset();
             }
 
-            wg.wait();
-            wg.reset();
+            if (style.isStroke()) {
+                const stroke_range = RangeU32{
+                    .start = path.start_stroke_boundary_offset,
+                    .end = path.end_stroke_boundary_offset,
+                };
 
-            const stroke_range = RangeU32{
-                .start = path.start_stroke_boundary_offset,
-                .end = path.end_stroke_boundary_offset,
-            };
+                var chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
+                while (chunk_iter.next()) |chunk| {
+                    pool.spawnWg(
+                        &wg,
+                        blender.fill,
+                        .{
+                            style.stroke.brush,
+                            style_offset.stroke_brush_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
+                        },
+                    );
+                }
 
-            chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
-            while (chunk_iter.next()) |chunk| {
-                pool.spawnWg(
-                    &wg,
-                    blender.fill,
-                    .{
-                        self.boundary_fragments.items,
-                        chunk,
-                        texture,
-                    },
-                );
+                wg.wait();
+                wg.reset();
             }
-
-            wg.wait();
-            wg.reset();
         }
     }
 
     pub fn debugPrint(self: @This(), texture: TextureUnmanaged) void {
-        if (self.config.debugExpandPathMonoids()) {
+        if (self.config.debugExpandMonoids()) {
             std.debug.print("============ Path Monoids ============\n", .{});
             for (self.path_monoids.items) |path_monoid| {
                 std.debug.print("{}\n", .{path_monoid});

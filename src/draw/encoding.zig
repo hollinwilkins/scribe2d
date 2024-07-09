@@ -89,9 +89,9 @@ pub const Style = packed struct {
         std.debug.assert(@sizeOf(Style) <= 32);
     }
 
-    pub const Brush = enum(u1) {
-        noop,
-        color,
+    pub const Brush = enum(u3) {
+        noop = 0,
+        color = 1,
 
         pub fn offset(self: @This()) u32 {
             return switch (self) {
@@ -101,9 +101,9 @@ pub const Style = packed struct {
         }
     };
 
-    pub const FillRule = enum(u2) {
-        even_odd = 1,
-        non_zero = 2,
+    pub const FillRule = enum(u1) {
+        even_odd = 0,
+        non_zero = 1,
     };
 
     pub const Fill = packed struct {
@@ -154,11 +154,33 @@ pub const Style = packed struct {
     }
 
     pub fn isFill(self: @This()) bool {
-        return self.flags.fill;
+        return self.flags.fill and self.fill.brush != .noop;
     }
 
     pub fn isStroke(self: @This()) bool {
-        return self.flags.stroke;
+        return self.flags.stroke and self.stroke.brush != .noop;
+    }
+};
+
+pub const StyleOffset = struct {
+    fill_brush_offset: u32 = 0,
+    stroke_brush_offset: u32 = 0,
+
+    pub usingnamespace MonoidFunctions(Style, @This());
+
+    pub fn createTag(tag: Style) @This() {
+        const fill_brush_offset = tag.fill.brush.offset();
+        return @This() {
+            .fill_brush_offset = fill_brush_offset,
+            .stroke_brush_offset = fill_brush_offset + tag.stroke.brush.offset(),
+        };
+    }
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .fill_brush_offset = self.fill_brush_offset + other.fill_brush_offset,
+            .stroke_brush_offset = self.stroke_brush_offset + other.stroke_brush_offset,
+        };
     }
 };
 
