@@ -1515,6 +1515,7 @@ pub const Rasterize = struct {
                         .subpath_flat_segments = subpath_flat_segments,
                         .segment_grid_intersections = segment_grid_intersections,
                         .grid_intersections = grid_intersections,
+                        .reverse = true,
                     };
 
                     boundarySegment2(
@@ -1892,17 +1893,23 @@ pub const Rasterize = struct {
         subpath_flat_segments: []const FlatSegment,
         segment_grid_intersections: []const GridIntersection,
         grid_intersections: []const GridIntersection,
+        reverse: bool = false,
 
         pub fn next(self: *@This()) ?GridIntersection {
+            if (self.index > self.segment_grid_intersections.len) {
+                return null;
+            }
+
             if (self.segment_grid_intersections.len == 0) {
                 return null;
             }
 
             var next_grid_intersection: GridIntersection = undefined;
 
-            if (self.index < self.segment_grid_intersections.len) {
-                next_grid_intersection = self.segment_grid_intersections[self.index];
-            } else if (self.index == self.segment_grid_intersections.len) {
+            const index: u32 = if (self.reverse) @as(u32, @intCast(self.segment_grid_intersections.len)) - self.index else self.index;
+            if (index < self.segment_grid_intersections.len) {
+                next_grid_intersection = self.segment_grid_intersections[index];
+            } else if (index == self.segment_grid_intersections.len) {
                 const next_flat_segment_index = (self.flat_segment_index + 1) % (self.subpath_flat_segments.len);
                 const next_flat_segment = self.subpath_flat_segments[next_flat_segment_index];
                 next_grid_intersection = self.grid_intersections[next_flat_segment.start_intersection_offset];
