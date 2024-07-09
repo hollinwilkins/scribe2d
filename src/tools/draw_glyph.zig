@@ -42,9 +42,9 @@ pub fn main() !void {
         .a = 255,
     });
     var style = draw.Style{};
-    // style.setFill(draw.Style.Fill{
-    //     .brush = .color,
-    // });
+    style.setFill(draw.Style.Fill{
+        .brush = .color,
+    });
     style.setStroke(draw.Style.Stroke{
         .join = .bevel,
     });

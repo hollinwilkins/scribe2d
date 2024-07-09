@@ -971,8 +971,8 @@ pub const SubpathOffset = struct {
             end_subpath_segment_offset = segment_offsets[segment_offsets.len - 1];
         }
 
-        const start_fill_flat_segment_offset = start_path_segment_offset.sum.line_offset + (start_subpath_segment_offset.fill.line_offset - start_path_segment_offset.fill.line_offset);
-        const end_fill_flat_segment_offset = start_path_segment_offset.sum.line_offset + (end_subpath_segment_offset.fill.line_offset - start_path_segment_offset.fill.line_offset);
+        const start_fill_flat_segment_offset = start_path_segment_offset.sum.flat_segment + (start_subpath_segment_offset.fill.flat_segment - start_path_segment_offset.fill.flat_segment);
+        const end_fill_flat_segment_offset = start_path_segment_offset.sum.flat_segment + (end_subpath_segment_offset.fill.flat_segment - start_path_segment_offset.fill.flat_segment);
 
         const last_fill_flat_segment_offset = start_path_segment_offset.sum.flat_segment + (end_path_segment_offset.fill.flat_segment - start_path_segment_offset.fill.flat_segment);
         var start_stroke_flat_segment_offset = last_fill_flat_segment_offset;
