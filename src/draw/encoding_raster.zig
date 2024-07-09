@@ -30,6 +30,52 @@ const ColorF32 = texture_module.ColorF32;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
+    pub const Config = struct {
+        pub const RUN_FLAG_EXPAND_PATH_MONOIDS: u8 = 0b00000001;
+        pub const RUN_FLAG_ESTIMATE_SEGMENTS: u8 = 0b00000010;
+        pub const RUN_FLAG_FLATTEN: u8 = 0b00000100;
+        pub const RUN_FLAG_INTERSECT: u8 = 0b00001000;
+        pub const RUN_FLAG_BOUNDARY: u8 = 0b00010000;
+        pub const RUN_FLAG_MERGE: u8 = 0b00100000;
+        pub const RUN_FLAG_MASK: u8 = 0b01000000;
+        pub const RUN_FLAG_FLUSH_TEXTURE: u8 = 0b10000000;
+
+        run_flags: u8 = RUN_FLAG_FLUSH_TEXTURE,
+        kernel_config: KernelConfig = KernelConfig.DEFAULT,
+
+        pub fn runExpandPathMonoids(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_EXPAND_PATH_MONOIDS;
+        }
+
+        pub fn runEstimateSegments(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_ESTIMATE_SEGMENTS;
+        }
+
+        pub fn runFlatten(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_FLATTEN;
+        }
+
+        pub fn runIntersect(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_INTERSECT;
+        }
+
+        pub fn runBoundary(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_BOUNDARY;
+        }
+
+        pub fn runMerge(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_MERGE;
+        }
+
+        pub fn runMask(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_MASK;
+        }
+
+        pub fn runFlushTexture(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_FLUSH_TEXTURE;
+        }
+    };
+
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const PathList = std.ArrayListUnmanaged(Path);
     const SubpathList = std.ArrayListUnmanaged(Subpath);
@@ -46,7 +92,7 @@ pub const CpuRasterizer = struct {
 
     allocator: Allocator,
     half_planes: *const HalfPlanesU16,
-    config: KernelConfig,
+    config: Config,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
     paths: PathList = PathList{},
@@ -61,7 +107,7 @@ pub const CpuRasterizer = struct {
     pub fn init(
         allocator: Allocator,
         half_planes: *const HalfPlanesU16,
-        config: KernelConfig,
+        config: Config,
         encoding: Encoding,
     ) !@This() {
         return @This(){
@@ -100,21 +146,42 @@ pub const CpuRasterizer = struct {
         var pool: std.Thread.Pool = undefined;
         try pool.init(.{
             .allocator = self.allocator,
-            .n_jobs = self.config.parallelism,
+            .n_jobs = self.config.kernel_config.parallelism,
         });
         defer pool.deinit();
 
         // reset the rasterizer
         self.reset();
+
+        if (!self.config.runExpandPathMonoids()) {
+            return;
+        }
+
         // expand path monoids
         try self.expandPathMonoids();
-        // // estimate FlatEncoder memory requirements
+
+        if (!self.config.runEstimateSegments()) {
+            return;
+        }
+
+        // estimate FlatEncoder memory requirements
         try self.estimateSegments(&pool);
+
+        if (!self.config.runFlatten()) {
+            return;
+        }
+
         // allocate the FlatEncoder
         // use the FlatEncoder to flatten the encoding
         try self.flatten(&pool);
+
         // calculate scanline encoding
         try self.kernelRasterize(&pool);
+
+        if (!self.config.runFlushTexture()) {
+            return;
+        }
+
         // write scanline encoding to texture
         self.flushTexture(&pool, texture);
     }
@@ -149,14 +216,14 @@ pub const CpuRasterizer = struct {
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
         };
-        var chunk_iter = range.chunkIterator(self.config.chunk_size);
+        var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
                 estimator.estimateSegments,
                 .{
-                    self.config,
+                    self.config.kernel_config,
                     self.encoding.path_tags,
                     self.path_monoids.items,
                     self.encoding.styles,
@@ -190,14 +257,14 @@ pub const CpuRasterizer = struct {
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
         };
-        var chunk_iter = range.chunkIterator(self.config.chunk_size);
+        var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
                 flattener.flatten,
                 .{
-                    self.config,
+                    self.config.kernel_config,
                     self.encoding.path_tags,
                     self.path_monoids.items,
                     self.encoding.styles,
@@ -217,6 +284,10 @@ pub const CpuRasterizer = struct {
     }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
+        if (!self.config.runIntersect()) {
+            return;
+        }
+
         var wg = std.Thread.WaitGroup{};
         const rasterizer = kernel_module.Rasterize;
         const last_segment_offset = self.segment_offsets.getLast();
@@ -229,7 +300,7 @@ pub const CpuRasterizer = struct {
             .end = @intCast(self.flat_segments.items.len),
         };
 
-        var chunk_iter = flat_segment_range.chunkIterator(self.config.chunk_size);
+        var chunk_iter = flat_segment_range.chunkIterator(self.config.kernel_config.chunk_size);
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
@@ -245,6 +316,10 @@ pub const CpuRasterizer = struct {
 
         wg.wait();
         wg.reset();
+
+        if (!self.config.runBoundary()) {
+            return;
+        }
 
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
@@ -273,7 +348,7 @@ pub const CpuRasterizer = struct {
             .start = 0,
             .end = @intCast(self.paths.items.len),
         };
-        chunk_iter = path_range.chunkIterator(self.config.chunk_size);
+        chunk_iter = path_range.chunkIterator(self.config.kernel_config.chunk_size);
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
@@ -290,6 +365,10 @@ pub const CpuRasterizer = struct {
 
         wg.wait();
         wg.reset();
+
+        if (!self.config.runMerge()) {
+            return;
+        }
 
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
@@ -308,13 +387,17 @@ pub const CpuRasterizer = struct {
         wg.wait();
         wg.reset();
 
+        if (!self.config.runMask()) {
+            return;
+        }
+
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
                 rasterizer.mask,
                 .{
-                    self.config,
+                    self.config.kernel_config,
                     self.paths.items,
                     chunk,
                     self.boundary_fragments.items,
@@ -337,7 +420,7 @@ pub const CpuRasterizer = struct {
                 .end = path.end_fill_merge_offset,
             };
 
-            var chunk_iter = fill_range.chunkIterator(self.config.chunk_size);
+            var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
             while (chunk_iter.next()) |chunk| {
                 pool.spawnWg(
                     &wg,
@@ -358,7 +441,7 @@ pub const CpuRasterizer = struct {
                 .end = path.end_stroke_merge_offset,
             };
 
-            chunk_iter = stroke_range.chunkIterator(self.config.chunk_size);
+            chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
             while (chunk_iter.next()) |chunk| {
                 pool.spawnWg(
                     &wg,
@@ -412,13 +495,15 @@ pub const CpuRasterizer = struct {
                 }),
             }
 
-            const offset = self.segment_offsets.items[segment_index];
-            std.debug.print("Offset: {}\n", .{offset});
-            std.debug.print("----------\n", .{});
+            if (self.config.runEstimateSegments()) {
+                const offset = self.segment_offsets.items[segment_index];
+                std.debug.print("Offset: {}\n", .{offset});
+                std.debug.print("----------\n", .{});
+            }
         }
         std.debug.print("======================================\n", .{});
 
-        {
+        if (self.config.runFlatten()) {
             std.debug.print("============ Flat Fill Lines ============\n", .{});
             for (self.subpaths.items) |subpath| {
                 const path_monoid = self.path_monoids.items[subpath.segment_index];
@@ -475,7 +560,7 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        {
+        if (self.config.runIntersect()) {
             std.debug.print("============ Grid Intersections ============\n", .{});
             for (self.subpaths.items) |subpath| {
                 const path_monoid = self.path_monoids.items[subpath.segment_index];
@@ -544,7 +629,7 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        {
+        if (self.config.runBoundary()) {
             std.debug.print("============ Boundary Fragments ============\n", .{});
             for (self.paths.items) |path| {
                 const path_monoid = self.path_monoids.items[path.segment_index];
@@ -574,7 +659,7 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        {
+        if (self.config.runMerge()) {
             std.debug.print("============ Merge Fragments ============\n", .{});
             for (self.paths.items) |path| {
                 const path_monoid = self.path_monoids.items[path.segment_index];
@@ -606,7 +691,7 @@ pub const CpuRasterizer = struct {
             }
         }
 
-        {
+        if (self.config.runFlushTexture()) {
             std.debug.print("\n============== Boundary Texture\n\n", .{});
             for (0..texture.dimensions.height) |y| {
                 std.debug.print("{:0>4}: ", .{y});

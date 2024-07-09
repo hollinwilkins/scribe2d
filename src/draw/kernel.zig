@@ -51,6 +51,9 @@ const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const KernelConfig = struct {
     pub const DEFAULT: @This() = init(@This(){});
+    pub const SERIAL: @This() = init(@This(){
+        .parallelism = 1,
+    });
 
     parallelism: u8 = 8,
     chunk_size: u8 = 8,

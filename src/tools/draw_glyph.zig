@@ -58,10 +58,13 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const encoding = encoder.encode();
+    const rasterizer_config = draw.CpuRasterizer.Config{
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
+    };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,
         &half_planes,
-        draw.KernelConfig.DEFAULT,
+        rasterizer_config,
         encoding,
     );
     defer rasterizer.deinit();
