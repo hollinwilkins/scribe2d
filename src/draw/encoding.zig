@@ -345,6 +345,14 @@ pub const Encoder = struct {
         self.draw_data.deinit(self.allocator);
     }
 
+    pub fn reset(self: *@This()) void {
+        self.path_tags.items.len = 0;
+        self.transforms.items.len = 0;
+        self.styles.items.len = 0;
+        self.segment_data.items.len = 0;
+        self.draw_data.items.len = 0;
+    }
+
     pub fn encode(self: @This()) Encoding {
         return Encoding{
             .path_tags = self.path_tags.items,
@@ -376,6 +384,7 @@ pub const Encoder = struct {
         if (self.staged.path) {
             self.staged.path = false;
             tag2.index.path = 1;
+            (try self.path_offsets.addOne(self.allocator)).* = @intCast(self.path_tags.len);
         }
 
         if (self.staged.subpath) {

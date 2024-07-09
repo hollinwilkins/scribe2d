@@ -27,5 +27,6 @@ pub const HalfPlanesU16 = msaa.HalfPlanesU16;
 pub const KernelConfig = kernel.KernelConfig;
 
 pub const Encoder = encoding.Encoder;
+pub const Style = encoding.Style;
 
 pub const CpuRasterizer = encoding_raster.CpuRasterizer;
