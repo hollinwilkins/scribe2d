@@ -722,10 +722,10 @@ pub const Flatten = struct {
         end_point: PointF32,
         writer: *Writer,
     ) void {
-        const p0 = transform.apply(cubic_points.p0);
-        const p1 = transform.apply(cubic_points.p1);
-        const p2 = transform.apply(cubic_points.p2);
-        const p3 = transform.apply(cubic_points.p3);
+        const p0 = cubic_points.p0;
+        const p1 = cubic_points.p1;
+        const p2 = cubic_points.p2;
+        const p3 = cubic_points.p3;
         const scale = 0.5 * transform.getScale();
 
         var t_start: PointF32 = undefined;
