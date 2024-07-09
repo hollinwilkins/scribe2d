@@ -1672,6 +1672,10 @@ pub const Rasterize = struct {
         merge_fragments: []MergeFragment,
     ) void {
         const path_boundary_fragments = boundary_fragments[start_boundary_offset..end_boundary_offset];
+        if (path_boundary_fragments.len == 0) {
+            return;
+        }
+
         var merge_fragment = &merge_fragments[bump.bump(1)];
         merge_fragment.* = MergeFragment{
             .pixel = boundary_fragments[start_boundary_offset].pixel,

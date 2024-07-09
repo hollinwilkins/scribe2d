@@ -784,18 +784,23 @@ pub fn PathEncoder(comptime T: type) type {
 
             fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
+                b.close() catch {
+                    unreachable;
+                };
 
-                const transform = (TransformF32{
+                const scale = (TransformF32{
                     .scale = PointF32{
                         .x = ppem,
                         .y = ppem,
                     },
+                }).toAffine();
+                const translate = (TransformF32{
                     .translate = PointF32{
                         .x = -bounds.min.x,
                         .y = -bounds.min.y,
                     },
                 }).toAffine();
-                const bounds2 = bounds.affineTransform(transform);
+                const bounds2 = bounds.affineTransform(translate).affineTransform(scale);
 
                 const transform2 = (TransformF32{
                     .scale = PointF32{
@@ -808,12 +813,9 @@ pub fn PathEncoder(comptime T: type) type {
                     },
                 }).toAffine();
 
-                b.affineTransform(transform);
+                b.affineTransform(translate);
+                b.affineTransform(scale);
                 b.affineTransform(transform2);
-
-                b.close() catch {
-                    unreachable;
-                };
             }
         };
     };
