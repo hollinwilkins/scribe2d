@@ -42,12 +42,12 @@ pub fn main() !void {
         .a = 255,
     });
     var style = draw.Style{};
-    style.setFill(draw.Style.Fill{
-        .brush = .color,
-    });
-    // style.setStroke(draw.Style.Stroke{
-    //     .join = .bevel,
+    // style.setFill(draw.Style.Fill{
+    //     .brush = .color,
     // });
+    style.setStroke(draw.Style.Stroke{
+        .join = .bevel,
+    });
     try encoder.encodeStyle(style);
 
     var path_encoder = encoder.pathEncoder(f32);
@@ -60,7 +60,7 @@ pub fn main() !void {
 
     const encoding = encoder.encode();
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,
