@@ -1981,10 +1981,51 @@ pub const Blend = struct {
     ) void {
         _ = brush; // only color for now
         const color_blend = ColorBlend.Alpha;
+        const brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
 
         for (range.start..range.end) |merge_index| {
             const merge_fragment = boundary_fragments[merge_index];
-            const brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
+
+            if (!merge_fragment.is_merge) {
+                continue;
+            }
+
+            const pixel = merge_fragment.pixel;
+            if (pixel.x < 0 or pixel.y < 0 or pixel.x >= texture.dimensions.width or pixel.y >= texture.dimensions.height) {
+                continue;
+            }
+
+            const intensity = merge_fragment.getIntensity();
+            const texture_pixel = PointU32{
+                .x = @intCast(pixel.x),
+                .y = @intCast(pixel.y),
+            };
+            const fragment_color = ColorF32{
+                .r = brush_color.r,
+                .g = brush_color.g,
+                .b = brush_color.b,
+                .a = brush_color.a * intensity,
+            };
+            const texture_color = texture.getPixelUnsafe(texture_pixel);
+            const blend_color = color_blend.blend(fragment_color, texture_color);
+            texture.setPixelUnsafe(texture_pixel, blend_color);
+        }
+    }
+
+    pub fn fillSpan(
+        brush: Style.Brush,
+        brush_offset: u32,
+        boundary_fragments: []const BoundaryFragment,
+        draw_data: []const u8,
+        range: RangeU32,
+        texture: *TextureUnmanaged,
+    ) void {
+        _ = brush; // only color for now
+        const color_blend = ColorBlend.Alpha;
+        const brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
+
+        for (range.start..range.end) |merge_index| {
+            const merge_fragment = boundary_fragments[merge_index];
 
             if (merge_fragment.is_scanline and merge_fragment.pixel.y >= 0 and merge_fragment.pixel.y < texture.dimensions.height) {
                 const y: u32 = @intCast(merge_fragment.pixel.y);
@@ -2029,30 +2070,6 @@ pub const Blend = struct {
                     previous_merge_fragment = current_merge_fragment;
                 }
             }
-
-            if (!merge_fragment.is_merge) {
-                continue;
-            }
-
-            const pixel = merge_fragment.pixel;
-            if (pixel.x < 0 or pixel.y < 0 or pixel.x >= texture.dimensions.width or pixel.y >= texture.dimensions.height) {
-                continue;
-            }
-
-            const intensity = merge_fragment.getIntensity();
-            const texture_pixel = PointU32{
-                .x = @intCast(pixel.x),
-                .y = @intCast(pixel.y),
-            };
-            const fragment_color = ColorF32{
-                .r = brush_color.r,
-                .g = brush_color.g,
-                .b = brush_color.b,
-                .a = brush_color.a * intensity,
-            };
-            const texture_color = texture.getPixelUnsafe(texture_pixel);
-            const blend_color = color_blend.blend(fragment_color, texture_color);
-            texture.setPixelUnsafe(texture_pixel, blend_color);
         }
     }
 };

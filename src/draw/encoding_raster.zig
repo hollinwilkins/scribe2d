@@ -494,6 +494,25 @@ pub const CpuRasterizer = struct {
 
                 wg.wait();
                 wg.reset();
+
+                chunk_iter.reset();
+                while (chunk_iter.next()) |chunk| {
+                    pool.spawnWg(
+                        &wg,
+                        blender.fillSpan,
+                        .{
+                            style.fill.brush,
+                            style_offset.fill_brush_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
+                        },
+                    );
+                }
+
+                wg.wait();
+                wg.reset();
             }
 
             if (style.isStroke()) {
@@ -507,6 +526,25 @@ pub const CpuRasterizer = struct {
                     pool.spawnWg(
                         &wg,
                         blender.fill,
+                        .{
+                            style.stroke.brush,
+                            style_offset.stroke_brush_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
+                        },
+                    );
+                }
+
+                wg.wait();
+                wg.reset();
+
+                chunk_iter.reset();
+                while (chunk_iter.next()) |chunk| {
+                    pool.spawnWg(
+                        &wg,
+                        blender.fillSpan,
                         .{
                             style.stroke.brush,
                             style_offset.stroke_brush_offset,
