@@ -587,6 +587,18 @@ pub const CpuRasterizer = struct {
                 std.debug.print("{}\n", .{path_monoid});
             }
             std.debug.print("======================================\n", .{});
+
+            std.debug.print("========== Subpaths ============\n", .{});
+            for (self.subpaths.items) |subpath| {
+                const subpath_tag = self.encoding.path_tags[subpath.segment_index];
+                const subpath_monoid = self.path_monoids.items[subpath.segment_index];
+                std.debug.print("Subpath({},{},{})\n", .{
+                    subpath_monoid.path_index,
+                    subpath_monoid.subpath_index,
+                    subpath_tag.segment.cap,
+                });
+            }
+            std.debug.print("======================================\n", .{});
         }
 
         if (self.config.debugEstimateSegments()) {

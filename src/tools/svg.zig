@@ -50,6 +50,7 @@ pub fn main() !void {
         .x = 10.0,
         .y = 10.0,
     });
+    try path_encoder.finish();
 
     const bounds = encoder.calculateBounds();
 
@@ -72,7 +73,8 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_EXPAND_MONOIDS,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_EXPAND_MONOIDS,
         .kernel_config = draw.KernelConfig.SERIAL,
     };
     var rasterizer = try draw.CpuRasterizer.init(

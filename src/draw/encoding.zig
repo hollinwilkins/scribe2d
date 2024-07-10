@@ -676,9 +676,7 @@ pub fn PathEncoder(comptime T: type) type {
                 return;
             }
 
-            if (self.is_fill) {
-                _ = try self.close();
-            }
+            _ = try self.close();
 
             self.encoder.staged.subpath = false;
         }
@@ -688,16 +686,18 @@ pub fn PathEncoder(comptime T: type) type {
                 return;
             }
 
-            if (self.is_fill) {
-                if (self.encoder.currentPathTag()) |tag| {
-                    // ensure filled subpaths are closed
-                    const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).*;
-                    const closed = try self.lineTo(start_point);
+            const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).*;
+            const end_point = self.encoder.pathTailSegment(PPoint);
 
-                    if (closed) {
-                        self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
-                        tag.segment.cap = true;
-                    }
+            if (!std.meta.eql(start_point, end_point.*)) {
+                self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
+
+                if (self.encoder.currentPathTag()) |tag| {
+                    tag.segment.cap = true;
+                }
+
+                if (self.is_fill) {
+                    _ = try self.lineTo(start_point);
                 }
             }
 
