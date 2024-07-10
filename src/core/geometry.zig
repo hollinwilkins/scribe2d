@@ -370,6 +370,9 @@ pub fn Transform(comptime T: type) type {
                 const x = z[0] * point.x + z[1] * point.y + z[2];
                 const y = z[3] * point.x + z[4] * point.y + z[5];
 
+                // const x = z[0] * point.x + z[3] * point.y + z[2];
+                // const y = z[1] * point.x + z[4] * point.y + z[5];
+
                 return P{
                     .x = x,
                     .y = y,
