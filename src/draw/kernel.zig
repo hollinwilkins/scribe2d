@@ -1256,7 +1256,6 @@ pub const Rasterize = struct {
         };
 
         while (line_iter.next()) |line| {
-            const start_intersection_index = intersection_writer.index;
             const start_point: PointF32 = line.apply(0.0);
             const end_point: PointF32 = line.apply(1.0);
             const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
@@ -1330,30 +1329,14 @@ pub const Rasterize = struct {
             var start_scan_y = scanner.y_range.start;
             while (scanner.nextX()) |x| {
                 if (scanX(x, line, scan_bounds)) |x_intersection| {
-                    std.debug.assert(true);
-                    std.debug.assert(true);
-                    std.debug.assert(true);
-
-                    const DEBUG_POINT = PointF32{ .x = -4e0, .y = 1.655012e0 };
-                    if (start_x_intersection.intersection.t == 0.0 and std.meta.eql(x_intersection.intersection.point, DEBUG_POINT)) {
-                        std.debug.assert(true);
-                        std.debug.assert(true);
-                    }
-
                     scan_y: {
                         if (@abs(start_scan_y - x_intersection.intersection.point.y) > 1.0) {
                             while (scanner.nextY()) |y| {
-                                std.debug.assert(true);
-                                std.debug.assert(true);
-
                                 if (scanY(y, line, scan_bounds)) |y_intersection| {
                                     intersection_writer.write(y_intersection);
                                     start_scan_y = y;
                                     start_y_intersection = y_intersection;
                                 }
-
-                                std.debug.assert(true);
-                                std.debug.assert(true);
 
                                 const next_y = scanner.peekNextY();
                                 if (min_y and next_y >= x_intersection.intersection.point.y) {
@@ -1361,15 +1344,9 @@ pub const Rasterize = struct {
                                 } else if (!min_y and next_y <= x_intersection.intersection.point.y) {
                                     break :scan_y;
                                 }
-
-                                std.debug.assert(true);
-                                std.debug.assert(true);
                             }
                         }
                     }
-
-                    std.debug.assert(true);
-                    std.debug.assert(true);
 
                     intersection_writer.write(x_intersection);
                     start_scan_x = x;
@@ -1377,21 +1354,18 @@ pub const Rasterize = struct {
                 }
             }
 
+            while (scanner.nextY()) |y| {
+                if (scanY(y, line, scan_bounds)) |y_intersection| {
+                    intersection_writer.write(y_intersection);
+                    start_scan_y = y;
+                    start_y_intersection = y_intersection;
+                }
+            }
+
             intersection_writer.write(end_intersection);
-
-            const end_intersection_index = intersection_writer.index;
-            const line_intersections = intersection_writer.intersections[start_intersection_index..end_intersection_index];
-
-            // need to sort by T for each curve, in order
-            std.mem.sort(
-                GridIntersection,
-                line_intersections,
-                @as(u32, 0),
-                gridIntersectionLessThan,
-            );
         }
 
-        flat_segment.end_intersection_offset = flat_segment.start_intersection_offset + intersection_writer.index;
+        flat_segment.end_intersection_offset = flat_segment.start_intersection_offset + intersection_writer.offset;
     }
 
     fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
@@ -1838,13 +1812,13 @@ pub const Rasterize = struct {
 
     pub const IntersectionWriter = struct {
         intersections: []GridIntersection,
-        index: u16 = 0,
+        offset: u16 = 0,
         check_index: ?u16 = null,
 
         pub fn write(self: *@This(), intersection: GridIntersection) void {
             std.debug.print("Write Intersection: {}\n", .{intersection});
 
-            self.intersections[self.index] = intersection;
+            self.intersections[self.offset] = intersection;
 
             if (intersection.intersection.t == 0.0) {
                 self.check_index = null;
@@ -1852,10 +1826,10 @@ pub const Rasterize = struct {
                 if (self.check_index) |check| {
                     std.debug.assert(self.intersections[check].intersection.t < intersection.intersection.t);
                 }
-                self.check_index = self.index;
+                self.check_index = self.offset;
             }
 
-            self.index += 1;
+            self.offset += 1;
         }
     };
 

@@ -42,12 +42,12 @@ pub fn main() !void {
         .width = outline_width,
     });
     try encoder.encodeStyle(style);
-    // try encoder.encodeTransform((core.TransformF32{
-    //     .scale = core.PointF32{
-    //         .x = 10.0,
-    //         .y = 10.0,
-    //     }
-    // }).toAffine());
+    try encoder.encodeTransform((core.TransformF32{
+        .scale = core.PointF32{
+            .x = 10.0,
+            .y = 10.0,
+        }
+    }).toAffine());
 
     var path_encoder = encoder.pathEncoder(f32);
     try path_encoder.moveTo(core.PointF32{
@@ -58,13 +58,13 @@ pub fn main() !void {
         .x = 5.2,
         .y = 5.5,
     });
-    // _ = try path_encoder.quadTo(core.PointF32{
-    //     .x = 5.0,
-    //     .y = 0.0,
-    // }, core.PointF32{
-    //     .x = 3.0,
-    //     .y = 1.0,
-    // });
+    _ = try path_encoder.quadTo(core.PointF32{
+        .x = 5.0,
+        .y = 0.0,
+    }, core.PointF32{
+        .x = 3.0,
+        .y = 1.0,
+    });
     try path_encoder.finish();
 
     const bounds = encoder.calculateBounds();
