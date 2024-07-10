@@ -1050,16 +1050,29 @@ pub const Flatten = struct {
             .coefficients = [_]f32{ c, -s, 0.0, s, c, 0.0 },
         };
 
+        const DEBUG_POINT = PointF32{ .x = 6.223242e1, .y = 4.248633e1 };
+        if (std.meta.eql(DEBUG_POINT, transform.apply(center))) {
+            std.debug.print("DEBUG PARAMS({},{},{},{},{},{},{})\n", .{
+                r,
+                radius,
+                theta,
+                n_lines,
+                s,
+                c,
+                rot,
+            });
+        }
+
         for (0..n_lines - 1) |n| {
-            _ = n;
             r = rot.apply(r);
             const p1 = transform.apply(center.add(r));
 
-            const DEBUG_POINT = PointF32{
-                .x = 6.223242e1, .y = 4.248633e1
-            };
             if (std.meta.eql(DEBUG_POINT, transform.apply(center))) {
-                std.debug.print("DEBUG POINT: {}\n", .{p1});
+                std.debug.print("DEBUG POINT({},{}): {}\n", .{
+                    n,
+                    r,
+                    p1,
+                });
             }
 
             writer.write(LineF32.create(p0, p1));
