@@ -2,7 +2,6 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const encoding_module = @import("./encoding.zig");
 const kernel_module = @import("./kernel.zig");
-const kernel_writer_module = @import("./kernel_writer.zig");
 const texture_module = @import("./texture.zig");
 const msaa_module = @import("./msaa.zig");
 const mem = std.mem;
@@ -281,24 +280,18 @@ pub const CpuRasterizer = struct {
 
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
-        const Flattener = kernel_module.Flatten(
-            kernel_writer_module.SinglePassLineWriterFactory,
-            kernel_writer_module.SinglePassLineWriter,
-        );
         const last_segment_offset = self.segment_offsets.getLast();
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(
             self.allocator,
             last_segment_offset.sum.intersections,
         );
 
-        const flattener = Flattener{
-            .factory = kernel_writer_module.SinglePassLineWriterFactory{
-                .half_planes = self.half_planes,
-                .boundary_fragments = boundary_fragments,
-                .path_monoids = self.path_monoids.items,
-                .paths = self.paths.items,
-                .segment_offsets = self.segment_offsets.items,
-            },
+        const flattener = kernel_module.Flatten{
+            .half_planes = self.half_planes,
+            .boundary_fragments = boundary_fragments,
+            .path_monoids = self.path_monoids.items,
+            .paths = self.paths.items,
+            .segment_offsets = self.segment_offsets.items,
         };
 
         const range = RangeU32{
@@ -310,7 +303,7 @@ pub const CpuRasterizer = struct {
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
-                Flattener.flatten,
+                kernel_module.Flatten.flatten,
                 .{
                     flattener,
                     self.config.kernel_config,
@@ -337,7 +330,7 @@ pub const CpuRasterizer = struct {
 
         var wg = std.Thread.WaitGroup{};
         const rasterizer = kernel_module.Rasterize;
-        
+
         const path_range = RangeU32{
             .start = 0,
             .end = @intCast(self.paths.items.len),

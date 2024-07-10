@@ -394,1128 +394,1132 @@ pub const Estimate = struct {
     };
 };
 
-pub fn Flatten(comptime LineWriterFactory: type, comptime LineWriter: type) type {
-    return struct {
-        factory: LineWriterFactory,
+pub const Flatten = struct {
+    half_planes: *const HalfPlanesU16,
+    path_monoids: []const PathMonoid,
+    segment_offsets: []const SegmentOffset,
+    boundary_fragments: []BoundaryFragment,
+    paths: []Path,
 
-        pub fn flatten(
-            self: @This(),
-            config: KernelConfig,
-            path_tags: []const PathTag,
-            path_monoids: []const PathMonoid,
-            styles: []const Style,
-            transforms: []const TransformF32.Affine,
-            subpaths: []const Subpath,
-            segment_data: []const u8,
-            range: RangeU32,
-            // outputs
-            // true if path is used, false to ignore
-            paths: []Path,
-            segment_offsets: []SegmentOffset,
-        ) void {
-            for (range.start..range.end) |segment_index| {
-                const path_monoid = path_monoids[segment_index];
-                const style = getStyle(styles, path_monoid.style_index);
-                const path = &paths[path_monoid.path_index];
-                const flatten_offset = FlatSegmentOffset.create(
+    pub fn createLineWriter(
+        self: @This(),
+        kind: FlatSegment.Kind,
+        segment_index: u32,
+        flatten_offset: FlatSegmentOffset,
+    ) LineWriter {
+        _ = flatten_offset;
+        const path_monoid = self.path_monoids[segment_index];
+        const path = &self.paths[path_monoid.path_index];
+        const path_offset = PathOffset.create(
+            path_monoid.path_index,
+            self.segment_offsets,
+            self.paths,
+        );
+        const reverse = kind == .stroke_back;
+        var bump: BumpAllocator = undefined;
+
+        switch (kind) {
+            .fill => {
+                bump = BumpAllocator{
+                    .start = path_offset.start_fill_boundary_offset,
+                    .end = path_offset.end_fill_boundary_offset,
+                    .offset = &path.fill_bump,
+                };
+            },
+            else => {
+                bump = BumpAllocator{
+                    .start = path_offset.start_stroke_boundary_offset,
+                    .end = path_offset.end_stroke_boundary_offset,
+                    .offset = &path.stroke_bump,
+                };
+            },
+        }
+
+        return LineWriter{
+            .half_planes = self.half_planes,
+            .bump = bump,
+            .boundary_fragments = self.boundary_fragments,
+            .reverse = reverse,
+        };
+    }
+
+    pub fn flatten(
+        self: @This(),
+        config: KernelConfig,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        styles: []const Style,
+        transforms: []const TransformF32.Affine,
+        subpaths: []const Subpath,
+        segment_data: []const u8,
+        range: RangeU32,
+        // outputs
+        // true if path is used, false to ignore
+        paths: []Path,
+        segment_offsets: []SegmentOffset,
+    ) void {
+        for (range.start..range.end) |segment_index| {
+            const path_monoid = path_monoids[segment_index];
+            const style = getStyle(styles, path_monoid.style_index);
+            const path = &paths[path_monoid.path_index];
+            const flatten_offset = FlatSegmentOffset.create(
+                @intCast(segment_index),
+                path_monoid,
+                segment_offsets,
+                paths,
+                subpaths,
+            );
+
+            if (style.isFill()) {
+                var line_writer: LineWriter = self.createLineWriter(
+                    .fill,
                     @intCast(segment_index),
-                    path_monoid,
-                    segment_offsets,
-                    paths,
-                    subpaths,
+                    flatten_offset,
                 );
 
-                if (style.isFill()) {
-                    var line_writer: LineWriter = self.factory.create(
-                        .fill,
-                        @intCast(segment_index),
-                        flatten_offset,
-                    );
-
-                    flattenFill(
-                        config,
-                        @intCast(segment_index),
-                        path_tags,
-                        path_monoids,
-                        transforms,
-                        segment_data,
-                        &line_writer,
-                    );
-
-                    var atomic_fill_bounds = AtomicBounds.createRect(&path.fill_bounds);
-                    atomic_fill_bounds.extendBy(line_writer.bounds);
-                }
-
-                if (style.isStroke()) {
-                    var front_line_writer: LineWriter = self.factory.create(
-                        .stroke_front,
-                        @intCast(segment_index),
-                        flatten_offset,
-                    );
-                    var back_line_writer: LineWriter = self.factory.create(
-                        .stroke_back,
-                        @intCast(segment_index),
-                        flatten_offset,
-                    );
-
-                    flattenStroke(
-                        config,
-                        style.stroke,
-                        @intCast(segment_index),
-                        path_tags,
-                        path_monoids,
-                        transforms,
-                        subpaths,
-                        segment_data,
-                        &front_line_writer,
-                        &back_line_writer,
-                    );
-
-                    var atomic_stroke_bounds = AtomicBounds.createRect(&path.stroke_bounds);
-                    atomic_stroke_bounds.extendBy(front_line_writer.bounds);
-                    atomic_stroke_bounds.extendBy(back_line_writer.bounds);
-                }
-            }
-        }
-
-        pub fn flattenFill(
-            config: KernelConfig,
-            segment_index: u32,
-            path_tags: []const PathTag,
-            path_monoids: []const PathMonoid,
-            transforms: []const TransformF32.Affine,
-            segment_data: []const u8,
-            line_writer: *LineWriter,
-        ) void {
-            const path_tag = path_tags[segment_index];
-            const path_monoid = path_monoids[segment_index];
-            const transform = getTransform(transforms, path_monoid.transform_index);
-
-            if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
-                @panic("Cannot flatten ArcF32 yet.\n");
-            }
-
-            const cubic_points = getCubicPoints(
-                path_tag,
-                path_monoid,
-                segment_data,
-            ).affineTransform(transform);
-
-            flattenEuler(
-                config,
-                cubic_points,
-                0.5 * transform.getScale(),
-                0.0,
-                cubic_points.p0,
-                cubic_points.p3,
-                line_writer,
-            );
-
-            // adjust lines to represent actual filled lines
-            line_writer.close();
-        }
-
-        pub fn flattenStroke(
-            config: KernelConfig,
-            stroke: Style.Stroke,
-            segment_index: u32,
-            path_tags: []const PathTag,
-            path_monoids: []const PathMonoid,
-            transforms: []const TransformF32.Affine,
-            subpaths: []const Subpath,
-            segment_data: []const u8,
-            front_line_writer: *LineWriter,
-            back_line_writer: *LineWriter,
-        ) void {
-            const path_tag = path_tags[segment_index];
-            const path_monoid = path_monoids[segment_index];
-            const transform = getTransform(transforms, path_monoid.transform_index);
-            const subpath = subpaths[path_monoid.subpath_index];
-            const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) subpaths[path_monoid.subpath_index + 1] else null;
-            var last_segment_offset: u32 = undefined;
-            if (next_subpath) |ns| {
-                last_segment_offset = ns.segment_index;
-            } else {
-                last_segment_offset = @intCast(path_tags.len);
-            }
-            var last_path_tag: PathTag = undefined;
-            var last_path_monoid: PathMonoid = undefined;
-            if (last_segment_offset > 0) {
-                last_path_tag = path_tags[last_segment_offset - 1];
-                last_path_monoid = path_monoids[last_segment_offset - 1];
-            } else {
-                last_path_tag = path_tags[path_tags.len - 1];
-                last_path_monoid = path_monoids[path_monoids.len - 1];
-            }
-
-            if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
-                std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
-                return;
-            }
-
-            const cubic_points = getCubicPoints(
-                path_tag,
-                path_monoid,
-                segment_data,
-            ).affineTransform(transform);
-
-            const offset = 0.5 * stroke.width;
-            const offset_point = PointF32{
-                .x = offset,
-                .y = offset,
-            };
-
-            const segment_range = RangeU32{
-                .start = subpath.segment_index,
-                .end = last_segment_offset,
-            };
-            const neighbor = readNeighborSegment(
-                config,
-                segment_index + 1,
-                segment_range,
-                path_tags,
-                path_monoids,
-                segment_data,
-            );
-            var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
-            var tan_next = neighbor.tangent;
-            var tan_start = cubicStartTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
-
-            if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
-                tan_start = PointF32{
-                    .x = config.tangent_threshold,
-                    .y = 0.0,
-                };
-            }
-
-            if (tan_prev.dot(tan_prev) < config.tangent_threshold_pow2) {
-                tan_prev = PointF32{
-                    .x = config.tangent_threshold,
-                    .y = 0.0,
-                };
-            }
-
-            if (tan_next.dot(tan_next) < config.tangent_threshold_pow2) {
-                tan_next = PointF32{
-                    .x = config.tangent_threshold,
-                    .y = 0.0,
-                };
-            }
-
-            const n_start = offset_point.mul((PointF32{
-                .x = -tan_start.y,
-                .y = tan_start.x,
-            }).normalizeUnsafe());
-            const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
-            const n_prev = PointF32{
-                .x = -offset_tangent.y,
-                .y = offset_tangent.x,
-            };
-            const tan_next_norm = tan_next.normalizeUnsafe();
-            const n_next = offset_point.mul(PointF32{
-                .x = -tan_next_norm.y,
-                .y = tan_next_norm.x,
-            });
-
-            if (last_path_tag.segment.cap and path_tag.index.subpath == 1) {
-                // draw start cap on left side
-                drawCap(
+                flattenFill(
                     config,
-                    stroke.start_cap,
-                    cubic_points.p0,
-                    cubic_points.p0.sub(n_start),
-                    cubic_points.p0.add(n_start),
-                    offset_tangent.negate(),
-                    front_line_writer,
+                    @intCast(segment_index),
+                    path_tags,
+                    path_monoids,
+                    transforms,
+                    segment_data,
+                    &line_writer,
                 );
+
+                var atomic_fill_bounds = AtomicBounds.createRect(&path.fill_bounds);
+                atomic_fill_bounds.extendBy(line_writer.bounds);
             }
 
-            flattenEuler(
+            if (style.isStroke()) {
+                var front_line_writer: LineWriter = self.createLineWriter(
+                    .stroke_front,
+                    @intCast(segment_index),
+                    flatten_offset,
+                );
+                var back_line_writer: LineWriter = self.createLineWriter(
+                    .stroke_back,
+                    @intCast(segment_index),
+                    flatten_offset,
+                );
+
+                flattenStroke(
+                    config,
+                    style.stroke,
+                    @intCast(segment_index),
+                    path_tags,
+                    path_monoids,
+                    transforms,
+                    subpaths,
+                    segment_data,
+                    &front_line_writer,
+                    &back_line_writer,
+                );
+
+                var atomic_stroke_bounds = AtomicBounds.createRect(&path.stroke_bounds);
+                atomic_stroke_bounds.extendBy(front_line_writer.bounds);
+                atomic_stroke_bounds.extendBy(back_line_writer.bounds);
+            }
+        }
+    }
+
+    pub fn flattenFill(
+        config: KernelConfig,
+        segment_index: u32,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        transforms: []const TransformF32.Affine,
+        segment_data: []const u8,
+        line_writer: *LineWriter,
+    ) void {
+        const path_tag = path_tags[segment_index];
+        const path_monoid = path_monoids[segment_index];
+        const transform = getTransform(transforms, path_monoid.transform_index);
+
+        if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
+            @panic("Cannot flatten ArcF32 yet.\n");
+        }
+
+        const cubic_points = getCubicPoints(
+            path_tag,
+            path_monoid,
+            segment_data,
+        ).affineTransform(transform);
+
+        flattenEuler(
+            config,
+            cubic_points,
+            0.5 * transform.getScale(),
+            0.0,
+            cubic_points.p0,
+            cubic_points.p3,
+            line_writer,
+        );
+
+        // adjust lines to represent actual filled lines
+        line_writer.close();
+    }
+
+    pub fn flattenStroke(
+        config: KernelConfig,
+        stroke: Style.Stroke,
+        segment_index: u32,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        transforms: []const TransformF32.Affine,
+        subpaths: []const Subpath,
+        segment_data: []const u8,
+        front_line_writer: *LineWriter,
+        back_line_writer: *LineWriter,
+    ) void {
+        const path_tag = path_tags[segment_index];
+        const path_monoid = path_monoids[segment_index];
+        const transform = getTransform(transforms, path_monoid.transform_index);
+        const subpath = subpaths[path_monoid.subpath_index];
+        const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) subpaths[path_monoid.subpath_index + 1] else null;
+        var last_segment_offset: u32 = undefined;
+        if (next_subpath) |ns| {
+            last_segment_offset = ns.segment_index;
+        } else {
+            last_segment_offset = @intCast(path_tags.len);
+        }
+        var last_path_tag: PathTag = undefined;
+        var last_path_monoid: PathMonoid = undefined;
+        if (last_segment_offset > 0) {
+            last_path_tag = path_tags[last_segment_offset - 1];
+            last_path_monoid = path_monoids[last_segment_offset - 1];
+        } else {
+            last_path_tag = path_tags[path_tags.len - 1];
+            last_path_monoid = path_monoids[path_monoids.len - 1];
+        }
+
+        if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
+            std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
+            return;
+        }
+
+        const cubic_points = getCubicPoints(
+            path_tag,
+            path_monoid,
+            segment_data,
+        ).affineTransform(transform);
+
+        const offset = 0.5 * stroke.width;
+        const offset_point = PointF32{
+            .x = offset,
+            .y = offset,
+        };
+
+        const segment_range = RangeU32{
+            .start = subpath.segment_index,
+            .end = last_segment_offset,
+        };
+        const neighbor = readNeighborSegment(
+            config,
+            segment_index + 1,
+            segment_range,
+            path_tags,
+            path_monoids,
+            segment_data,
+        );
+        var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
+        var tan_next = neighbor.tangent;
+        var tan_start = cubicStartTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
+
+        if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
+            tan_start = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        if (tan_prev.dot(tan_prev) < config.tangent_threshold_pow2) {
+            tan_prev = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        if (tan_next.dot(tan_next) < config.tangent_threshold_pow2) {
+            tan_next = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        const n_start = offset_point.mul((PointF32{
+            .x = -tan_start.y,
+            .y = tan_start.x,
+        }).normalizeUnsafe());
+        const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
+        const n_prev = PointF32{
+            .x = -offset_tangent.y,
+            .y = offset_tangent.x,
+        };
+        const tan_next_norm = tan_next.normalizeUnsafe();
+        const n_next = offset_point.mul(PointF32{
+            .x = -tan_next_norm.y,
+            .y = tan_next_norm.x,
+        });
+
+        if (last_path_tag.segment.cap and path_tag.index.subpath == 1) {
+            // draw start cap on left side
+            drawCap(
                 config,
-                cubic_points,
-                0.5 * transform.getScale(),
-                offset,
+                stroke.start_cap,
+                cubic_points.p0,
+                cubic_points.p0.sub(n_start),
                 cubic_points.p0.add(n_start),
-                cubic_points.p3.add(n_prev),
+                offset_tangent.negate(),
                 front_line_writer,
             );
+        }
 
-            flattenEuler(
+        flattenEuler(
+            config,
+            cubic_points,
+            0.5 * transform.getScale(),
+            offset,
+            cubic_points.p0.add(n_start),
+            cubic_points.p3.add(n_prev),
+            front_line_writer,
+        );
+
+        flattenEuler(
+            config,
+            cubic_points,
+            0.5 * transform.getScale(),
+            -offset,
+            cubic_points.p0.sub(n_start),
+            cubic_points.p3.sub(n_prev),
+            back_line_writer,
+        );
+
+        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+            // draw end cap on left side
+            drawCap(
                 config,
-                cubic_points,
-                0.5 * transform.getScale(),
-                -offset,
-                cubic_points.p0.sub(n_start),
+                stroke.end_cap,
+                cubic_points.p3,
+                cubic_points.p3.add(n_prev),
                 cubic_points.p3.sub(n_prev),
+                offset_tangent,
+                front_line_writer,
+            );
+        } else {
+            drawJoin(
+                config,
+                stroke,
+                cubic_points.p3,
+                tan_prev,
+                tan_next,
+                n_prev,
+                n_next,
+                front_line_writer,
                 back_line_writer,
             );
-
-            if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
-                // draw end cap on left side
-                drawCap(
-                    config,
-                    stroke.end_cap,
-                    cubic_points.p3,
-                    cubic_points.p3.add(n_prev),
-                    cubic_points.p3.sub(n_prev),
-                    offset_tangent,
-                    front_line_writer,
-                );
-            } else {
-                drawJoin(
-                    config,
-                    stroke,
-                    cubic_points.p3,
-                    tan_prev,
-                    tan_next,
-                    n_prev,
-                    n_next,
-                    front_line_writer,
-                    back_line_writer,
-                );
-            }
-
-            front_line_writer.close();
-            back_line_writer.close();
         }
 
-        fn flattenEuler(
-            config: KernelConfig,
-            cubic_points: CubicBezierF32,
-            scale: f32,
-            offset: f32,
-            start_point: PointF32,
-            end_point: PointF32,
-            writer: *LineWriter,
-        ) void {
-            const p0 = cubic_points.p0;
-            const p1 = cubic_points.p1;
-            const p2 = cubic_points.p2;
-            const p3 = cubic_points.p3;
+        front_line_writer.close();
+        back_line_writer.close();
+    }
 
-            var t_start: PointF32 = undefined;
-            var t_end: PointF32 = undefined;
-            if (offset == 0.0) {
-                t_start = p0;
-                t_end = p3;
-            } else {
-                t_start = start_point;
-                t_end = end_point;
+    fn flattenEuler(
+        config: KernelConfig,
+        cubic_points: CubicBezierF32,
+        scale: f32,
+        offset: f32,
+        start_point: PointF32,
+        end_point: PointF32,
+        writer: *LineWriter,
+    ) void {
+        const p0 = cubic_points.p0;
+        const p1 = cubic_points.p1;
+        const p2 = cubic_points.p2;
+        const p3 = cubic_points.p3;
+
+        var t_start: PointF32 = undefined;
+        var t_end: PointF32 = undefined;
+        if (offset == 0.0) {
+            t_start = p0;
+            t_end = p3;
+        } else {
+            t_start = start_point;
+            t_end = end_point;
+        }
+
+        // Drop zero length lines. This is an exact equality test because dropping very short
+        // line segments may result in loss of watertightness. The parallel curves of zero
+        // length lines add nothing to stroke outlines, but we still may need to draw caps.
+        if (std.meta.eql(p0, p1) and std.meta.eql(p0, p2) and std.meta.eql(p0, p3)) {
+            return;
+        }
+
+        var t0_u: u32 = 0;
+        var dt: f32 = 1.0;
+        var last_p = p0;
+        var last_q = p1.sub(p0);
+
+        // We want to avoid near zero derivatives, so the general technique is to
+        // detect, then sample a nearby t value if it fails to meet the threshold.
+        if (last_q.lengthSquared() < config.derivative_threshold_pow2) {
+            last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, config.derivative_eps).derivative;
+        }
+        var last_t: f32 = 0.0;
+        var lp0 = t_start;
+
+        while (true) {
+            const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
+            if (t0 == 1.0) {
+                break;
             }
+            var t1 = t0 + dt;
+            const this_p0 = last_p;
+            const this_q0 = last_q;
+            const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
+            var this_p1 = cd1.point;
+            var this_q1 = cd1.derivative;
+            if (this_q1.lengthSquared() < config.derivative_threshold_pow2) {
+                const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - config.derivative_eps);
+                const new_p1 = cd2.point;
+                const new_q1 = cd2.derivative;
+                this_q1 = new_q1;
 
-            // Drop zero length lines. This is an exact equality test because dropping very short
-            // line segments may result in loss of watertightness. The parallel curves of zero
-            // length lines add nothing to stroke outlines, but we still may need to draw caps.
-            if (std.meta.eql(p0, p1) and std.meta.eql(p0, p2) and std.meta.eql(p0, p3)) {
-                return;
-            }
-
-            var t0_u: u32 = 0;
-            var dt: f32 = 1.0;
-            var last_p = p0;
-            var last_q = p1.sub(p0);
-
-            // We want to avoid near zero derivatives, so the general technique is to
-            // detect, then sample a nearby t value if it fails to meet the threshold.
-            if (last_q.lengthSquared() < config.derivative_threshold_pow2) {
-                last_q = evaluateCubicAndDeriv(p0, p1, p2, p3, config.derivative_eps).derivative;
-            }
-            var last_t: f32 = 0.0;
-            var lp0 = t_start;
-
-            while (true) {
-                const t0 = @as(f32, @floatFromInt(t0_u)) * dt;
-                if (t0 == 1.0) {
-                    break;
+                // Change just the derivative at the endpoint, but also move the point so it
+                // matches the derivative exactly if in the interior.
+                if (t1 < 1.0) {
+                    this_p1 = new_p1;
+                    t1 -= config.derivative_eps;
                 }
-                var t1 = t0 + dt;
-                const this_p0 = last_p;
-                const this_q0 = last_q;
-                const cd1 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1);
-                var this_p1 = cd1.point;
-                var this_q1 = cd1.derivative;
-                if (this_q1.lengthSquared() < config.derivative_threshold_pow2) {
-                    const cd2 = evaluateCubicAndDeriv(p0, p1, p2, p3, t1 - config.derivative_eps);
-                    const new_p1 = cd2.point;
-                    const new_q1 = cd2.derivative;
-                    this_q1 = new_q1;
+            }
+            const actual_dt = t1 - last_t;
+            const cubic_params = CubicParams.create(this_p0, this_p1, this_q0, this_q1, actual_dt);
+            if (cubic_params.err * scale <= config.error_tolerance or dt <= config.subdivision_limit) {
+                const euler_params = EulerParams.create(cubic_params.th0, cubic_params.th1);
+                const es = EulerSegment{
+                    .p0 = this_p0,
+                    .p1 = this_p1,
+                    .params = euler_params,
+                };
 
-                    // Change just the derivative at the endpoint, but also move the point so it
-                    // matches the derivative exactly if in the interior.
-                    if (t1 < 1.0) {
-                        this_p1 = new_p1;
-                        t1 -= config.derivative_eps;
-                    }
+                const k0 = es.params.k0 - 0.5 * es.params.k1;
+                const k1 = es.params.k1;
+
+                // compute forward integral to determine number of subdivisions
+                const normalized_offset = offset / cubic_params.chord_len;
+                const dist_scaled = normalized_offset * es.params.ch;
+
+                // The number of subdivisions for curvature = 1
+                const scale_multiplier = 0.5 * std.math.sqrt1_2 * std.math.sqrt((scale * cubic_params.chord_len / (es.params.ch * config.error_tolerance)));
+                var a: f32 = 0.0;
+                var b: f32 = 0.0;
+                var integral: f32 = 0.0;
+                var int0: f32 = 0.0;
+
+                var n_frac: f32 = undefined;
+                var robust: EspcRobust = undefined;
+
+                if (@abs(k1) < config.k1_threshold) {
+                    const k = k0 + 0.5 * k1;
+                    n_frac = std.math.sqrt(@abs(k * (k * dist_scaled + 1.0)));
+                    robust = .low_k1;
+                } else if (@abs(dist_scaled) < config.distance_threshold) {
+                    a = k1;
+                    b = k0;
+                    int0 = b * std.math.sqrt(@abs(b));
+                    const int1 = (a + b) * std.math.sqrt(@abs(a + b));
+                    integral = int1 - int0;
+                    n_frac = (2.0 / 3.0) * integral / a;
+                    robust = .low_dist;
+                } else {
+                    a = -2.0 * dist_scaled * k1;
+                    b = -1.0 - 2.0 * dist_scaled * k0;
+                    int0 = EspcRobust.intApproximation(config, b);
+                    const int1 = EspcRobust.intApproximation(config, a + b);
+                    integral = int1 - int0;
+                    const k_peak = k0 - k1 * b / a;
+                    const integrand_peak = std.math.sqrt(@abs(k_peak * (k_peak * dist_scaled + 1.0)));
+                    const scaled_int = integral * integrand_peak / a;
+                    n_frac = scaled_int;
+                    robust = .normal;
                 }
-                const actual_dt = t1 - last_t;
-                const cubic_params = CubicParams.create(this_p0, this_p1, this_q0, this_q1, actual_dt);
-                if (cubic_params.err * scale <= config.error_tolerance or dt <= config.subdivision_limit) {
-                    const euler_params = EulerParams.create(cubic_params.th0, cubic_params.th1);
-                    const es = EulerSegment{
-                        .p0 = this_p0,
-                        .p1 = this_p1,
-                        .params = euler_params,
-                    };
 
-                    const k0 = es.params.k0 - 0.5 * es.params.k1;
-                    const k1 = es.params.k1;
+                const n = std.math.clamp(@ceil(n_frac * scale_multiplier), 1.0, 100.0);
 
-                    // compute forward integral to determine number of subdivisions
-                    const normalized_offset = offset / cubic_params.chord_len;
-                    const dist_scaled = normalized_offset * es.params.ch;
+                // Flatten line segments
+                std.debug.assert(!std.math.isNan(n));
+                for (0..@intFromFloat(n)) |i| {
+                    var lp1: PointF32 = undefined;
 
-                    // The number of subdivisions for curvature = 1
-                    const scale_multiplier = 0.5 * std.math.sqrt1_2 * std.math.sqrt((scale * cubic_params.chord_len / (es.params.ch * config.error_tolerance)));
-                    var a: f32 = 0.0;
-                    var b: f32 = 0.0;
-                    var integral: f32 = 0.0;
-                    var int0: f32 = 0.0;
-
-                    var n_frac: f32 = undefined;
-                    var robust: EspcRobust = undefined;
-
-                    if (@abs(k1) < config.k1_threshold) {
-                        const k = k0 + 0.5 * k1;
-                        n_frac = std.math.sqrt(@abs(k * (k * dist_scaled + 1.0)));
-                        robust = .low_k1;
-                    } else if (@abs(dist_scaled) < config.distance_threshold) {
-                        a = k1;
-                        b = k0;
-                        int0 = b * std.math.sqrt(@abs(b));
-                        const int1 = (a + b) * std.math.sqrt(@abs(a + b));
-                        integral = int1 - int0;
-                        n_frac = (2.0 / 3.0) * integral / a;
-                        robust = .low_dist;
+                    if (i == (@as(usize, @intFromFloat(n)) - 1) and t1 == 1.0) {
+                        lp1 = t_end;
                     } else {
-                        a = -2.0 * dist_scaled * k1;
-                        b = -1.0 - 2.0 * dist_scaled * k0;
-                        int0 = EspcRobust.intApproximation(config, b);
-                        const int1 = EspcRobust.intApproximation(config, a + b);
-                        integral = int1 - int0;
-                        const k_peak = k0 - k1 * b / a;
-                        const integrand_peak = std.math.sqrt(@abs(k_peak * (k_peak * dist_scaled + 1.0)));
-                        const scaled_int = integral * integrand_peak / a;
-                        n_frac = scaled_int;
-                        robust = .normal;
-                    }
+                        const t = @as(f32, @floatFromInt(i + 1)) / n;
 
-                    const n = std.math.clamp(@ceil(n_frac * scale_multiplier), 1.0, 100.0);
-
-                    // Flatten line segments
-                    std.debug.assert(!std.math.isNan(n));
-                    for (0..@intFromFloat(n)) |i| {
-                        var lp1: PointF32 = undefined;
-
-                        if (i == (@as(usize, @intFromFloat(n)) - 1) and t1 == 1.0) {
-                            lp1 = t_end;
-                        } else {
-                            const t = @as(f32, @floatFromInt(i + 1)) / n;
-
-                            var s: f32 = undefined;
-                            switch (robust) {
-                                .low_k1 => {
-                                    s = t;
-                                },
-                                .low_dist => {
-                                    const c = std.math.cbrt(integral * t + int0);
-                                    const inv = c * @abs(c);
-                                    s = (inv - b) / a;
-                                },
-                                .normal => {
-                                    const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
-                                    s = (inv - b) / a;
-                                    // TODO: probably shouldn't have to do this, it differs from Vello
-                                    s = std.math.clamp(s, 0.0, 1.0);
-                                },
-                            }
-                            lp1 = es.applyOffset(s, normalized_offset);
+                        var s: f32 = undefined;
+                        switch (robust) {
+                            .low_k1 => {
+                                s = t;
+                            },
+                            .low_dist => {
+                                const c = std.math.cbrt(integral * t + int0);
+                                const inv = c * @abs(c);
+                                s = (inv - b) / a;
+                            },
+                            .normal => {
+                                const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
+                                s = (inv - b) / a;
+                                // TODO: probably shouldn't have to do this, it differs from Vello
+                                s = std.math.clamp(s, 0.0, 1.0);
+                            },
                         }
-
-                        // const l0 = if (offset >= 0.0) lp0 else lp1;
-                        // const l1 = if (offset >= 0.0) lp1 else lp0;
-                        const line = LineF32.create(lp0, lp1);
-                        writer.write(line);
-
-                        lp0 = lp1;
+                        lp1 = es.applyOffset(s, normalized_offset);
                     }
 
-                    last_p = this_p1;
-                    last_q = this_q1;
-                    last_t = t1;
+                    // const l0 = if (offset >= 0.0) lp0 else lp1;
+                    // const l1 = if (offset >= 0.0) lp1 else lp0;
+                    const line = LineF32.create(lp0, lp1);
+                    writer.write(line);
 
-                    // Advance segment to next range. Beginning of segment is the end of
-                    // this one. The number of trailing zeros represents the number of stack
-                    // frames to pop in the recursive version of adaptive subdivision, and
-                    // each stack pop represents doubling of the size of the range.
-                    t0_u += 1;
-                    const shift: u5 = @intCast(@ctz(t0_u));
-                    t0_u >>= shift;
-                    dt *= @as(f32, @floatFromInt(@as(u32, 1) << shift));
-                } else {
-                    // Subdivide; halve the size of the range while retaining its start.
-                    t0_u *|= 2;
-                    dt *= 0.5;
-                }
-            }
-        }
-
-        fn drawCap(
-            config: KernelConfig,
-            cap_style: Style.Cap,
-            point: PointF32,
-            cap0: PointF32,
-            cap1: PointF32,
-            offset_tangent: PointF32,
-            writer: *LineWriter,
-        ) void {
-            if (cap_style == .round) {
-                flattenArc(
-                    config,
-                    cap0,
-                    cap1,
-                    point,
-                    -1,
-                    std.math.pi,
-                    writer,
-                );
-                return;
-            }
-
-            var start = cap0;
-            var end = cap1;
-            if (cap_style == .square) {
-                const v = offset_tangent;
-                const p0 = start.add(v);
-                const p1 = end.add(v);
-                writer.write(LineF32.create(start, p0));
-                writer.write(LineF32.create(p0, p1));
-
-                start = p1;
-                end = end;
-            }
-
-            writer.write(LineF32.create(start, end));
-        }
-
-        fn drawJoin(
-            config: KernelConfig,
-            stroke: Style.Stroke,
-            p0: PointF32,
-            tan_prev: PointF32,
-            tan_next: PointF32,
-            n_prev: PointF32,
-            n_next: PointF32,
-            left_writer: *LineWriter,
-            right_writer: *LineWriter,
-        ) void {
-            var front0 = p0.add(n_prev);
-            const front1 = p0.add(n_next);
-            const back0 = p0.sub(n_next);
-            var back1 = p0.sub(n_prev);
-
-            const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
-            const d = tan_prev.dot(tan_next);
-
-            switch (stroke.join) {
-                .bevel => {
-                    left_writer.write(LineF32.create(front0, front1));
-                    right_writer.write(LineF32.create(back1, back0));
-                },
-                .miter => {
-                    const hypot = std.math.hypot(cr, d);
-                    const miter_limit = stroke.miter_limit;
-
-                    if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
-                        const is_backside = cr > 0.0;
-                        const fp_last = if (is_backside) back1 else front0;
-                        const fp_this = if (is_backside) back0 else front1;
-                        const p = if (is_backside) back1 else front0;
-
-                        const v = fp_this.sub(fp_last);
-                        const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
-                        const miter_pt = fp_this.sub(tan_next.mul(PointF32{
-                            .x = h,
-                            .y = h,
-                        }));
-
-                        if (is_backside) {
-                            right_writer.write(LineF32.create(p, miter_pt));
-                            back1 = miter_pt;
-                        } else {
-                            left_writer.write(LineF32.create(p, miter_pt));
-                            front0 = miter_pt;
-                        }
-                    }
-
-                    right_writer.write(LineF32.create(back1, back0));
-                    left_writer.write(LineF32.create(front0, front1));
-                },
-                .round => {
-                    if (cr > 0.0) {
-                        flattenArc(
-                            config,
-                            back1,
-                            back0,
-                            p0,
-                            1,
-                            @abs(std.math.atan2(cr, d)),
-                            right_writer,
-                        );
-
-                        left_writer.write(LineF32.create(front0, front1));
-                    } else {
-                        flattenArc(
-                            config,
-                            front0,
-                            front1,
-                            p0,
-                            -1,
-                            @abs(std.math.atan2(cr, d)),
-                            left_writer,
-                        );
-
-                        right_writer.write(LineF32.create(back1, back0));
-                    }
-                },
-            }
-        }
-
-        fn flattenArc(
-            config: KernelConfig,
-            start: PointF32,
-            end: PointF32,
-            center: PointF32,
-            theta_sign: i2,
-            angle: f32,
-            writer: *LineWriter,
-        ) void {
-            var p0 = start;
-            var r = start.sub(center);
-            const radius = @max(config.error_tolerance, (p0.sub(center)).length());
-            const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
-
-            // Always output at least one line so that we always draw the chord.
-            const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
-
-            // let (s, c) = theta.sin_cos();
-            const i_theta = theta * @as(f32, @floatFromInt(theta_sign));
-            const s = std.math.sin(i_theta);
-            const c = std.math.cos(i_theta);
-            const rot = TransformF32.Matrix{
-                .coefficients = [_]f32{
-                    c, -s, 0.0,
-                    s, c,  0.0,
-                },
-            };
-
-            for (0..n_lines - 1) |_| {
-                r = rot.apply(r);
-                const p1 = center.add(r);
-                writer.write(LineF32.create(p0, p1));
-                p0 = p1;
-            }
-
-            const p1 = end;
-            writer.write(LineF32.create(p0, p1));
-        }
-
-        pub const EspcRobust = enum(u8) {
-            normal = 0,
-            low_k1 = 1,
-            low_dist = 2,
-
-            pub fn intApproximation(config: KernelConfig, x: f32) f32 {
-                const y = @abs(x);
-                var a: f32 = undefined;
-
-                if (y < config.break1) {
-                    a = std.math.sin(config.sin_scale * y) * (1.0 / config.sin_scale);
-                } else if (y < config.break2) {
-                    a = (std.math.sqrt(8.0) / 3.0) * (y - 1.0) * std.math.sqrt(@abs(y - 1.0)) + (std.math.pi / 4.0);
-                } else {
-                    var qa: f32 = undefined;
-                    var qb: f32 = undefined;
-                    var qc: f32 = undefined;
-
-                    if (y < config.break3) {
-                        qa = config.quad_a1;
-                        qb = config.quad_b1;
-                        qc = config.quad_c1;
-                    } else {
-                        qa = config.quad_a2;
-                        qb = config.quad_b2;
-                        qc = config.quad_c2;
-                    }
-
-                    a = qa * y * y + qb * y + qc;
+                    lp0 = lp1;
                 }
 
-                return std.math.copysign(a, x);
+                last_p = this_p1;
+                last_q = this_q1;
+                last_t = t1;
+
+                // Advance segment to next range. Beginning of segment is the end of
+                // this one. The number of trailing zeros represents the number of stack
+                // frames to pop in the recursive version of adaptive subdivision, and
+                // each stack pop represents doubling of the size of the range.
+                t0_u += 1;
+                const shift: u5 = @intCast(@ctz(t0_u));
+                t0_u >>= shift;
+                dt *= @as(f32, @floatFromInt(@as(u32, 1) << shift));
+            } else {
+                // Subdivide; halve the size of the range while retaining its start.
+                t0_u *|= 2;
+                dt *= 0.5;
             }
-
-            pub fn intInvApproximation(config: KernelConfig, x: f32) f32 {
-                const y = @abs(x);
-                var a: f32 = undefined;
-
-                if (y < 0.7010707591262915) {
-                    a = std.math.asin(x * config.sin_scale * (1.0 / config.sin_scale));
-                } else if (y < 0.903249293595206) {
-                    const b = y - (std.math.pi / 4.0);
-                    const u = std.math.copysign(std.math.pow(f32, @abs(b), 2.0 / 3.0), b);
-                    a = u * std.math.cbrt(@as(f32, 9.0 / 8.0)) + 1.0;
-                } else {
-                    var u: f32 = undefined;
-                    var v: f32 = undefined;
-                    var w: f32 = undefined;
-
-                    if (y < 2.038857793595206) {
-                        const B: f32 = 0.5 * config.quad_b1 / config.quad_a1;
-                        u = B * B - config.quad_c1 / config.quad_a1;
-                        v = 1.0 / config.quad_a1;
-                        w = B;
-                    } else {
-                        const B: f32 = 0.5 * config.quad_b2 / config.quad_a2;
-                        u = B * B - config.quad_c2 / config.quad_a2;
-                        v = 1.0 / config.quad_a2;
-                        w = B;
-                    }
-
-                    a = std.math.sqrt(u + v * y) - w;
-                }
-
-                return std.math.copysign(a, x);
-            }
-        };
-
-        pub const CubicAndDeriv = struct {
-            point: PointF32,
-            derivative: PointF32,
-        };
-
-        // Evaluate both the point and derivative of a cubic bezier.
-        pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, t: f32) CubicAndDeriv {
-            const m: f32 = 1.0 - t;
-            const mm = m * m;
-            const mt = m * t;
-            const tt = t * t;
-            // p = p0 * (mm * m) + (p1 * (3.0 * mm) + p2 * (3.0 * mt) + p3 * tt) * t;
-            const p = p0.mulScalar(mm * m).add(p1.mulScalar(3.0 * mm).add(p2.mulScalar(3.0 * mt)).add(p3.mulScalar(tt)).mulScalar(t));
-            // q = (p - p0) * mm + (p2 - p1) * (2.0 * mt) + (p3 - p2) * tt;
-            const q = p.sub(p0).mulScalar(mm).add(p2.sub(p1).mulScalar(2.0 * mt)).add(p3.sub(p2).mulScalar(tt));
-
-            return CubicAndDeriv{
-                .point = p,
-                .derivative = q,
-            };
         }
+    }
 
-        pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) CubicBezierF32 {
-            var cubic_points: CubicBezierF32 = undefined;
-            const sd = SegmentData{
-                .segment_data = segment_data,
-            };
-
-            switch (path_tag.segment.kind) {
-                .line_f32 => {
-                    const line = sd.getSegment(LineF32, path_monoid);
-                    cubic_points.p0 = line.p0;
-                    cubic_points.p1 = line.p1;
-                    cubic_points.p3 = cubic_points.p1;
-                    cubic_points.p2 = cubic_points.p3.lerp(cubic_points.p0, 1.0 / 3.0);
-                    cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
-                },
-                .line_i16 => {
-                    const line = sd.getSegment(LineI16, path_monoid).cast(f32);
-                    cubic_points.p0 = line.p0;
-                    cubic_points.p1 = line.p1;
-                    cubic_points.p3 = cubic_points.p1;
-                    cubic_points.p2 = cubic_points.p3.lerp(cubic_points.p0, 1.0 / 3.0);
-                    cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
-                },
-                .quadratic_bezier_f32 => {
-                    const qb = sd.getSegment(QuadraticBezierF32, path_monoid);
-                    cubic_points.p0 = qb.p0;
-                    cubic_points.p1 = qb.p1;
-                    cubic_points.p2 = qb.p2;
-                    cubic_points.p3 = cubic_points.p2;
-                    cubic_points.p2 = cubic_points.p1.lerp(cubic_points.p2, 1.0 / 3.0);
-                    cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
-                },
-                .quadratic_bezier_i16 => {
-                    const qb = sd.getSegment(QuadraticBezierI16, path_monoid).cast(f32);
-                    cubic_points.p0 = qb.p0;
-                    cubic_points.p1 = qb.p1;
-                    cubic_points.p2 = qb.p2;
-                    cubic_points.p3 = cubic_points.p2;
-                    cubic_points.p2 = cubic_points.p1.lerp(cubic_points.p2, 1.0 / 3.0);
-                    cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
-                },
-                .cubic_bezier_f32 => {
-                    cubic_points = sd.getSegment(CubicBezierF32, path_monoid);
-                },
-                .cubic_bezier_i16 => {
-                    cubic_points = sd.getSegment(CubicBezierI16, path_monoid).cast(f32);
-                },
-                else => @panic("Cannot get cubic points for Arc"),
-            }
-
-            return cubic_points;
-        }
-
-        pub const NeighborSegment = struct {
-            tangent: PointF32,
-        };
-
-        fn readNeighborSegment(
-            config: KernelConfig,
-            next_segment_index: u32,
-            segment_range: RangeU32,
-            path_tags: []const PathTag,
-            path_monoids: []const PathMonoid,
-            segment_data: []const u8,
-        ) NeighborSegment {
-            const index_shifted = (next_segment_index - segment_range.start) % segment_range.size() + segment_range.start;
-            const next_path_tag = path_tags[index_shifted];
-            const next_path_monoid = path_monoids[index_shifted];
-            const cubic_points = getCubicPoints(next_path_tag, next_path_monoid, segment_data);
-            const tangent = cubicStartTangent(
+    fn drawCap(
+        config: KernelConfig,
+        cap_style: Style.Cap,
+        point: PointF32,
+        cap0: PointF32,
+        cap1: PointF32,
+        offset_tangent: PointF32,
+        writer: *LineWriter,
+    ) void {
+        if (cap_style == .round) {
+            flattenArc(
                 config,
-                cubic_points.p0,
-                cubic_points.p1,
-                cubic_points.p2,
-                cubic_points.p3,
+                cap0,
+                cap1,
+                point,
+                -1,
+                std.math.pi,
+                writer,
             );
-
-            return NeighborSegment{
-                .tangent = tangent,
-            };
+            return;
         }
 
-        pub fn cubicStartTangent(config: KernelConfig, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
-            const d01 = p1.sub(p0);
-            const d02 = p2.sub(p0);
-            const d03 = p3.sub(p0);
+        var start = cap0;
+        var end = cap1;
+        if (cap_style == .square) {
+            const v = offset_tangent;
+            const p0 = start.add(v);
+            const p1 = end.add(v);
+            writer.write(LineF32.create(start, p0));
+            writer.write(LineF32.create(p0, p1));
 
-            if (d01.lengthSquared() > config.robust_eps) {
-                return d01;
-            } else if (d02.lengthSquared() > config.robust_eps) {
-                return d02;
-            } else {
-                return d03;
-            }
+            start = p1;
+            end = end;
         }
 
-        fn cubicEndTangent(config: KernelConfig, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
-            const d23 = p3.sub(p2);
-            const d13 = p3.sub(p1);
-            const d03 = p3.sub(p0);
-            if (d23.lengthSquared() > config.robust_eps) {
-                return d23;
-            } else if (d13.lengthSquared() > config.robust_eps) {
-                return d13;
+        writer.write(LineF32.create(start, end));
+    }
+
+    fn drawJoin(
+        config: KernelConfig,
+        stroke: Style.Stroke,
+        p0: PointF32,
+        tan_prev: PointF32,
+        tan_next: PointF32,
+        n_prev: PointF32,
+        n_next: PointF32,
+        left_writer: *LineWriter,
+        right_writer: *LineWriter,
+    ) void {
+        var front0 = p0.add(n_prev);
+        const front1 = p0.add(n_next);
+        const back0 = p0.sub(n_next);
+        var back1 = p0.sub(n_prev);
+
+        const cr = tan_prev.x * tan_next.y - tan_prev.y * tan_next.x;
+        const d = tan_prev.dot(tan_next);
+
+        switch (stroke.join) {
+            .bevel => {
+                left_writer.write(LineF32.create(front0, front1));
+                right_writer.write(LineF32.create(back1, back0));
+            },
+            .miter => {
+                const hypot = std.math.hypot(cr, d);
+                const miter_limit = stroke.miter_limit;
+
+                if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
+                    const is_backside = cr > 0.0;
+                    const fp_last = if (is_backside) back1 else front0;
+                    const fp_this = if (is_backside) back0 else front1;
+                    const p = if (is_backside) back1 else front0;
+
+                    const v = fp_this.sub(fp_last);
+                    const h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+                    const miter_pt = fp_this.sub(tan_next.mul(PointF32{
+                        .x = h,
+                        .y = h,
+                    }));
+
+                    if (is_backside) {
+                        right_writer.write(LineF32.create(p, miter_pt));
+                        back1 = miter_pt;
+                    } else {
+                        left_writer.write(LineF32.create(p, miter_pt));
+                        front0 = miter_pt;
+                    }
+                }
+
+                right_writer.write(LineF32.create(back1, back0));
+                left_writer.write(LineF32.create(front0, front1));
+            },
+            .round => {
+                if (cr > 0.0) {
+                    flattenArc(
+                        config,
+                        back1,
+                        back0,
+                        p0,
+                        1,
+                        @abs(std.math.atan2(cr, d)),
+                        right_writer,
+                    );
+
+                    left_writer.write(LineF32.create(front0, front1));
+                } else {
+                    flattenArc(
+                        config,
+                        front0,
+                        front1,
+                        p0,
+                        -1,
+                        @abs(std.math.atan2(cr, d)),
+                        left_writer,
+                    );
+
+                    right_writer.write(LineF32.create(back1, back0));
+                }
+            },
+        }
+    }
+
+    fn flattenArc(
+        config: KernelConfig,
+        start: PointF32,
+        end: PointF32,
+        center: PointF32,
+        theta_sign: i2,
+        angle: f32,
+        writer: *LineWriter,
+    ) void {
+        var p0 = start;
+        var r = start.sub(center);
+        const radius = @max(config.error_tolerance, (p0.sub(center)).length());
+        const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
+
+        // Always output at least one line so that we always draw the chord.
+        const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
+
+        // let (s, c) = theta.sin_cos();
+        const i_theta = theta * @as(f32, @floatFromInt(theta_sign));
+        const s = std.math.sin(i_theta);
+        const c = std.math.cos(i_theta);
+        const rot = TransformF32.Matrix{
+            .coefficients = [_]f32{
+                c, -s, 0.0,
+                s, c,  0.0,
+            },
+        };
+
+        for (0..n_lines - 1) |_| {
+            r = rot.apply(r);
+            const p1 = center.add(r);
+            writer.write(LineF32.create(p0, p1));
+            p0 = p1;
+        }
+
+        const p1 = end;
+        writer.write(LineF32.create(p0, p1));
+    }
+
+    pub const EspcRobust = enum(u8) {
+        normal = 0,
+        low_k1 = 1,
+        low_dist = 2,
+
+        pub fn intApproximation(config: KernelConfig, x: f32) f32 {
+            const y = @abs(x);
+            var a: f32 = undefined;
+
+            if (y < config.break1) {
+                a = std.math.sin(config.sin_scale * y) * (1.0 / config.sin_scale);
+            } else if (y < config.break2) {
+                a = (std.math.sqrt(8.0) / 3.0) * (y - 1.0) * std.math.sqrt(@abs(y - 1.0)) + (std.math.pi / 4.0);
             } else {
-                return d03;
+                var qa: f32 = undefined;
+                var qb: f32 = undefined;
+                var qc: f32 = undefined;
+
+                if (y < config.break3) {
+                    qa = config.quad_a1;
+                    qb = config.quad_b1;
+                    qc = config.quad_c1;
+                } else {
+                    qa = config.quad_a2;
+                    qb = config.quad_b2;
+                    qc = config.quad_c2;
+                }
+
+                a = qa * y * y + qb * y + qc;
             }
+
+            return std.math.copysign(a, x);
+        }
+
+        pub fn intInvApproximation(config: KernelConfig, x: f32) f32 {
+            const y = @abs(x);
+            var a: f32 = undefined;
+
+            if (y < 0.7010707591262915) {
+                a = std.math.asin(x * config.sin_scale * (1.0 / config.sin_scale));
+            } else if (y < 0.903249293595206) {
+                const b = y - (std.math.pi / 4.0);
+                const u = std.math.copysign(std.math.pow(f32, @abs(b), 2.0 / 3.0), b);
+                a = u * std.math.cbrt(@as(f32, 9.0 / 8.0)) + 1.0;
+            } else {
+                var u: f32 = undefined;
+                var v: f32 = undefined;
+                var w: f32 = undefined;
+
+                if (y < 2.038857793595206) {
+                    const B: f32 = 0.5 * config.quad_b1 / config.quad_a1;
+                    u = B * B - config.quad_c1 / config.quad_a1;
+                    v = 1.0 / config.quad_a1;
+                    w = B;
+                } else {
+                    const B: f32 = 0.5 * config.quad_b2 / config.quad_a2;
+                    u = B * B - config.quad_c2 / config.quad_a2;
+                    v = 1.0 / config.quad_a2;
+                    w = B;
+                }
+
+                a = std.math.sqrt(u + v * y) - w;
+            }
+
+            return std.math.copysign(a, x);
         }
     };
-}
+
+    pub const CubicAndDeriv = struct {
+        point: PointF32,
+        derivative: PointF32,
+    };
+
+    // Evaluate both the point and derivative of a cubic bezier.
+    pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32, t: f32) CubicAndDeriv {
+        const m: f32 = 1.0 - t;
+        const mm = m * m;
+        const mt = m * t;
+        const tt = t * t;
+        // p = p0 * (mm * m) + (p1 * (3.0 * mm) + p2 * (3.0 * mt) + p3 * tt) * t;
+        const p = p0.mulScalar(mm * m).add(p1.mulScalar(3.0 * mm).add(p2.mulScalar(3.0 * mt)).add(p3.mulScalar(tt)).mulScalar(t));
+        // q = (p - p0) * mm + (p2 - p1) * (2.0 * mt) + (p3 - p2) * tt;
+        const q = p.sub(p0).mulScalar(mm).add(p2.sub(p1).mulScalar(2.0 * mt)).add(p3.sub(p2).mulScalar(tt));
+
+        return CubicAndDeriv{
+            .point = p,
+            .derivative = q,
+        };
+    }
+
+    pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) CubicBezierF32 {
+        var cubic_points: CubicBezierF32 = undefined;
+        const sd = SegmentData{
+            .segment_data = segment_data,
+        };
+
+        switch (path_tag.segment.kind) {
+            .line_f32 => {
+                const line = sd.getSegment(LineF32, path_monoid);
+                cubic_points.p0 = line.p0;
+                cubic_points.p1 = line.p1;
+                cubic_points.p3 = cubic_points.p1;
+                cubic_points.p2 = cubic_points.p3.lerp(cubic_points.p0, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
+            },
+            .line_i16 => {
+                const line = sd.getSegment(LineI16, path_monoid).cast(f32);
+                cubic_points.p0 = line.p0;
+                cubic_points.p1 = line.p1;
+                cubic_points.p3 = cubic_points.p1;
+                cubic_points.p2 = cubic_points.p3.lerp(cubic_points.p0, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
+            },
+            .quadratic_bezier_f32 => {
+                const qb = sd.getSegment(QuadraticBezierF32, path_monoid);
+                cubic_points.p0 = qb.p0;
+                cubic_points.p1 = qb.p1;
+                cubic_points.p2 = qb.p2;
+                cubic_points.p3 = cubic_points.p2;
+                cubic_points.p2 = cubic_points.p1.lerp(cubic_points.p2, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
+            },
+            .quadratic_bezier_i16 => {
+                const qb = sd.getSegment(QuadraticBezierI16, path_monoid).cast(f32);
+                cubic_points.p0 = qb.p0;
+                cubic_points.p1 = qb.p1;
+                cubic_points.p2 = qb.p2;
+                cubic_points.p3 = cubic_points.p2;
+                cubic_points.p2 = cubic_points.p1.lerp(cubic_points.p2, 1.0 / 3.0);
+                cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
+            },
+            .cubic_bezier_f32 => {
+                cubic_points = sd.getSegment(CubicBezierF32, path_monoid);
+            },
+            .cubic_bezier_i16 => {
+                cubic_points = sd.getSegment(CubicBezierI16, path_monoid).cast(f32);
+            },
+            else => @panic("Cannot get cubic points for Arc"),
+        }
+
+        return cubic_points;
+    }
+
+    pub const NeighborSegment = struct {
+        tangent: PointF32,
+    };
+
+    fn readNeighborSegment(
+        config: KernelConfig,
+        next_segment_index: u32,
+        segment_range: RangeU32,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        segment_data: []const u8,
+    ) NeighborSegment {
+        const index_shifted = (next_segment_index - segment_range.start) % segment_range.size() + segment_range.start;
+        const next_path_tag = path_tags[index_shifted];
+        const next_path_monoid = path_monoids[index_shifted];
+        const cubic_points = getCubicPoints(next_path_tag, next_path_monoid, segment_data);
+        const tangent = cubicStartTangent(
+            config,
+            cubic_points.p0,
+            cubic_points.p1,
+            cubic_points.p2,
+            cubic_points.p3,
+        );
+
+        return NeighborSegment{
+            .tangent = tangent,
+        };
+    }
+
+    pub fn cubicStartTangent(config: KernelConfig, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
+        const d01 = p1.sub(p0);
+        const d02 = p2.sub(p0);
+        const d03 = p3.sub(p0);
+
+        if (d01.lengthSquared() > config.robust_eps) {
+            return d01;
+        } else if (d02.lengthSquared() > config.robust_eps) {
+            return d02;
+        } else {
+            return d03;
+        }
+    }
+
+    fn cubicEndTangent(config: KernelConfig, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) PointF32 {
+        const d23 = p3.sub(p2);
+        const d13 = p3.sub(p1);
+        const d03 = p3.sub(p0);
+        if (d23.lengthSquared() > config.robust_eps) {
+            return d23;
+        } else if (d13.lengthSquared() > config.robust_eps) {
+            return d13;
+        } else {
+            return d03;
+        }
+    }
+};
+
+pub const LineWriter = struct {
+    const GRID_POINT_TOLERANCE: f32 = 1e-6;
+
+    half_planes: *const HalfPlanesU16,
+    bump: BumpAllocator,
+    boundary_fragments: []BoundaryFragment,
+    bounds: RectF32 = RectF32.NONE,
+    lines: u32 = 0,
+    debug: bool = true,
+    previous_point: ?PointF32 = null,
+    previous_grid_intersection: ?GridIntersection = null,
+    reverse: bool = false,
+
+    pub fn write(self: *@This(), line: LineF32) void {
+        if (std.meta.eql(line.p0, line.p1)) {
+            return;
+        }
+
+        if (self.debug) {
+            std.debug.print("WriteLine: {}\n", .{line});
+        }
+
+        // intersect
+        // boundary
+
+        self.intersect(line);
+
+        self.lines += 1;
+    }
+
+    fn intersect(self: *@This(), line: LineF32) void {
+        const start_point: PointF32 = line.apply(0.0);
+        const end_point: PointF32 = line.apply(1.0);
+        const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+        const bounds: RectI32 = RectI32.create(PointI32{
+            .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+            .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+        }, PointI32{
+            .x = @intFromFloat(@floor(bounds_f32.max.x)),
+            .y = @intFromFloat(@floor(bounds_f32.max.y)),
+        });
+        const scan_bounds = RectF32.create(PointF32{
+            .x = @floatFromInt(bounds.min.x - 1),
+            .y = @floatFromInt(bounds.min.y - 1),
+        }, PointF32{
+            .x = @floatFromInt(bounds.max.x + 1),
+            .y = @floatFromInt(bounds.max.y + 1),
+        });
+
+        const start_intersection = GridIntersection.create((IntersectionF32{
+            .t = 0.0,
+            .point = start_point,
+        }).fitToGrid());
+        const end_intersection = GridIntersection.create((IntersectionF32{
+            .t = 1.0,
+            .point = end_point,
+        }).fitToGrid());
+
+        const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
+        const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
+        var start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
+        var end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
+        var start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
+        var end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
+        const inc_x: f32 = if (min_x) 1.0 else -1.0;
+        const inc_y: f32 = if (min_y) 1.0 else -1.0;
+
+        if (start_x == start_intersection.intersection.point.x) {
+            start_x += inc_x;
+        }
+
+        if (end_x == end_intersection.intersection.point.x) {
+            end_x -= inc_x;
+        }
+
+        if (start_y == start_intersection.intersection.point.y) {
+            start_y += inc_y;
+        }
+
+        if (end_y == end_intersection.intersection.point.y) {
+            end_y -= inc_y;
+        }
+
+        var scanner = Scanner{
+            .x_range = RangeF32{
+                .start = start_x,
+                .end = end_x,
+            },
+            .y_range = RangeF32{
+                .start = start_y,
+                .end = end_y,
+            },
+            .inc_x = inc_x,
+            .inc_y = inc_y,
+        };
+
+        self.writeIntersection(start_intersection);
+
+        var start_x_intersection: GridIntersection = start_intersection;
+        var start_y_intersection: GridIntersection = start_intersection;
+        var start_scan_x = scanner.x_range.start;
+        var start_scan_y = scanner.y_range.start;
+        while (scanner.nextX()) |x| {
+            if (scanX(x, line, scan_bounds)) |x_intersection| {
+                scan_y: {
+                    if (@abs(start_scan_y - x_intersection.intersection.point.y) > 1.0) {
+                        while (scanner.nextY()) |y| {
+                            if (scanY(y, line, scan_bounds)) |y_intersection| {
+                                self.writeIntersection(y_intersection);
+                                start_scan_y = y;
+                                start_y_intersection = y_intersection;
+                            }
+
+                            const next_y = scanner.peekNextY();
+                            if (min_y and next_y >= x_intersection.intersection.point.y) {
+                                break :scan_y;
+                            } else if (!min_y and next_y <= x_intersection.intersection.point.y) {
+                                break :scan_y;
+                            }
+                        }
+                    }
+                }
+
+                self.writeIntersection(x_intersection);
+                start_scan_x = x;
+                start_x_intersection = x_intersection;
+            }
+        }
+
+        while (scanner.nextY()) |y| {
+            if (scanY(y, line, scan_bounds)) |y_intersection| {
+                self.writeIntersection(y_intersection);
+                start_scan_y = y;
+                start_y_intersection = y_intersection;
+            }
+        }
+
+        self.writeIntersection(end_intersection);
+    }
+
+    fn writeIntersection(self: *@This(), grid_intersection: GridIntersection) void {
+        if (self.debug) {
+            std.debug.print("GridIntersection({},{}), T({}), Intersection({},{})\n", .{
+                grid_intersection.pixel.x,
+                grid_intersection.pixel.y,
+                grid_intersection.intersection.t,
+                grid_intersection.intersection.point.x,
+                grid_intersection.intersection.point.y,
+            });
+        }
+
+        var grid_intersection2 = grid_intersection;
+        if (self.reverse) {
+            grid_intersection2 = grid_intersection.reverse();
+        }
+
+        if (self.previous_grid_intersection) |*previous| {
+            if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
+                // skip if exactly the same point
+                self.previous_grid_intersection = grid_intersection2;
+                return;
+            }
+
+            {
+                if (self.reverse) {
+                    self.writeBoundaryFragment(BoundaryFragment.create(
+                        self.half_planes,
+                        [_]*const GridIntersection{
+                            &grid_intersection2,
+                            previous,
+                        },
+                    ));
+                } else {
+                    self.writeBoundaryFragment(BoundaryFragment.create(
+                        self.half_planes,
+                        [_]*const GridIntersection{
+                            previous,
+                            &grid_intersection2,
+                        },
+                    ));
+                }
+            }
+
+            self.previous_grid_intersection = grid_intersection2;
+        } else {
+            self.previous_grid_intersection = grid_intersection2;
+            return;
+        }
+    }
+
+    fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
+        if (self.debug) {
+            std.debug.print("BoundaryFragment({},{})\n", .{
+                boundary_fragment.pixel.x,
+                boundary_fragment.pixel.y,
+            });
+        }
+
+        const boundary_fragment_index = self.bump.bump(1);
+        self.boundary_fragments[boundary_fragment_index] = boundary_fragment;
+    }
+
+    fn scanX(
+        grid_x: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+    ) ?GridIntersection {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.min.y,
+            },
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.max.y,
+            },
+        );
+
+        if (line.intersectVerticalLine(scan_line)) |intersection| {
+            return GridIntersection.create(intersection.fitToGrid());
+        }
+
+        return null;
+    }
+
+    fn scanY(
+        grid_y: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+    ) ?GridIntersection {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = scan_bounds.min.x,
+                .y = grid_y,
+            },
+            PointF32{
+                .x = scan_bounds.max.x,
+                .y = grid_y,
+            },
+        );
+
+        if (line.intersectHorizontalLine(scan_line)) |intersection| {
+            return GridIntersection.create(intersection.fitToGrid());
+        }
+
+        return null;
+    }
+
+    pub fn close(self: *@This()) void {
+        _ = self;
+        // do nothing
+    }
+};
 
 pub const Rasterize = struct {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
-
-    pub fn intersect(
-        line_data: []const u8,
-        range: RangeU32,
-        flat_segments: []FlatSegment,
-        grid_intersections: []GridIntersection,
-    ) void {
-        for (range.start..range.end) |flat_segment_index| {
-            intersectSegment(
-                @intCast(flat_segment_index),
-                line_data,
-                flat_segments,
-                grid_intersections,
-            );
-        }
-    }
-
-    pub fn intersectSegment(
-        flat_segment_index: u32,
-        line_data: []const u8,
-        flat_segments: []FlatSegment,
-        grid_intersections: []GridIntersection,
-    ) void {
-        const flat_segment = &flat_segments[flat_segment_index];
-        const intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
-
-        var intersection_writer = IntersectionWriter{
-            .intersections = intersections,
-        };
-        const segment_line_data = line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset];
-        var line_iter = LineIterator{
-            .line_data = segment_line_data,
-        };
-
-        while (line_iter.next()) |line| {
-            const start_point: PointF32 = line.apply(0.0);
-            const end_point: PointF32 = line.apply(1.0);
-            const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
-            const bounds: RectI32 = RectI32.create(PointI32{
-                .x = @intFromFloat(@ceil(bounds_f32.min.x)),
-                .y = @intFromFloat(@ceil(bounds_f32.min.y)),
-            }, PointI32{
-                .x = @intFromFloat(@floor(bounds_f32.max.x)),
-                .y = @intFromFloat(@floor(bounds_f32.max.y)),
-            });
-            const scan_bounds = RectF32.create(PointF32{
-                .x = @floatFromInt(bounds.min.x - 1),
-                .y = @floatFromInt(bounds.min.y - 1),
-            }, PointF32{
-                .x = @floatFromInt(bounds.max.x + 1),
-                .y = @floatFromInt(bounds.max.y + 1),
-            });
-
-            const start_intersection = GridIntersection.create((IntersectionF32{
-                .t = 0.0,
-                .point = start_point,
-            }).fitToGrid());
-            const end_intersection = GridIntersection.create((IntersectionF32{
-                .t = 1.0,
-                .point = end_point,
-            }).fitToGrid());
-
-            const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
-            const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
-            var start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
-            var end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
-            var start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
-            var end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
-            const inc_x: f32 = if (min_x) 1.0 else -1.0;
-            const inc_y: f32 = if (min_y) 1.0 else -1.0;
-
-            if (start_x == start_intersection.intersection.point.x) {
-                start_x += inc_x;
-            }
-
-            if (end_x == end_intersection.intersection.point.x) {
-                end_x -= inc_x;
-            }
-
-            if (start_y == start_intersection.intersection.point.y) {
-                start_y += inc_y;
-            }
-
-            if (end_y == end_intersection.intersection.point.y) {
-                end_y -= inc_y;
-            }
-
-            var scanner = Scanner{
-                .x_range = RangeF32{
-                    .start = start_x,
-                    .end = end_x,
-                },
-                .y_range = RangeF32{
-                    .start = start_y,
-                    .end = end_y,
-                },
-                .inc_x = inc_x,
-                .inc_y = inc_y,
-            };
-
-            intersection_writer.write(start_intersection);
-
-            var start_x_intersection: GridIntersection = start_intersection;
-            var start_y_intersection: GridIntersection = start_intersection;
-            var start_scan_x = scanner.x_range.start;
-            var start_scan_y = scanner.y_range.start;
-            while (scanner.nextX()) |x| {
-                if (scanX(x, line, scan_bounds)) |x_intersection| {
-                    scan_y: {
-                        if (@abs(start_scan_y - x_intersection.intersection.point.y) > 1.0) {
-                            while (scanner.nextY()) |y| {
-                                if (scanY(y, line, scan_bounds)) |y_intersection| {
-                                    intersection_writer.write(y_intersection);
-                                    start_scan_y = y;
-                                    start_y_intersection = y_intersection;
-                                }
-
-                                const next_y = scanner.peekNextY();
-                                if (min_y and next_y >= x_intersection.intersection.point.y) {
-                                    break :scan_y;
-                                } else if (!min_y and next_y <= x_intersection.intersection.point.y) {
-                                    break :scan_y;
-                                }
-                            }
-                        }
-                    }
-
-                    intersection_writer.write(x_intersection);
-                    start_scan_x = x;
-                    start_x_intersection = x_intersection;
-                }
-            }
-
-            while (scanner.nextY()) |y| {
-                if (scanY(y, line, scan_bounds)) |y_intersection| {
-                    intersection_writer.write(y_intersection);
-                    start_scan_y = y;
-                    start_y_intersection = y_intersection;
-                }
-            }
-
-            intersection_writer.write(end_intersection);
-        }
-
-        flat_segment.end_intersection_offset = flat_segment.start_intersection_offset + intersection_writer.offset;
-    }
-
-    fn gridIntersectionLessThan(_: u32, left: GridIntersection, right: GridIntersection) bool {
-        if (left.intersection.t < right.intersection.t) {
-            return true;
-        }
-
-        return false;
-    }
-
-    pub fn boundary(
-        half_planes: *const HalfPlanesU16,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
-        subpaths: []const Subpath,
-        flat_segments: []const FlatSegment,
-        grid_intersections: []const GridIntersection,
-        segment_offsets: []const SegmentOffset,
-        range: RangeU32,
-        paths: []Path,
-        boundary_fragments: []BoundaryFragment,
-    ) void {
-        for (range.start..range.end) |flat_segment_index| {
-            boundarySegment(
-                @intCast(flat_segment_index),
-                half_planes,
-                path_tags,
-                path_monoids,
-                subpaths,
-                flat_segments,
-                grid_intersections,
-                segment_offsets,
-                paths,
-                boundary_fragments,
-            );
-        }
-    }
-
-    pub fn boundarySegment(
-        flat_segment_index: u32,
-        half_planes: *const HalfPlanesU16,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
-        subpaths: []const Subpath,
-        flat_segments: []const FlatSegment,
-        grid_intersections: []const GridIntersection,
-        segment_offsets: []const SegmentOffset,
-        paths: []Path,
-        boundary_fragments: []BoundaryFragment,
-    ) void {
-        const flat_segment = flat_segments[flat_segment_index];
-        const path_monoid = path_monoids[flat_segment.segment_index];
-        const subpath_tag = path_tags[subpaths[path_monoid.subpath_index].segment_index];
-        _ = subpath_tag;
-        const path = &paths[path_monoid.path_index];
-        const path_offset = PathOffset.create(path_monoid.path_index, segment_offsets, paths);
-
-        if (flat_segment.kind == .fill) {
-            var fill_path_bump = BumpAllocator{
-                .start = path_offset.start_fill_boundary_offset,
-                .end = path_offset.end_fill_boundary_offset,
-                .offset = &path.fill_bump,
-            };
-            const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
-
-            var intersection_iter = IntersectionIterator{
-                .segment_grid_intersections = segment_grid_intersections,
-            };
-
-            boundarySegment2(
-                IntersectionIterator,
-                half_planes,
-                &fill_path_bump,
-                &intersection_iter,
-                boundary_fragments,
-            );
-        } else {
-            // front/back stroke are separate subpaths
-            var stroke_path_bump = BumpAllocator{
-                .start = path_offset.start_stroke_boundary_offset,
-                .end = path_offset.end_stroke_boundary_offset,
-                .offset = &path.stroke_bump,
-            };
-
-            if (flat_segment.kind == .stroke_front) {
-                const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
-                var intersection_iter = IntersectionIterator{
-                    .segment_grid_intersections = segment_grid_intersections,
-                };
-
-                boundarySegment2(
-                    IntersectionIterator,
-                    half_planes,
-                    &stroke_path_bump,
-                    &intersection_iter,
-                    boundary_fragments,
-                );
-            } else if (flat_segment.kind == .stroke_back) {
-                const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
-                var intersection_iter = IntersectionIterator{
-                    .segment_grid_intersections = segment_grid_intersections,
-                    .reverse = true,
-                };
-
-                boundarySegment2(
-                    IntersectionIterator,
-                    half_planes,
-                    &stroke_path_bump,
-                    &intersection_iter,
-                    boundary_fragments,
-                );
-            }
-        }
-    }
-
-    pub fn boundarySegment2(
-        comptime T: type,
-        half_planes: *const HalfPlanesU16,
-        bump: *BumpAllocator,
-        intersection_iter: *T,
-        boundary_fragments: []BoundaryFragment,
-    ) void {
-        var previous_grid_intersection: ?GridIntersection = null;
-        while (intersection_iter.next()) |grid_intersection| {
-            if (previous_grid_intersection) |*previous| {
-                if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
-                    // skip if exactly the same point
-                    previous_grid_intersection = grid_intersection;
-                    continue;
-                }
-
-                {
-                    const boundary_fragment_index = bump.bump(1);
-                    boundary_fragments[boundary_fragment_index] = BoundaryFragment.create(
-                        half_planes,
-                        [_]*const GridIntersection{
-                            previous,
-                            &grid_intersection,
-                        },
-                    );
-                }
-
-                previous_grid_intersection = grid_intersection;
-            } else {
-                previous_grid_intersection = grid_intersection;
-                continue;
-            }
-        }
-    }
 
     pub fn boundaryFinish(
         path_monoids: []const PathMonoid,
@@ -1809,111 +1813,6 @@ pub const Rasterize = struct {
 
             merge_fragment.stencil_mask |= @as(u16, @intCast((@as(i16, @intFromFloat(bit_winding)) & 1))) * bit_index;
         }
-    }
-
-    pub const IntersectionWriter = struct {
-        intersections: []GridIntersection,
-        offset: u16 = 0,
-        check_index: ?u16 = null,
-
-        pub fn write(self: *@This(), intersection: GridIntersection) void {
-            std.debug.print("Write Intersection: {}\n", .{intersection});
-
-            self.intersections[self.offset] = intersection;
-
-            if (intersection.intersection.t == 0.0) {
-                self.check_index = null;
-            } else {
-                if (self.check_index) |check| {
-                    std.debug.assert(self.intersections[check].intersection.t < intersection.intersection.t);
-                }
-                self.check_index = self.offset;
-            }
-
-            self.offset += 1;
-        }
-    };
-
-    pub const IntersectionIterator = struct {
-        index: u32 = 0,
-        segment_grid_intersections: []const GridIntersection,
-        reverse: bool = false,
-
-        pub fn next(self: *@This()) ?GridIntersection {
-            if (self.index > self.segment_grid_intersections.len) {
-                return null;
-            }
-
-            if (self.segment_grid_intersections.len == 0) {
-                return null;
-            }
-
-            var next_grid_intersection: GridIntersection = undefined;
-
-            if (self.reverse) {
-                if (self.index < self.segment_grid_intersections.len) {
-                    const index = @as(u32, @intCast(self.segment_grid_intersections.len)) - self.index - 1;
-                    next_grid_intersection = self.segment_grid_intersections[index].reverse();
-                } else {
-                    return null;
-                }
-            } else {
-                if (self.index < self.segment_grid_intersections.len) {
-                    next_grid_intersection = self.segment_grid_intersections[self.index];
-                } else {
-                    return null;
-                }
-            }
-
-            self.index += 1;
-            return next_grid_intersection;
-        }
-    };
-
-    fn scanX(
-        grid_x: f32,
-        line: LineF32,
-        scan_bounds: RectF32,
-    ) ?GridIntersection {
-        const scan_line = LineF32.create(
-            PointF32{
-                .x = grid_x,
-                .y = scan_bounds.min.y,
-            },
-            PointF32{
-                .x = grid_x,
-                .y = scan_bounds.max.y,
-            },
-        );
-
-        if (line.intersectVerticalLine(scan_line)) |intersection| {
-            return GridIntersection.create(intersection.fitToGrid());
-        }
-
-        return null;
-    }
-
-    fn scanY(
-        grid_y: f32,
-        line: LineF32,
-        scan_bounds: RectF32,
-    ) ?GridIntersection {
-        const scan_line = LineF32.create(
-            PointF32{
-                .x = scan_bounds.min.x,
-                .y = grid_y,
-            },
-            PointF32{
-                .x = scan_bounds.max.x,
-                .y = grid_y,
-            },
-        );
-
-        if (line.intersectHorizontalLine(scan_line)) |intersection| {
-            return GridIntersection.create(intersection.fitToGrid());
-        }
-
-        return null;
     }
 };
 
