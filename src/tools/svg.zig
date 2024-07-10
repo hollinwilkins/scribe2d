@@ -91,7 +91,7 @@ pub fn main() !void {
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .kernel_config = draw.KernelConfig.SERIAL,
-        .flush_texture_span = false,
+        // .flush_texture_span = false,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,

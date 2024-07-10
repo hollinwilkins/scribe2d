@@ -1431,6 +1431,7 @@ pub const Rasterize = struct {
         const flat_segment = flat_segments[flat_segment_index];
         const path_monoid = path_monoids[flat_segment.segment_index];
         const subpath_tag = path_tags[subpaths[path_monoid.subpath_index].segment_index];
+        _ = subpath_tag;
         const path = &paths[path_monoid.path_index];
         const path_offset = PathOffset.create(path_monoid.path_index, segment_offsets, paths);
 
@@ -1478,7 +1479,7 @@ pub const Rasterize = struct {
                 const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                 var intersection_iter = IntersectionIterator{
                     .segment_grid_intersections = segment_grid_intersections,
-                    .reverse = !subpath_tag.segment.cap,
+                    .reverse = true,
                 };
 
                 boundarySegment2(
@@ -1862,11 +1863,19 @@ pub const Rasterize = struct {
 
             var next_grid_intersection: GridIntersection = undefined;
 
-            const index: u32 = if (self.reverse) @as(u32, @intCast(self.segment_grid_intersections.len)) - self.index else self.index;
-            if (index < self.segment_grid_intersections.len) {
-                next_grid_intersection = self.segment_grid_intersections[index];
+            if (self.reverse) {
+                if (self.index < self.segment_grid_intersections.len) {
+                    const index = @as(u32, @intCast(self.segment_grid_intersections.len)) - self.index - 1;
+                    next_grid_intersection = self.segment_grid_intersections[index].reverse();
+                } else {
+                    return null;
+                }
             } else {
-                return null;
+                if (self.index < self.segment_grid_intersections.len) {
+                    next_grid_intersection = self.segment_grid_intersections[self.index];
+                } else {
+                    return null;
+                }
             }
 
             self.index += 1;

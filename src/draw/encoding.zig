@@ -1470,6 +1470,16 @@ pub const GridIntersection = struct {
             },
         };
     }
+
+    pub fn reverse(self: @This()) @This() {
+        var intersection2 = self.intersection;
+        intersection2.t = 1.0 - self.intersection.t;
+
+        return GridIntersection{
+            .intersection = intersection2,
+            .pixel = self.pixel,
+        };
+    }
 };
 
 pub const LineIterator = struct {
