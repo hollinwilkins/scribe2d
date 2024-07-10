@@ -518,12 +518,12 @@ pub const Flatten = struct {
             path_tag,
             path_monoid,
             segment_data,
-        );
+        ).affineTransform(transform);
 
         flattenEuler(
             config,
             cubic_points,
-            transform,
+            0.5 * transform.getScale(),
             0.0,
             cubic_points.p0,
             cubic_points.p3,
@@ -591,7 +591,7 @@ pub const Flatten = struct {
             path_tag,
             path_monoid,
             segment_data,
-        );
+        ).affineTransform(transform);
 
         const offset = 0.5 * stroke.width;
         const offset_point = PointF32{
@@ -660,7 +660,6 @@ pub const Flatten = struct {
                 cubic_points.p0.sub(n_start),
                 cubic_points.p0.add(n_start),
                 offset_tangent.negate(),
-                transform,
                 &front_writer,
             );
         }
@@ -668,7 +667,7 @@ pub const Flatten = struct {
         flattenEuler(
             config,
             cubic_points,
-            transform,
+            0.5 * transform.getScale(),
             offset,
             cubic_points.p0.add(n_start),
             cubic_points.p3.add(n_prev),
@@ -678,7 +677,7 @@ pub const Flatten = struct {
         flattenEuler(
             config,
             cubic_points,
-            transform,
+            0.5 * transform.getScale(),
             -offset,
             cubic_points.p0.sub(n_start),
             cubic_points.p3.sub(n_prev),
@@ -694,7 +693,6 @@ pub const Flatten = struct {
                 cubic_points.p3.add(n_prev),
                 cubic_points.p3.sub(n_prev),
                 offset_tangent,
-                transform,
                 &front_writer,
             );
         } else {
@@ -706,7 +704,6 @@ pub const Flatten = struct {
                 tan_next,
                 n_prev,
                 n_next,
-                transform,
                 &front_writer,
                 &back_writer,
             );
@@ -719,7 +716,7 @@ pub const Flatten = struct {
     fn flattenEuler(
         config: KernelConfig,
         cubic_points: CubicBezierF32,
-        transform: TransformF32.Matrix,
+        scale: f32,
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
@@ -729,7 +726,6 @@ pub const Flatten = struct {
         const p1 = cubic_points.p1;
         const p2 = cubic_points.p2;
         const p3 = cubic_points.p3;
-        const scale = 0.5 * transform.getScale();
 
         var t_start: PointF32 = undefined;
         var t_end: PointF32 = undefined;
@@ -871,7 +867,7 @@ pub const Flatten = struct {
 
                     // const l0 = if (offset >= 0.0) lp0 else lp1;
                     // const l1 = if (offset >= 0.0) lp1 else lp0;
-                    const line = LineF32.create(transform.apply(lp0), transform.apply(lp1));
+                    const line = LineF32.create(lp0, lp1);
                     writer.write(line);
 
                     lp0 = lp1;
@@ -904,7 +900,6 @@ pub const Flatten = struct {
         cap0: PointF32,
         cap1: PointF32,
         offset_tangent: PointF32,
-        transform: TransformF32.Matrix,
         writer: *LineWriter,
     ) void {
         if (cap_style == .round) {
@@ -915,7 +910,6 @@ pub const Flatten = struct {
                 point,
                 1,
                 std.math.pi,
-                transform,
                 writer,
             );
             return;
@@ -927,14 +921,14 @@ pub const Flatten = struct {
             const v = offset_tangent;
             const p0 = start.add(v);
             const p1 = end.add(v);
-            writer.write(LineF32.create(start, p0).affineTransform(transform));
-            writer.write(LineF32.create(p1, end).affineTransform(transform));
+            writer.write(LineF32.create(start, p0));
+            writer.write(LineF32.create(p1, end));
 
             start = p0;
             end = p1;
         }
 
-        writer.write(LineF32.create(start, end).affineTransform(transform));
+        writer.write(LineF32.create(start, end));
     }
 
     fn drawJoin(
@@ -945,7 +939,6 @@ pub const Flatten = struct {
         tan_next: PointF32,
         n_prev: PointF32,
         n_next: PointF32,
-        transform: TransformF32.Matrix,
         left_writer: *LineWriter,
         right_writer: *LineWriter,
     ) void {
@@ -959,8 +952,8 @@ pub const Flatten = struct {
 
         switch (stroke.join) {
             .bevel => {
-                left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
-                right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
+                left_writer.write(LineF32.create(front0, front1));
+                right_writer.write(LineF32.create(back1, back0));
             },
             .miter => {
                 const hypot = std.math.hypot(cr, d);
@@ -980,16 +973,16 @@ pub const Flatten = struct {
                     }));
 
                     if (is_backside) {
-                        right_writer.write(LineF32.create(p, miter_pt).affineTransform(transform));
+                        right_writer.write(LineF32.create(p, miter_pt));
                         back1 = miter_pt;
                     } else {
-                        left_writer.write(LineF32.create(p, miter_pt).affineTransform(transform));
+                        left_writer.write(LineF32.create(p, miter_pt));
                         front0 = miter_pt;
                     }
                 }
 
-                right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
-                left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
+                right_writer.write(LineF32.create(back1, back0));
+                left_writer.write(LineF32.create(front0, front1));
             },
             .round => {
                 if (cr > 0.0) {
@@ -1000,11 +993,10 @@ pub const Flatten = struct {
                         p0,
                         1,
                         @abs(std.math.atan2(cr, d)),
-                        transform,
                         right_writer,
                     );
 
-                    left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
+                    left_writer.write(LineF32.create(front0, front1));
                 } else {
                     flattenArc(
                         config,
@@ -1013,11 +1005,10 @@ pub const Flatten = struct {
                         p0,
                         -1,
                         @abs(std.math.atan2(cr, d)),
-                        transform,
                         left_writer,
                     );
 
-                    right_writer.write(LineF32.create(back1, back0).affineTransform(transform));
+                    right_writer.write(LineF32.create(back1, back0));
                 }
             },
         }
@@ -1030,12 +1021,11 @@ pub const Flatten = struct {
         center: PointF32,
         theta_sign: i2,
         angle: f32,
-        transform: TransformF32.Matrix,
         writer: *LineWriter,
     ) void {
-        var p0 = transform.apply(start);
+        var p0 = start;
         var r = start.sub(center);
-        const radius = @max(config.error_tolerance, (p0.sub(transform.apply(center))).length());
+        const radius = @max(config.error_tolerance, (p0.sub(center)).length());
         const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
 
         // Always output at least one line so that we always draw the chord.
@@ -1054,12 +1044,12 @@ pub const Flatten = struct {
 
         for (0..n_lines - 1) |_| {
             r = rot.apply(r);
-            const p1 = transform.apply(center.add(r));
+            const p1 = center.add(r);
             writer.write(LineF32.create(p0, p1));
             p0 = p1;
         }
 
-        const p1 = transform.apply(end);
+        const p1 = end;
         writer.write(LineF32.create(p0, p1));
     }
 
