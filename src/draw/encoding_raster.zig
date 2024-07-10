@@ -46,7 +46,7 @@ pub const CpuRasterizer = struct {
 
         run_flags: u8 = RUN_FLAG_FLUSH_TEXTURE,
         debug_flags: u8 = RUN_FLAG_ALL,
-        debug: bool = false,
+        debug_single_pass: bool = false,
         flush_texture_boundary: bool = true,
         flush_texture_span: bool = true,
         kernel_config: KernelConfig = KernelConfig.DEFAULT,
@@ -72,7 +72,7 @@ pub const CpuRasterizer = struct {
         }
 
         pub fn debugFlatten(self: @This()) bool {
-            return self.runFlatten() and self.debug_flags & RUN_FLAG_FLATTEN > 0;
+            return self.debug_single_pass and self.runFlatten() and self.debug_flags & RUN_FLAG_FLATTEN > 0;
         }
 
         pub fn runIntersect(self: @This()) bool {
@@ -80,7 +80,7 @@ pub const CpuRasterizer = struct {
         }
 
         pub fn debugIntersect(self: @This()) bool {
-            return self.runIntersect() and self.debug_flags & RUN_FLAG_INTERSECT > 0;
+            return self.debug_single_pass and self.runIntersect() and self.debug_flags & RUN_FLAG_INTERSECT > 0;
         }
 
         pub fn runBoundary(self: @This()) bool {
@@ -285,7 +285,7 @@ pub const CpuRasterizer = struct {
         var flat_segments: []FlatSegment = &.{};
         var line_data: []u8 = &.{};
         var intersections: []GridIntersection = &.{};
-        if (self.config.debug) {
+        if (self.config.debug_single_pass) {
             flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.sum.flat_segment);
             line_data = try self.line_data.addManyAsSlice(self.allocator, last_segment_offset.sum.line_offset);
             intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
@@ -304,7 +304,7 @@ pub const CpuRasterizer = struct {
             .flat_segments = flat_segments,
             .line_data = line_data,
             .intersections = intersections,
-            .debug = self.config.debug,
+            .debug = self.config.debug_single_pass,
         };
 
         const range = RangeU32{
