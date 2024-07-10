@@ -1281,13 +1281,6 @@ pub const Flatten = struct {
         }
 
         fn addPoint(self: *@This(), point: PointF32) void {
-            const END_POINT = PointF32{ .x = 2.3140625e1, .y = 3.021875e1 };
-
-            if (std.meta.eql(point, END_POINT)) {
-                std.debug.assert(true);
-                std.debug.assert(true);
-            }
-
             self.bounds.extendByInPlace(point);
             std.mem.bytesAsValue(PointF32, self.line_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
@@ -1858,7 +1851,9 @@ pub const Rasterize = struct {
                 bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
             }
 
-            merge_fragment.stencil_mask = merge_fragment.stencil_mask | (@as(u16, @intFromBool(bit_winding != 0.0)) * bit_index);
+            if (@abs(@as(i32, @intFromFloat(bit_winding))) % 2 == 1) {
+                merge_fragment.stencil_mask = merge_fragment.stencil_mask | bit_index; 
+            }
         }
     }
 

@@ -170,7 +170,7 @@ pub const StyleOffset = struct {
 
     pub fn createTag(tag: Style) @This() {
         const fill_brush_offset = tag.fill.brush.offset();
-        return @This() {
+        return @This(){
             .fill_brush_offset = fill_brush_offset,
             .stroke_brush_offset = fill_brush_offset + tag.stroke.brush.offset(),
         };
@@ -1308,9 +1308,9 @@ pub const Masks = struct {
 
     pub fn debugPrint(self: @This()) void {
         std.debug.print("-----------\n", .{});
-        std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask0});
-        std.debug.print("V0: {b:0>16}\n", .{self.vertical_mask1});
-        std.debug.print(" H: {b:0>16}\n", .{self.horizontal_mask});
+        std.debug.print("V0({}): {b:0>16}\n", .{ self.vertical_sign0, self.vertical_mask0 });
+        std.debug.print("V0({}): {b:0>16}\n", .{ self.vertical_sign1, self.vertical_mask1 });
+        std.debug.print(" H({}): {b:0>16}\n", .{ self.horizontal_sign, self.horizontal_mask });
         std.debug.print("-----------\n", .{});
     }
 };
@@ -1366,9 +1366,12 @@ pub const BoundaryFragment = struct {
         std.debug.assert(intersections[0].point.y <= 1.0);
         std.debug.assert(intersections[1].point.x <= 1.0);
         std.debug.assert(intersections[1].point.y <= 1.0);
+
+        const masks = calculateMasks(half_planes, intersections);
+
         return @This(){
             .pixel = pixel,
-            .masks = calculateMasks(half_planes, intersections),
+            .masks = masks,
             .intersections = intersections,
         };
     }
