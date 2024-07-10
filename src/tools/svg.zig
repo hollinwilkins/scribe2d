@@ -18,15 +18,15 @@ pub fn main() !void {
 
     const outline_width = 4.0;
     var style = draw.Style{};
-    try encoder.encodeColor(draw.ColorU8{
-        .r = 0,
-        .g = 0,
-        .b = 0,
-        .a = 255,
-    });
-    style.setFill(draw.Style.Fill{
-        .brush = .color,
-    });
+    // try encoder.encodeColor(draw.ColorU8{
+    //     .r = 0,
+    //     .g = 0,
+    //     .b = 0,
+    //     .a = 255,
+    // });
+    // style.setFill(draw.Style.Fill{
+    //     .brush = .color,
+    // });
     try encoder.encodeColor(draw.ColorU8{
         .r = 255,
         .g = 0,
