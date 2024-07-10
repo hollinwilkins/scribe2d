@@ -569,10 +569,6 @@ pub const Flatten = struct {
             last_path_monoid = path_monoids[path_monoids.len - 1];
         }
 
-        if (path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
-            return;
-        }
-
         if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
             std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
             return;
@@ -581,6 +577,7 @@ pub const Flatten = struct {
         var front_writer = LineWriter{
             .bounds = bounds,
             .line_data = line_data[front_flat_segment.start_line_data_offset..front_flat_segment.end_line_data_offset],
+            .debug = true,
         };
         var back_writer = LineWriter{
             .bounds = bounds,
@@ -684,7 +681,7 @@ pub const Flatten = struct {
             &back_writer,
         );
 
-        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index - 1) {
+        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
             // draw end cap on left side
             drawCap(
                 config,
@@ -928,7 +925,7 @@ pub const Flatten = struct {
             end = p1;
         }
 
-        writer.write(LineF32.create(start, end));
+        writer.write(LineF32.create(cap0, cap1));
     }
 
     fn drawJoin(
@@ -1256,6 +1253,7 @@ pub const Flatten = struct {
         bounds: *RectF32,
         line_data: []u8,
         offset: u32 = 0,
+        debug: bool = false,
 
         pub fn write(self: *@This(), line: LineF32) void {
             if (std.meta.eql(line.p0, line.p1)) {
@@ -1281,6 +1279,10 @@ pub const Flatten = struct {
             self.bounds.extendByInPlace(point);
             std.mem.bytesAsValue(PointF32, self.line_data[self.offset .. self.offset + @sizeOf(PointF32)]).* = point;
             self.offset += @sizeOf(PointF32);
+
+            if (self.debug) {
+                std.debug.print("WritePoint: {}\n", .{point});
+            }
         }
     };
 };
@@ -1441,13 +1443,13 @@ pub const Rasterize = struct {
             };
             const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_fill_flat_segment_offset;
             const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
+            const next_flat_segment = subpath_flat_segments[(subpath_flat_segment_index + 1) % subpath_flat_segments.len];
+            const last_grid_intersection = grid_intersections[next_flat_segment.start_intersection_offset];
             const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
             var intersection_iter = IntersectionIterator{
-                .flat_segment_index = subpath_flat_segment_index,
-                .subpath_flat_segments = subpath_flat_segments,
                 .segment_grid_intersections = segment_grid_intersections,
-                .grid_intersections = grid_intersections,
+                .last_grid_intersection = last_grid_intersection,
             };
 
             boundarySegment2(
@@ -1468,12 +1470,12 @@ pub const Rasterize = struct {
             if (flat_segment.kind == .stroke_front) {
                 const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_front_stroke_flat_segment_offset;
                 const subpath_flat_segments = flat_segments[subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset];
+                const next_flat_segment = subpath_flat_segments[(subpath_flat_segment_index + 1) % subpath_flat_segments.len];
+                const last_grid_intersection = grid_intersections[next_flat_segment.start_intersection_offset];
                 const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                 var intersection_iter = IntersectionIterator{
-                    .flat_segment_index = subpath_flat_segment_index,
-                    .subpath_flat_segments = subpath_flat_segments,
                     .segment_grid_intersections = segment_grid_intersections,
-                    .grid_intersections = grid_intersections,
+                    .last_grid_intersection = last_grid_intersection,
                 };
 
                 boundarySegment2(
@@ -1486,12 +1488,12 @@ pub const Rasterize = struct {
             } else if (flat_segment.kind == .stroke_back) {
                 const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_back_stroke_flat_segment_offset;
                 const subpath_flat_segments = flat_segments[subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset];
+                const next_flat_segment = subpath_flat_segments[(subpath_flat_segment_index + 1) % subpath_flat_segments.len];
+                const last_grid_intersection = grid_intersections[next_flat_segment.start_intersection_offset];
                 const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                 var intersection_iter = IntersectionIterator{
-                    .flat_segment_index = subpath_flat_segment_index,
-                    .subpath_flat_segments = subpath_flat_segments,
                     .segment_grid_intersections = segment_grid_intersections,
-                    .grid_intersections = grid_intersections,
+                    .last_grid_intersection = last_grid_intersection,
                     .reverse = true,
                 };
 
@@ -1862,10 +1864,8 @@ pub const Rasterize = struct {
 
     pub const IntersectionIterator = struct {
         index: u32 = 0,
-        flat_segment_index: u32,
-        subpath_flat_segments: []const FlatSegment,
         segment_grid_intersections: []const GridIntersection,
-        grid_intersections: []const GridIntersection,
+        last_grid_intersection: GridIntersection,
         reverse: bool = false,
 
         pub fn next(self: *@This()) ?GridIntersection {
@@ -1883,9 +1883,7 @@ pub const Rasterize = struct {
             if (index < self.segment_grid_intersections.len) {
                 next_grid_intersection = self.segment_grid_intersections[index];
             } else if (index == self.segment_grid_intersections.len) {
-                const next_flat_segment_index = (self.flat_segment_index + 1) % (self.subpath_flat_segments.len);
-                const next_flat_segment = self.subpath_flat_segments[next_flat_segment_index];
-                next_grid_intersection = self.grid_intersections[next_flat_segment.start_intersection_offset];
+                next_grid_intersection = self.last_grid_intersection;
             } else {
                 return null;
             }

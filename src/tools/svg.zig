@@ -36,6 +36,8 @@ pub fn main() !void {
     style.setStroke(draw.Style.Stroke{
         .brush = .color,
         .join = .round,
+        .start_cap = .butt,
+        .end_cap = .butt,
         .width = outline_width,
     });
     try encoder.encodeStyle(style);
@@ -73,7 +75,7 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_INTERSECT,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .kernel_config = draw.KernelConfig.SERIAL,
     };
