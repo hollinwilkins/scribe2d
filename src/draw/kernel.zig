@@ -1004,6 +1004,12 @@ pub const Flatten = struct {
 
                     left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
                 } else {
+                    std.debug.print("FlattenArc, Front0({}), Front1({}), P0({}), Angle({})\n", .{
+                        front0,
+                        front1,
+                        p0,
+                        @abs(std.math.atan2(cr, d)),
+                    });
                     flattenArc(
                         config,
                         front0,
