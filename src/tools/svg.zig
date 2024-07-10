@@ -1,48 +1,109 @@
 const std = @import("std");
 const scribe = @import("scribe");
+const zstbi = @import("zstbi");
+const text = scribe.text;
 const draw = scribe.draw;
+const core = scribe.core;
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    // try path_encoder.moveTo(core.PointF32.create(10.0, 10.0));
-    // _ = try path_encoder.lineTo(core.PointF32.create(20.0, 20.0));
-    // _ = try path_encoder.lineTo(core.PointF32.create(40.0, 20.0));
-    // //_ = try path_encoder.arcTo(core.PointF32.create(3.0, 3.0), core.PointF32.create(4.0, 2.0));
-    // _ = try path_encoder.lineTo(core.PointF32.create(10.0, 10.0));
-    // try path_encoder.finish();
+    var args = std.process.args();
+    const output_file = args.next() orelse @panic("need to provide output file");
 
-    // var path_encoder2 = encoder.pathEncoder(i16);
-    // try path_encoder2.moveTo(core.PointI16.create(10, 10));
-    // _ = try path_encoder2.lineTo(core.PointI16.create(20, 20));
-    // _ = try path_encoder2.lineTo(core.PointI16.create(15, 30));
-    // _ = try path_encoder2.quadTo(core.PointI16.create(33, 44), core.PointI16.create(100, 100));
-    // _ = try path_encoder2.cubicTo(
-    //     core.PointI16.create(120, 120),
-    //     core.PointI16.create(70, 130),
-    //     core.PointI16.create(22, 22),
-    // );
-    // try path_encoder2.finish();
+    var encoder = draw.Encoder.init(allocator);
+    defer encoder.deinit();
 
-    // var half_planes = try draw.HalfPlanesU16.init(std.testing.allocator);
-    // defer half_planes.deinit();
+    const outline_width = 4.0;
+    var style = draw.Style{};
+    try encoder.encodeColor(draw.ColorU8{
+        .r = 0,
+        .g = 0,
+        .b = 0,
+        .a = 255,
+    });
+    style.setFill(draw.Style.Fill{
+        .brush = .color,
+    });
+    try encoder.encodeColor(draw.ColorU8{
+        .r = 255,
+        .g = 0,
+        .b = 0,
+        .a = 255,
+    });
+    style.setStroke(draw.Style.Stroke{
+        .brush = .color,
+        .join = .round,
+        .width = outline_width,
+    });
+    try encoder.encodeStyle(style);
+    try encoder.encodeTransform(core.TransformF32.Affine.IDENTITY);
 
-    // const encoding = encoder.encode();
-    // var rasterizer = try draw.CpuRasterizer.init(
-    //     std.testing.allocator,
-    //     &half_planes,
-    //     draw.KernelConfig.DEFAULT,
-    //     encoding,
-    // );
-    // defer rasterizer.deinit();
+    var path_encoder = encoder.pathEncoder(f32);
+    try path_encoder.moveTo(core.PointF32{
+        .x = 1.0,
+        .y = 1.0,
+    });
+    _ = try path_encoder.lineTo(core.PointF32{
+        .x = 10.0,
+        .y = 10.0,
+    });
 
-    // var texture = try draw.Texture.init(std.testing.allocator, core.DimensionsU32{
-    //     .width = 50,
-    //     .height = 50,
-    // }, draw.TextureFormat.RgbaU8);
-    // defer texture.deinit();
-    // texture.clear(draw.Colors.WHITE);
+    const bounds = encoder.calculateBounds();
 
-    // try rasterizer.rasterize(&texture);
+    const dimensions = core.DimensionsU32{
+        .width = @intFromFloat(@ceil(bounds.getWidth() + outline_width / 2.0 + 16.0)),
+        .height = @intFromFloat(@ceil(bounds.getHeight() + outline_width / 2.0 + 16.0)),
+    };
 
-    // rasterizer.debugPrint(texture);
+    const translate_center = (core.TransformF32{
+        .translate = core.PointF32{
+            .x = @floatFromInt(dimensions.width / 2),
+            .y = @floatFromInt(dimensions.height / 2),
+        },
+    }).toAffine();
+    encoder.transforms.items[0] = translate_center;
+
+    const encoding = encoder.encode();
+
+    var half_planes = try draw.HalfPlanesU16.init(allocator);
+    defer half_planes.deinit();
+
+    const rasterizer_config = draw.CpuRasterizer.Config{
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .kernel_config = draw.KernelConfig.SERIAL,
+    };
+    var rasterizer = try draw.CpuRasterizer.init(
+        allocator,
+        &half_planes,
+        rasterizer_config,
+        encoding,
+    );
+    defer rasterizer.deinit();
+
+    zstbi.init(allocator);
+    defer zstbi.deinit();
+
+    var image = try zstbi.Image.createEmpty(
+        dimensions.width,
+        dimensions.height,
+        3,
+        .{},
+    );
+    defer image.deinit();
+
+    var texture = draw.TextureUnmanaged{
+        .dimensions = dimensions,
+        .format = draw.TextureFormat.SrgbU8,
+        .bytes = image.data,
+    };
+    texture.clear(draw.Colors.WHITE);
+
+    try rasterizer.rasterize(&texture);
+
+    rasterizer.debugPrint(texture);
+
+    try image.writeToFile(output_file, .png);
 }
