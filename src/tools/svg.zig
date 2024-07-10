@@ -42,12 +42,12 @@ pub fn main() !void {
         .width = outline_width,
     });
     try encoder.encodeStyle(style);
-    // try encoder.encodeTransform((core.TransformF32{
-    //     .scale = core.PointF32{
-    //         .x = 10.0,
-    //         .y = 10.0,
-    //     }
-    // }).toAffine());
+    try encoder.encodeTransform((core.TransformF32{
+        .scale = core.PointF32{
+            .x = 10.0,
+            .y = 10.0,
+        }
+    }).toAffine());
 
     var path_encoder = encoder.pathEncoder(f32);
     try path_encoder.moveTo(core.PointF32{
@@ -74,13 +74,13 @@ pub fn main() !void {
         .height = @intFromFloat(@ceil(bounds.getHeight() + outline_width / 2.0 + 4.0)),
     };
 
-    // const translate_center = (core.TransformF32{
-    //     .translate = core.PointF32{
-    //         .x = 2.0,
-    //         .y = 2.0,
-    //     },
-    // }).toAffine();
-    // encoder.transforms.items[0] = translate_center.mul(encoder.transforms.items[0]);
+    const translate_center = (core.TransformF32{
+        .translate = core.PointF32{
+            .x = 2.0,
+            .y = 2.0,
+        },
+    }).toAffine();
+    encoder.transforms.items[0] = translate_center.mul(encoder.transforms.items[0]);
 
     const encoding = encoder.encode();
 
@@ -89,7 +89,7 @@ pub fn main() !void {
 
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .debug_flags = 0,
         .kernel_config = draw.KernelConfig.SERIAL,
         // .flush_texture_span = false,
     };

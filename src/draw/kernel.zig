@@ -1322,33 +1322,62 @@ pub const Rasterize = struct {
                 .inc_y = inc_y,
             };
 
-            intersection_writer.addOne().* = start_intersection;
+            intersection_writer.write(start_intersection);
 
             var start_x_intersection: GridIntersection = start_intersection;
             var start_y_intersection: GridIntersection = start_intersection;
+            var start_scan_x = scanner.x_range.start;
+            var start_scan_y = scanner.y_range.start;
             while (scanner.nextX()) |x| {
                 if (scanX(x, line, scan_bounds)) |x_intersection| {
+                    std.debug.assert(true);
+                    std.debug.assert(true);
+                    std.debug.assert(true);
+
+                    const DEBUG_POINT = PointF32{ .x = -4e0, .y = 1.655012e0 };
+                    if (start_x_intersection.intersection.t == 0.0 and std.meta.eql(x_intersection.intersection.point, DEBUG_POINT)) {
+                        std.debug.assert(true);
+                        std.debug.assert(true);
+                    }
+
                     scan_y: {
-                        if (@abs(start_x_intersection.intersection.point.y - x_intersection.intersection.point.y) > 1.0) {
+                        if (@abs(start_scan_y - x_intersection.intersection.point.y) > 1.0) {
                             while (scanner.nextY()) |y| {
+                                std.debug.assert(true);
+                                std.debug.assert(true);
+
                                 if (scanY(y, line, scan_bounds)) |y_intersection| {
-                                    intersection_writer.addOne().* = y_intersection;
+                                    intersection_writer.write(y_intersection);
+                                    start_scan_y = y;
                                     start_y_intersection = y_intersection;
                                 }
 
-                                if (scanner.peekNextY() >= x_intersection.intersection.point.y) {
+                                std.debug.assert(true);
+                                std.debug.assert(true);
+
+                                const next_y = scanner.peekNextY();
+                                if (min_y and next_y >= x_intersection.intersection.point.y) {
+                                    break :scan_y;
+                                } else if (!min_y and next_y <= x_intersection.intersection.point.y) {
                                     break :scan_y;
                                 }
+
+                                std.debug.assert(true);
+                                std.debug.assert(true);
                             }
                         }
                     }
 
-                    intersection_writer.addOne().* = x_intersection;
+                    std.debug.assert(true);
+                    std.debug.assert(true);
+
+                    intersection_writer.write(x_intersection);
+                    start_scan_x = x;
                     start_x_intersection = x_intersection;
                 }
             }
-            
-            intersection_writer.addOne().* = end_intersection;
+
+            intersection_writer.write(end_intersection);
 
             const end_intersection_index = intersection_writer.index;
             const line_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
@@ -1818,10 +1847,17 @@ pub const Rasterize = struct {
                 };
             }
 
-            pub fn addOne(self: *@This()) *T {
-                const item = &self.slice[self.index];
+            pub fn write(self: *@This(), intersection: GridIntersection) void {
+                std.debug.print("Write Intersection: {}\n", .{intersection});
+
+                const DEBUG_POINT = PointF32{ .x = -4.655325e0, .y = 9.6848106e-1 };
+                if (std.meta.eql(intersection.intersection.point, DEBUG_POINT)) {
+                    std.debug.assert(true);
+                    std.debug.assert(true);
+                }
+
+                self.slice[self.index] = intersection;
                 self.index += 1;
-                return item;
             }
 
             pub fn toSlice(self: @This()) []T {
@@ -1895,7 +1931,7 @@ pub const Rasterize = struct {
         }
 
         pub fn peekNextY(self: *@This()) f32 {
-            return self.y_range.start + self.inc_y;
+            return self.y_range.start;
         }
     };
 
