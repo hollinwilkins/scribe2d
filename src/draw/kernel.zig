@@ -29,6 +29,7 @@ const GridIntersection = encoding_module.GridIntersection;
 const BoundaryFragment = encoding_module.BoundaryFragment;
 const MergeFragment = encoding_module.MergeFragment;
 const BumpAllocator = encoding_module.BumpAllocator;
+const Scanner = encoding_module.Scanner;
 const TransformF32 = core.TransformF32;
 const IntersectionF32 = core.IntersectionF32;
 const RectF32 = core.RectF32;
@@ -1866,37 +1867,6 @@ pub const Rasterize = struct {
 
             self.index += 1;
             return next_grid_intersection;
-        }
-    };
-
-    pub const Scanner = struct {
-        x_range: RangeF32,
-        y_range: RangeF32,
-        inc_x: f32,
-        inc_y: f32,
-
-        pub fn nextX(self: *@This()) ?f32 {
-            if (self.x_range.end - self.x_range.start == -self.inc_x) {
-                return null;
-            }
-
-            const next = self.x_range.start;
-            self.x_range.start += self.inc_x;
-            return next;
-        }
-
-        pub fn nextY(self: *@This()) ?f32 {
-            if (self.y_range.end - self.y_range.start == -self.inc_y) {
-                return null;
-            }
-
-            const next = self.y_range.start;
-            self.y_range.start += self.inc_y;
-            return next;
-        }
-
-        pub fn peekNextY(self: *@This()) f32 {
-            return self.y_range.start;
         }
     };
 

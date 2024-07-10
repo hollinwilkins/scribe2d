@@ -8,6 +8,7 @@ const Allocator = mem.Allocator;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 const IntersectionF32 = core.IntersectionF32;
 const TransformF32 = core.TransformF32;
+const RangeF32 = core.RangeF32;
 const RangeU32 = core.RangeU32;
 const PointI32 = core.PointI32;
 const Point = core.Point;
@@ -1495,5 +1496,36 @@ pub const LineIterator = struct {
         const line = std.mem.bytesToValue(LineF32, self.line_data[self.offset..end_offset]);
         self.offset += @sizeOf(PointF32);
         return line;
+    }
+};
+
+pub const Scanner = struct {
+    x_range: RangeF32,
+    y_range: RangeF32,
+    inc_x: f32,
+    inc_y: f32,
+
+    pub fn nextX(self: *@This()) ?f32 {
+        if (self.x_range.end - self.x_range.start == -self.inc_x) {
+            return null;
+        }
+
+        const next = self.x_range.start;
+        self.x_range.start += self.inc_x;
+        return next;
+    }
+
+    pub fn nextY(self: *@This()) ?f32 {
+        if (self.y_range.end - self.y_range.start == -self.inc_y) {
+            return null;
+        }
+
+        const next = self.y_range.start;
+        self.y_range.start += self.inc_y;
+        return next;
+    }
+
+    pub fn peekNextY(self: *@This()) f32 {
+        return self.y_range.start;
     }
 };
