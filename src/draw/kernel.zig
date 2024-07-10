@@ -1054,6 +1054,14 @@ pub const Flatten = struct {
             _ = n;
             r = rot.apply(r);
             const p1 = transform.apply(center.add(r));
+
+            const DEBUG_POINT = PointF32{
+                .x = 6.223242e1, .y = 4.248633e1
+            };
+            if (std.meta.eql(DEBUG_POINT, transform.apply(center))) {
+                std.debug.print("DEBUG POINT: {}\n", .{p1});
+            }
+
             writer.write(LineF32.create(p0, p1));
             p0 = p1;
         }
