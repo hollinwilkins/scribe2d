@@ -11,12 +11,13 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     var args = std.process.args();
+    _ = args.next();
     const output_file = args.next() orelse @panic("need to provide output file");
 
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    const outline_width = 4.0;
+    const outline_width = 2.0;
     var style = draw.Style{};
     // try encoder.encodeColor(draw.ColorU8{
     //     .r = 0,
@@ -49,8 +50,8 @@ pub fn main() !void {
         .y = 1.0,
     });
     _ = try path_encoder.lineTo(core.PointF32{
-        .x = 10.0,
-        .y = 10.0,
+        .x = 3.0,
+        .y = 3.0,
     });
     try path_encoder.finish();
 
@@ -61,13 +62,13 @@ pub fn main() !void {
         .height = @intFromFloat(@ceil(bounds.getHeight() + outline_width / 2.0 + 16.0)),
     };
 
-    const translate_center = (core.TransformF32{
-        .translate = core.PointF32{
-            .x = @floatFromInt(dimensions.width / 2),
-            .y = @floatFromInt(dimensions.height / 2),
-        },
-    }).toAffine();
-    encoder.transforms.items[0] = translate_center;
+    // const translate_center = (core.TransformF32{
+    //     .translate = core.PointF32{
+    //         .x = @floatFromInt(dimensions.width / 2),
+    //         .y = @floatFromInt(dimensions.height / 2),
+    //     },
+    // }).toAffine();
+    // encoder.transforms.items[0] = translate_center;
 
     const encoding = encoder.encode();
 
@@ -75,7 +76,7 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_INTERSECT,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .kernel_config = draw.KernelConfig.SERIAL,
     };

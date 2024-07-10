@@ -366,7 +366,6 @@ pub const CpuRasterizer = struct {
                 .{
                     self.half_planes,
                     self.path_monoids.items,
-                    self.subpaths.items,
                     self.flat_segments.items,
                     grid_intersections,
                     self.segment_offsets.items,

@@ -1389,7 +1389,6 @@ pub const Rasterize = struct {
     pub fn boundary(
         half_planes: *const HalfPlanesU16,
         path_monoids: []const PathMonoid,
-        subpaths: []const Subpath,
         flat_segments: []const FlatSegment,
         grid_intersections: []const GridIntersection,
         segment_offsets: []const SegmentOffset,
@@ -1402,7 +1401,6 @@ pub const Rasterize = struct {
                 @intCast(flat_segment_index),
                 half_planes,
                 path_monoids,
-                subpaths,
                 flat_segments,
                 grid_intersections,
                 segment_offsets,
@@ -1416,7 +1414,6 @@ pub const Rasterize = struct {
         flat_segment_index: u32,
         half_planes: *const HalfPlanesU16,
         path_monoids: []const PathMonoid,
-        subpaths: []const Subpath,
         flat_segments: []const FlatSegment,
         grid_intersections: []const GridIntersection,
         segment_offsets: []const SegmentOffset,
@@ -1427,13 +1424,6 @@ pub const Rasterize = struct {
         const path_monoid = path_monoids[flat_segment.segment_index];
         const path = &paths[path_monoid.path_index];
         const path_offset = PathOffset.create(path_monoid.path_index, segment_offsets, paths);
-        const subpath_offset = SubpathOffset.create(
-            flat_segment.segment_index,
-            path_monoids,
-            segment_offsets,
-            paths,
-            subpaths,
-        );
 
         if (flat_segment.kind == .fill) {
             var fill_path_bump = BumpAllocator{
@@ -1441,15 +1431,10 @@ pub const Rasterize = struct {
                 .end = path_offset.end_fill_boundary_offset,
                 .offset = &path.fill_bump,
             };
-            const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_fill_flat_segment_offset;
-            const subpath_flat_segments = flat_segments[subpath_offset.start_fill_flat_segment_offset..subpath_offset.end_fill_flat_segment_offset];
-            const next_flat_segment = subpath_flat_segments[(subpath_flat_segment_index + 1) % subpath_flat_segments.len];
-            const last_grid_intersection = grid_intersections[next_flat_segment.start_intersection_offset];
             const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
             var intersection_iter = IntersectionIterator{
                 .segment_grid_intersections = segment_grid_intersections,
-                .last_grid_intersection = last_grid_intersection,
             };
 
             boundarySegment2(
@@ -1468,14 +1453,9 @@ pub const Rasterize = struct {
             };
 
             if (flat_segment.kind == .stroke_front) {
-                const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_front_stroke_flat_segment_offset;
-                const subpath_flat_segments = flat_segments[subpath_offset.start_front_stroke_flat_segment_offset..subpath_offset.end_front_stroke_flat_segment_offset];
-                const next_flat_segment = subpath_flat_segments[(subpath_flat_segment_index + 1) % subpath_flat_segments.len];
-                const last_grid_intersection = grid_intersections[next_flat_segment.start_intersection_offset];
                 const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                 var intersection_iter = IntersectionIterator{
                     .segment_grid_intersections = segment_grid_intersections,
-                    .last_grid_intersection = last_grid_intersection,
                 };
 
                 boundarySegment2(
@@ -1486,14 +1466,9 @@ pub const Rasterize = struct {
                     boundary_fragments,
                 );
             } else if (flat_segment.kind == .stroke_back) {
-                const subpath_flat_segment_index = flat_segment_index - subpath_offset.start_back_stroke_flat_segment_offset;
-                const subpath_flat_segments = flat_segments[subpath_offset.start_back_stroke_flat_segment_offset..subpath_offset.end_back_stroke_flat_segment_offset];
-                const next_flat_segment = subpath_flat_segments[(subpath_flat_segment_index + 1) % subpath_flat_segments.len];
-                const last_grid_intersection = grid_intersections[next_flat_segment.start_intersection_offset];
                 const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                 var intersection_iter = IntersectionIterator{
                     .segment_grid_intersections = segment_grid_intersections,
-                    .last_grid_intersection = last_grid_intersection,
                     .reverse = true,
                 };
 
@@ -1865,7 +1840,6 @@ pub const Rasterize = struct {
     pub const IntersectionIterator = struct {
         index: u32 = 0,
         segment_grid_intersections: []const GridIntersection,
-        last_grid_intersection: GridIntersection,
         reverse: bool = false,
 
         pub fn next(self: *@This()) ?GridIntersection {
@@ -1882,8 +1856,6 @@ pub const Rasterize = struct {
             const index: u32 = if (self.reverse) @as(u32, @intCast(self.segment_grid_intersections.len)) - self.index else self.index;
             if (index < self.segment_grid_intersections.len) {
                 next_grid_intersection = self.segment_grid_intersections[index];
-            } else if (index == self.segment_grid_intersections.len) {
-                next_grid_intersection = self.last_grid_intersection;
             } else {
                 return null;
             }
