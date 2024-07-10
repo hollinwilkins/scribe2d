@@ -52,7 +52,7 @@ pub fn main() !void {
     });
     style.setStroke(draw.Style.Stroke{
         .brush = .color,
-        .join = .bevel,
+        .join = .round,
         .width = outline_width,
     });
     try encoder.encodeStyle(style);
