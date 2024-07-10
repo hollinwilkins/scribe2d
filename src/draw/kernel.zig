@@ -4,6 +4,7 @@ const encoding_module = @import("./encoding.zig");
 const texture_module = @import("./texture.zig");
 const euler_module = @import("./euler.zig");
 const msaa_module = @import("./msaa.zig");
+const RangeF32 = core.RangeF32;
 const RangeI32 = core.RangeI32;
 const RangeU32 = core.RangeU32;
 const PointU32 = core.PointU32;
@@ -1274,25 +1275,80 @@ pub const Rasterize = struct {
                 .y = @floatFromInt(bounds.max.y + 1),
             });
 
-            intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
+            const start_intersection = GridIntersection.create((IntersectionF32{
                 .t = 0.0,
                 .point = start_point,
             }).fitToGrid());
-
-            for (0..@as(usize, @intCast(bounds.getWidth())) + 1) |x_offset| {
-                const grid_x: f32 = @floatFromInt(bounds.min.x + @as(i32, @intCast(x_offset)));
-                try scanX(grid_x, line, scan_bounds, &intersection_writer);
-            }
-
-            for (0..@as(usize, @intCast(bounds.getHeight())) + 1) |y_offset| {
-                const grid_y: f32 = @floatFromInt(bounds.min.y + @as(i32, @intCast(y_offset)));
-                try scanY(grid_y, line, scan_bounds, &intersection_writer);
-            }
-
-            intersection_writer.addOne().* = GridIntersection.create((IntersectionF32{
+            const end_intersection = GridIntersection.create((IntersectionF32{
                 .t = 1.0,
                 .point = end_point,
             }).fitToGrid());
+
+            const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
+            const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
+            var start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
+            var end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
+            var start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
+            var end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
+            const inc_x: f32 = if (min_x) 1.0 else -1.0;
+            const inc_y: f32 = if (min_y) 1.0 else -1.0;
+
+            if (start_x == start_intersection.intersection.point.x) {
+                start_x += inc_x;
+            }
+
+            if (end_x == end_intersection.intersection.point.x) {
+                end_x -= inc_x;
+            }
+
+            if (start_y == start_intersection.intersection.point.y) {
+                start_y += inc_y;
+            }
+
+            if (end_y == end_intersection.intersection.point.y) {
+                end_y -= inc_y;
+            }
+
+            var scanner = Scanner{
+                .x_range = RangeF32{
+                    .start = start_x,
+                    .end = end_x,
+                },
+                .y_range = RangeF32{
+                    .start = start_y,
+                    .end = end_y,
+                },
+                .inc_x = inc_x,
+                .inc_y = inc_y,
+            };
+
+            intersection_writer.addOne().* = start_intersection;
+
+            var start_x_intersection: GridIntersection = start_intersection;
+            var start_y_intersection: GridIntersection = start_intersection;
+            while (scanner.nextX()) |x| {
+                if (scanX(x, line, scan_bounds)) |x_intersection| {
+                    scan_y: {
+                        if (@abs(start_x_intersection.intersection.point.y - x_intersection.intersection.point.y) > 1.0) {
+                            while (scanner.nextY()) |y| {
+                                if (scanY(y, line, scan_bounds)) |y_intersection| {
+                                    intersection_writer.addOne().* = y_intersection;
+                                    start_y_intersection = y_intersection;
+                                }
+
+                                if (scanner.peekNextY() >= x_intersection.intersection.point.y) {
+                                    break :scan_y;
+                                }
+                            }
+                        }
+                    }
+
+                    intersection_writer.addOne().* = x_intersection;
+                    start_x_intersection = x_intersection;
+                }
+            }
+            
+            intersection_writer.addOne().* = end_intersection;
 
             const end_intersection_index = intersection_writer.index;
             const line_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
@@ -1812,12 +1868,42 @@ pub const Rasterize = struct {
         }
     };
 
+    pub const Scanner = struct {
+        x_range: RangeF32,
+        y_range: RangeF32,
+        inc_x: f32,
+        inc_y: f32,
+
+        pub fn nextX(self: *@This()) ?f32 {
+            if (self.x_range.end - self.x_range.start == -self.inc_x) {
+                return null;
+            }
+
+            const next = self.x_range.start;
+            self.x_range.start += self.inc_x;
+            return next;
+        }
+
+        pub fn nextY(self: *@This()) ?f32 {
+            if (self.y_range.end - self.y_range.start == -self.inc_y) {
+                return null;
+            }
+
+            const next = self.y_range.start;
+            self.y_range.start += self.inc_y;
+            return next;
+        }
+
+        pub fn peekNextY(self: *@This()) f32 {
+            return self.y_range.start + self.inc_y;
+        }
+    };
+
     fn scanX(
         grid_x: f32,
         line: LineF32,
         scan_bounds: RectF32,
-        intersection_writer: *IntersectionWriter,
-    ) !void {
+    ) ?GridIntersection {
         const scan_line = LineF32.create(
             PointF32{
                 .x = grid_x,
@@ -1830,16 +1916,17 @@ pub const Rasterize = struct {
         );
 
         if (line.intersectVerticalLine(scan_line)) |intersection| {
-            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            return GridIntersection.create(intersection.fitToGrid());
         }
+
+        return null;
     }
 
     fn scanY(
         grid_y: f32,
         line: LineF32,
         scan_bounds: RectF32,
-        intersection_writer: *IntersectionWriter,
-    ) !void {
+    ) ?GridIntersection {
         const scan_line = LineF32.create(
             PointF32{
                 .x = scan_bounds.min.x,
@@ -1852,8 +1939,10 @@ pub const Rasterize = struct {
         );
 
         if (line.intersectHorizontalLine(scan_line)) |intersection| {
-            intersection_writer.addOne().* = GridIntersection.create(intersection.fitToGrid());
+            return GridIntersection.create(intersection.fitToGrid());
         }
+
+        return null;
     }
 };
 
