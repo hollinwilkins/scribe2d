@@ -215,10 +215,10 @@ pub const Estimate = struct {
 
         if (style.isStroke()) {
             // TODO: this still seems wrong
-            const scale = transform.getScale() * 0.5;
+            const scale = transform.getScale();
             const stroke = style.stroke;
             const scaled_width = @max(1.0, stroke.width) * scale;
-            const stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
+            const stroke_fudge = @max(1.0, scaled_width);
             const cap = estimateCap(config, path_tag, stroke, scaled_width);
             const join = estimateJoin(config, stroke, scaled_width);
             const base_stroke = base.mulScalar(stroke_fudge).combine(join);
@@ -1252,6 +1252,7 @@ pub const Flatten = struct {
     const LineWriter = struct {
         bounds: *RectF32,
         line_data: []u8,
+        lines: u32 = 0,
         offset: u32 = 0,
         debug: bool = false,
 
@@ -1260,6 +1261,7 @@ pub const Flatten = struct {
                 return;
             }
 
+            self.lines += 1;
             if (self.offset == 0) {
                 self.addPoint(line.p0);
                 self.addPoint(line.p1);
@@ -1388,7 +1390,9 @@ pub const Rasterize = struct {
 
     pub fn boundary(
         half_planes: *const HalfPlanesU16,
+        path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
+        subpaths: []const Subpath,
         flat_segments: []const FlatSegment,
         grid_intersections: []const GridIntersection,
         segment_offsets: []const SegmentOffset,
@@ -1400,7 +1404,9 @@ pub const Rasterize = struct {
             boundarySegment(
                 @intCast(flat_segment_index),
                 half_planes,
+                path_tags,
                 path_monoids,
+                subpaths,
                 flat_segments,
                 grid_intersections,
                 segment_offsets,
@@ -1413,7 +1419,9 @@ pub const Rasterize = struct {
     pub fn boundarySegment(
         flat_segment_index: u32,
         half_planes: *const HalfPlanesU16,
+        path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
+        subpaths: []const Subpath,
         flat_segments: []const FlatSegment,
         grid_intersections: []const GridIntersection,
         segment_offsets: []const SegmentOffset,
@@ -1422,6 +1430,7 @@ pub const Rasterize = struct {
     ) void {
         const flat_segment = flat_segments[flat_segment_index];
         const path_monoid = path_monoids[flat_segment.segment_index];
+        const subpath_tag = path_tags[subpaths[path_monoid.subpath_index].segment_index];
         const path = &paths[path_monoid.path_index];
         const path_offset = PathOffset.create(path_monoid.path_index, segment_offsets, paths);
 
@@ -1469,7 +1478,7 @@ pub const Rasterize = struct {
                 const segment_grid_intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
                 var intersection_iter = IntersectionIterator{
                     .segment_grid_intersections = segment_grid_intersections,
-                    .reverse = true,
+                    .reverse = !subpath_tag.segment.cap,
                 };
 
                 boundarySegment2(

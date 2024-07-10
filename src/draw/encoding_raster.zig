@@ -365,7 +365,9 @@ pub const CpuRasterizer = struct {
                 rasterizer.boundary,
                 .{
                     self.half_planes,
+                    self.encoding.path_tags,
                     self.path_monoids.items,
+                    self.subpaths.items,
                     self.flat_segments.items,
                     grid_intersections,
                     self.segment_offsets.items,

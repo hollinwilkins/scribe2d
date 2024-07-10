@@ -42,7 +42,12 @@ pub fn main() !void {
         .width = outline_width,
     });
     try encoder.encodeStyle(style);
-    try encoder.encodeTransform(core.TransformF32.Affine.IDENTITY);
+    try encoder.encodeTransform((core.TransformF32{
+        .scale = core.PointF32{
+            .x = 10.0,
+            .y = 10.0,
+        }
+    }).toAffine());
 
     var path_encoder = encoder.pathEncoder(f32);
     try path_encoder.moveTo(core.PointF32{
@@ -50,25 +55,32 @@ pub fn main() !void {
         .y = 1.0,
     });
     _ = try path_encoder.lineTo(core.PointF32{
-        .x = 3.0,
-        .y = 3.0,
+        .x = 30.0,
+        .y = 30.0,
+    });
+    _ = try path_encoder.quadTo(core.PointF32{
+        .x = 30.0,
+        .y = 0.0,
+    }, core.PointF32{
+        .x = 5.0,
+        .y = 5.0,
     });
     try path_encoder.finish();
 
     const bounds = encoder.calculateBounds();
 
     const dimensions = core.DimensionsU32{
-        .width = @intFromFloat(@ceil(bounds.getWidth() + outline_width / 2.0 + 16.0)),
-        .height = @intFromFloat(@ceil(bounds.getHeight() + outline_width / 2.0 + 16.0)),
+        .width = @intFromFloat(@ceil(bounds.getWidth() + outline_width / 2.0 + 4.0)),
+        .height = @intFromFloat(@ceil(bounds.getHeight() + outline_width / 2.0 + 4.0)),
     };
 
     // const translate_center = (core.TransformF32{
     //     .translate = core.PointF32{
-    //         .x = @floatFromInt(dimensions.width / 2),
-    //         .y = @floatFromInt(dimensions.height / 2),
+    //         .x = 2.0,
+    //         .y = 2.0,
     //     },
     // }).toAffine();
-    // encoder.transforms.items[0] = translate_center;
+    // encoder.transforms.items[0] = translate_center.mul(encoder.transforms.items[0]);
 
     const encoding = encoder.encode();
 
@@ -79,6 +91,7 @@ pub fn main() !void {
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .kernel_config = draw.KernelConfig.SERIAL,
+        .flush_texture_span = false,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,
