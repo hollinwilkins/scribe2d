@@ -17,7 +17,7 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    const outline_width = 2.0;
+    const outline_width = 8.0;
     var style = draw.Style{};
     // try encoder.encodeColor(draw.ColorU8{
     //     .r = 0,
@@ -37,8 +37,8 @@ pub fn main() !void {
     style.setStroke(draw.Style.Stroke{
         .brush = .color,
         .join = .round,
-        .start_cap = .butt,
-        .end_cap = .butt,
+        .start_cap = .round,
+        .end_cap = .round,
         .width = outline_width,
     });
     try encoder.encodeStyle(style);
@@ -62,7 +62,7 @@ pub fn main() !void {
         .x = 30.0,
         .y = 0.0,
     }, core.PointF32{
-        .x = 5.0,
+        .x = 10.0,
         .y = 5.0,
     });
     try path_encoder.finish();

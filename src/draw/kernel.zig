@@ -905,7 +905,7 @@ pub const Flatten = struct {
                 cap0,
                 cap1,
                 point,
-                1,
+                -1,
                 std.math.pi,
                 writer,
             );
