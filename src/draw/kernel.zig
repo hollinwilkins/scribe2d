@@ -123,6 +123,7 @@ pub const Estimate = struct {
     const VIRTUAL_INTERSECTIONS: u16 = 2;
     const INTERSECTION_FUDGE: u16 = 2;
     const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
+    const CUBIC_FUDGE: f32 = 3.0;
 
     pub const RoundArcEstimate = struct {
         lines: u16 = 0,
@@ -192,19 +193,19 @@ pub const Estimate = struct {
             },
             .quadratic_bezier_f32 => {
                 const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
-                base = estimateQuadraticBezier(qb);
+                base = estimateQuadraticBezier(qb).mulScalar(CUBIC_FUDGE);
             },
             .quadratic_bezier_i16 => {
                 const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                base = estimateQuadraticBezier(qb);
+                base = estimateQuadraticBezier(qb).mulScalar(CUBIC_FUDGE);
             },
             .cubic_bezier_f32 => {
                 const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                base = estimateCubicBezier(cb);
+                base = estimateCubicBezier(cb).mulScalar(CUBIC_FUDGE);
             },
             .cubic_bezier_i16 => {
                 const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                base = estimateCubicBezier(cb);
+                base = estimateCubicBezier(cb).mulScalar(CUBIC_FUDGE);
             },
         }
 
@@ -215,10 +216,10 @@ pub const Estimate = struct {
 
         if (style.isStroke()) {
             // TODO: this still seems wrong
-            const scale = transform.getScale();
+            const scale = transform.getScale() * 0.5;
             const stroke = style.stroke;
             const scaled_width = @max(1.0, stroke.width) * scale;
-            const stroke_fudge = @max(1.0, scaled_width);
+            const stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
             const cap = estimateCap(config, path_tag, stroke, scaled_width);
             const join = estimateJoin(config, stroke, scaled_width);
             const base_stroke = base.mulScalar(stroke_fudge).combine(join);
@@ -2011,10 +2012,10 @@ pub const Blend = struct {
                         const x_range: u32 = @intCast(end_x - start_x);
 
                         for (0..x_range) |x_offset| {
-                            const x: u32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
+                            const x: i32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
                             if (x >= 0 and x < texture.dimensions.width) {
                                 const texture_pixel = PointU32{
-                                    .x = x,
+                                    .x = @intCast(x),
                                     .y = y,
                                 };
                                 const texture_color = texture.getPixelUnsafe(texture_pixel);
@@ -2035,10 +2036,10 @@ pub const Blend = struct {
                     const x_range: u32 = @intCast(end_x - start_x);
 
                     for (0..x_range) |x_offset| {
-                        const x: u32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
+                        const x: i32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
                         if (x >= 0 and x < texture.dimensions.width) {
                             const texture_pixel = PointU32{
-                                .x = x,
+                                .x = @intCast(x),
                                 .y = y,
                             };
                             const texture_color = texture.getPixelUnsafe(texture_pixel);

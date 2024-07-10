@@ -62,8 +62,8 @@ pub fn main() !void {
         .x = 30.0,
         .y = 0.0,
     }, core.PointF32{
-        .x = 10.0,
-        .y = 5.0,
+        .x = 3.0,
+        .y = 10.0,
     });
     try path_encoder.finish();
 
