@@ -143,6 +143,7 @@ pub const SinglePassLineWriterFactory = struct {
             self.segment_offsets,
             self.paths,
         );
+        const reverse = kind == .stroke_back;
         var bump: BumpAllocator = undefined;
 
         switch (kind) {
@@ -166,6 +167,7 @@ pub const SinglePassLineWriterFactory = struct {
             .half_planes = self.half_planes,
             .bump = bump,
             .boundary_fragments = self.boundary_fragments,
+            .reverse = reverse,
         };
     }
 };
@@ -181,6 +183,7 @@ pub const SinglePassLineWriter = struct {
     debug: bool = true,
     previous_point: ?PointF32 = null,
     previous_grid_intersection: ?GridIntersection = null,
+    reverse: bool = false,
 
     pub fn write(self: *@This(), line: LineF32) void {
         if (std.meta.eql(line.p0, line.p1)) {
@@ -320,26 +323,41 @@ pub const SinglePassLineWriter = struct {
             });
         }
 
+        var grid_intersection2 = grid_intersection;
+        if (self.reverse) {
+            grid_intersection2 = grid_intersection.reverse();
+        }
+
         if (self.previous_grid_intersection) |*previous| {
             if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
                 // skip if exactly the same point
-                self.previous_grid_intersection = grid_intersection;
+                self.previous_grid_intersection = grid_intersection2;
                 return;
             }
 
             {
-                self.writeBoundaryFragment(BoundaryFragment.create(
-                    self.half_planes,
-                    [_]*const GridIntersection{
-                        previous,
-                        &grid_intersection,
-                    },
-                ));
+                if (self.reverse) {
+                    self.writeBoundaryFragment(BoundaryFragment.create(
+                        self.half_planes,
+                        [_]*const GridIntersection{
+                            &grid_intersection2,
+                            previous,
+                        },
+                    ));
+                } else {
+                    self.writeBoundaryFragment(BoundaryFragment.create(
+                        self.half_planes,
+                        [_]*const GridIntersection{
+                            previous,
+                            &grid_intersection2,
+                        },
+                    ));
+                }
             }
 
-            self.previous_grid_intersection = grid_intersection;
+            self.previous_grid_intersection = grid_intersection2;
         } else {
-            self.previous_grid_intersection = grid_intersection;
+            self.previous_grid_intersection = grid_intersection2;
             return;
         }
     }
