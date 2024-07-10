@@ -19,52 +19,53 @@ pub fn main() !void {
 
     const outline_width = 8.0;
     var style = draw.Style{};
-    // try encoder.encodeColor(draw.ColorU8{
-    //     .r = 0,
-    //     .g = 0,
-    //     .b = 0,
-    //     .a = 255,
-    // });
-    // style.setFill(draw.Style.Fill{
-    //     .brush = .color,
-    // });
     try encoder.encodeColor(draw.ColorU8{
-        .r = 255,
+        .r = 0,
         .g = 0,
         .b = 0,
         .a = 255,
     });
-    style.setStroke(draw.Style.Stroke{
+    style.setFill(draw.Style.Fill{
         .brush = .color,
-        .join = .round,
-        .start_cap = .square,
-        .end_cap = .square,
-        .width = outline_width,
     });
+    // try encoder.encodeColor(draw.ColorU8{
+    //     .r = 255,
+    //     .g = 0,
+    //     .b = 0,
+    //     .a = 255,
+    // });
+    // style.setStroke(draw.Style.Stroke{
+    //     .brush = .color,
+    //     .join = .round,
+    //     .start_cap = .square,
+    //     .end_cap = .square,
+    //     .width = outline_width,
+    // });
     try encoder.encodeStyle(style);
     try encoder.encodeTransform((core.TransformF32{
         .scale = core.PointF32{
-            .x = 10.0,
-            .y = 10.0,
+            .x = 2.0,
+            .y = 2.0,
         }
     }).toAffine());
 
     var path_encoder = encoder.pathEncoder(f32);
     try path_encoder.moveTo(core.PointF32{
         .x = 1.0,
-        .y = 1.1,
-    });
-    _ = try path_encoder.lineTo(core.PointF32{
-        .x = 5.2,
-        .y = 5.5,
-    });
-    _ = try path_encoder.quadTo(core.PointF32{
-        .x = 5.0,
-        .y = 0.0,
-    }, core.PointF32{
-        .x = 3.0,
         .y = 1.0,
     });
+    _ = try path_encoder.arcTo(core.PointF32.create(5.0, 5.0), core.PointF32.create(1.0, 9.0));
+    // _ = try path_encoder.lineTo(core.PointF32{
+    //     .x = 5.2,
+    //     .y = 5.5,
+    // });
+    // _ = try path_encoder.quadTo(core.PointF32{
+    //     .x = 5.0,
+    //     .y = 0.0,
+    // }, core.PointF32{
+    //     .x = 3.0,
+    //     .y = 1.0,
+    // });
     try path_encoder.finish();
 
     const bounds = encoder.calculateBounds();

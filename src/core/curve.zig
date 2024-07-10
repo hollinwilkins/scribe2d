@@ -71,6 +71,10 @@ pub fn Line(comptime T: type) type {
             };
         }
 
+        pub fn midpoint(self: @This()) P {
+            return self.apply(0.5);
+        }
+
         pub fn affineTransform(self: @This(), affine: Transform(T).Affine) @This() {
             return @This(){
                 .p0 = self.p0.affineTransform(affine),
@@ -82,6 +86,43 @@ pub fn Line(comptime T: type) type {
             return @This(){
                 .p0 = self.p0.add(t),
                 .p1 = self.p1.add(t),
+            };
+        }
+
+        pub fn pointIntersectLine(self: @This(), other: @This()) ?P {
+            const x1 = self.p0.x;
+            const x2 = self.p1.x;
+            const x3 = other.p0.x;
+            const x4 = other.p1.x;
+            const y1 = self.p0.y;
+            const y2 = self.p1.y;
+            const y3 = other.p0.y;
+            const y4 = other.p1.y;
+
+            const c1 = x1 - x2;
+            const c2 = y3 - y4;
+            const c3 = y1 - y2;
+            const c4 = x3 - x4;
+
+            const d = (c1 * c2) - (c3 * c4);
+
+            // put some thresholding here
+            if (d == 0) {
+                return null;
+            }
+
+            const x1y2 = x1 * y2;
+            const y1x2 = y1 * x2;
+            const y3x4 = y3 * x4;
+            const x3y4 = x3 * y4;
+            const xn = ((x1y2 - y1x2) * c4) - (c1 * (x3y4 - y3x4));
+            const yn = ((x1y2 - y1x2) * c2) - (c3 * (x3y4 - y3x4));
+            const x = xn / d;
+            const y = yn / d;
+
+            return P{
+                .x = x,
+                .y = y,
             };
         }
 

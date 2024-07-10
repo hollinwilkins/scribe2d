@@ -19,7 +19,6 @@ const StyleOffset = encoding_module.StyleOffset;
 const LineIterator = encoding_module.LineIterator;
 const MonoidFunctions = encoding_module.MonoidFunctions;
 const AtomicBounds = encoding_module.AtomicBounds;
-const Estimates = encoding_module.Estimates;
 const Offsets = encoding_module.Offset;
 const PathOffset = encoding_module.PathOffset;
 const SubpathOffset = encoding_module.SubpathOffset;
@@ -187,11 +186,11 @@ pub const Estimate = struct {
             },
             .arc_f32 => {
                 const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                base = estimateArc(config, arc);
+                base = estimateArc(config, arc).mulScalar(CUBIC_FUDGE);
             },
             .arc_i16 => {
                 const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                base = estimateArc(config, arc);
+                base = estimateArc(config, arc).mulScalar(CUBIC_FUDGE);
             },
             .quadratic_bezier_f32 => {
                 const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
@@ -585,25 +584,42 @@ pub const Flatten = struct {
         const path_monoid = path_monoids[segment_index];
         const transform = getTransform(transforms, path_monoid.transform_index);
 
-        if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
-            @panic("Cannot flatten ArcF32 yet.\n");
+        switch (path_tag.segment.kind) {
+            .arc_f32 => {
+                const arc_points = getArcPoints(
+                    path_tag,
+                    path_monoid,
+                    segment_data,
+                ).affineTransform(transform);
+                flattenArcSegment(
+                    config,
+                    arc_points,
+                    0.5 * transform.getScale(),
+                    0.0,
+                    arc_points.p0,
+                    arc_points.p2,
+                    line_writer,
+                );
+            },
+            .arc_i16 => {},
+            else => {
+                const cubic_points = getCubicPoints(
+                    path_tag,
+                    path_monoid,
+                    segment_data,
+                ).affineTransform(transform);
+
+                flattenEuler(
+                    config,
+                    cubic_points,
+                    0.5 * transform.getScale(),
+                    0.0,
+                    cubic_points.p0,
+                    cubic_points.p3,
+                    line_writer,
+                );
+            },
         }
-
-        const cubic_points = getCubicPoints(
-            path_tag,
-            path_monoid,
-            segment_data,
-        ).affineTransform(transform);
-
-        flattenEuler(
-            config,
-            cubic_points,
-            0.5 * transform.getScale(),
-            0.0,
-            cubic_points.p0,
-            cubic_points.p3,
-            line_writer,
-        );
 
         // adjust lines to represent actual filled lines
         line_writer.close();
@@ -771,6 +787,53 @@ pub const Flatten = struct {
 
         front_line_writer.close();
         back_line_writer.close();
+    }
+
+    fn flattenArcSegment(
+        config: KernelConfig,
+        arc_points: ArcF32,
+        scale: f32,
+        offset: f32,
+        start_point: PointF32,
+        end_poinit: PointF32,
+        writer: *LineWriter,
+    ) void {
+        _ = scale;
+        _ = offset;
+        const line1 = LineF32.create(arc_points.p0, arc_points.p1);
+        const line2 = LineF32.create(arc_points.p1, arc_points.p2);
+
+        // calculate normals
+        var normal1 = line1.normal();
+        var normal2 = line2.normal();
+
+        // calculate midpoints
+        const mid1 = line1.midpoint();
+        const mid2 = line2.midpoint();
+
+        // position normals at midpoint of line
+        normal1 = normal1.add(mid1.sub(line1.p0));
+        normal2 = normal2.add(mid2.sub(line2.p0));
+
+        // intersect normal lines
+        const normal_line1 = LineF32.create(mid1, normal1);
+        const normal_line2 = LineF32.create(mid2, normal2);
+
+        if (normal_line1.pointIntersectLine(normal_line2)) |center| {
+            const angle1 = arc_points.p0.sub(center).atan2();
+            const angle2 = arc_points.p2.sub(center).atan2();
+            const angle = @abs(angle1 - angle2);
+
+            flattenArc(
+                config,
+                start_point,
+                end_poinit,
+                center,
+                1,
+                angle,
+                writer,
+            );
+        }
     }
 
     fn flattenEuler(
@@ -1201,6 +1264,24 @@ pub const Flatten = struct {
             .point = p,
             .derivative = q,
         };
+    }
+
+    pub fn getArcPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) ArcF32 {
+        const sd = SegmentData{
+            .segment_data = segment_data,
+        };
+
+        switch (path_tag.segment.kind) {
+            .arc_f32 => {
+                return sd.getSegment(ArcF32, path_monoid);
+            },
+            .arc_i16 => {
+                return sd.getSegment(ArcI16, path_monoid).cast(f32);
+            },
+            else => {
+                @panic("Can only get arc points for Arc32 or ArcI16");
+            }
+        }
     }
 
     pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) CubicBezierF32 {
