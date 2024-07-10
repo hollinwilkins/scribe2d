@@ -293,6 +293,7 @@ pub const CpuRasterizer = struct {
 
         const flattener = Flattener{
             .factory = kernel_writer_module.SinglePassLineWriterFactory{
+                .half_planes = self.half_planes,
                 .boundary_fragments = boundary_fragments,
                 .path_monoids = self.path_monoids.items,
                 .paths = self.paths.items,

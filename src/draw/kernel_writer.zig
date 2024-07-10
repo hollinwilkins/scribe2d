@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core/root.zig");
 const encoding_module = @import("./encoding.zig");
+const msaa_module = @import("./msaa.zig");
 const mem = std.mem;
 const RangeF32 = core.RangeF32;
 const RectF32 = core.RectF32;
@@ -20,6 +21,7 @@ const FlatSegmentOffset = encoding_module.FlatSegmentOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
 const BumpAllocator = encoding_module.BumpAllocator;
 const Scanner = encoding_module.Scanner;
+const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const SimpleLineWriterFactory = struct {
     flat_segments: []FlatSegment,
@@ -121,6 +123,7 @@ pub const SimpleLineWriter = struct {
 };
 
 pub const SinglePassLineWriterFactory = struct {
+    half_planes: *const HalfPlanesU16,
     path_monoids: []const PathMonoid,
     segment_offsets: []const SegmentOffset,
     boundary_fragments: []BoundaryFragment,
@@ -160,6 +163,7 @@ pub const SinglePassLineWriterFactory = struct {
         }
 
         return SinglePassLineWriter{
+            .half_planes = self.half_planes,
             .bump = bump,
             .boundary_fragments = self.boundary_fragments,
         };
@@ -167,12 +171,16 @@ pub const SinglePassLineWriterFactory = struct {
 };
 
 pub const SinglePassLineWriter = struct {
+    const GRID_POINT_TOLERANCE: f32 = 1e-6;
+
+    half_planes: *const HalfPlanesU16,
     bump: BumpAllocator,
     boundary_fragments: []BoundaryFragment,
     bounds: RectF32 = RectF32.NONE,
     lines: u32 = 0,
     debug: bool = true,
-    last_point: ?PointF32 = null,
+    previous_point: ?PointF32 = null,
+    previous_grid_intersection: ?GridIntersection = null,
 
     pub fn write(self: *@This(), line: LineF32) void {
         if (std.meta.eql(line.p0, line.p1)) {
@@ -301,16 +309,51 @@ pub const SinglePassLineWriter = struct {
         self.writeIntersection(end_intersection);
     }
 
-    fn writeIntersection(self: *@This(), intersection: GridIntersection) void {
+    fn writeIntersection(self: *@This(), grid_intersection: GridIntersection) void {
         if (self.debug) {
-            std.debug.print("Pixel({},{}), T({}), Intersection({},{})\n", .{
-                intersection.pixel.x,
-                intersection.pixel.y,
-                intersection.intersection.t,
-                intersection.intersection.point.x,
-                intersection.intersection.point.y,
+            std.debug.print("GridIntersection({},{}), T({}), Intersection({},{})\n", .{
+                grid_intersection.pixel.x,
+                grid_intersection.pixel.y,
+                grid_intersection.intersection.t,
+                grid_intersection.intersection.point.x,
+                grid_intersection.intersection.point.y,
             });
         }
+
+        if (self.previous_grid_intersection) |*previous| {
+            if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
+                // skip if exactly the same point
+                self.previous_grid_intersection = grid_intersection;
+                return;
+            }
+
+            {
+                self.writeBoundaryFragment(BoundaryFragment.create(
+                    self.half_planes,
+                    [_]*const GridIntersection{
+                        previous,
+                        &grid_intersection,
+                    },
+                ));
+            }
+
+            self.previous_grid_intersection = grid_intersection;
+        } else {
+            self.previous_grid_intersection = grid_intersection;
+            return;
+        }
+    }
+
+    fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
+        if (self.debug) {
+            std.debug.print("BoundaryFragment({},{})\n", .{
+                boundary_fragment.pixel.x,
+                boundary_fragment.pixel.y,
+            });
+        }
+
+        const boundary_fragment_index = self.bump.bump(1);
+        self.boundary_fragments[boundary_fragment_index] = boundary_fragment;
     }
 
     fn scanX(
