@@ -552,17 +552,18 @@ pub const Flatten = struct {
         const path_monoid = path_monoids[segment_index];
         const transform = getTransform(transforms, path_monoid.transform_index);
         const subpath = subpaths[path_monoid.subpath_index];
-        var next_subpath: Subpath = undefined;
-        if (path_monoid.subpath_index + 1 < subpaths.len) {
-            next_subpath = subpaths[path_monoid.subpath_index + 1];
+        const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) subpaths[path_monoid.subpath_index + 1] else null;
+        var last_segment_offset: u32 = undefined;
+        if (next_subpath) |ns| {
+            last_segment_offset = ns.segment_index;
         } else {
-            next_subpath = subpaths[subpaths.len - 1];
+            last_segment_offset = @intCast(path_tags.len);
         }
         var last_path_tag: PathTag = undefined;
         var last_path_monoid: PathMonoid = undefined;
-        if (next_subpath.segment_index > 0) {
-            last_path_tag = path_tags[next_subpath.segment_index - 1];
-            last_path_monoid = path_monoids[next_subpath.segment_index - 1];
+        if (last_segment_offset > 0) {
+            last_path_tag = path_tags[last_segment_offset - 1];
+            last_path_monoid = path_monoids[last_segment_offset - 1];
         } else {
             last_path_tag = path_tags[path_tags.len - 1];
             last_path_monoid = path_monoids[path_monoids.len - 1];
@@ -600,7 +601,7 @@ pub const Flatten = struct {
 
         const segment_range = RangeU32{
             .start = subpath.segment_index,
-            .end = next_subpath.segment_index + 1,
+            .end = last_segment_offset,
         };
         const neighbor = readNeighborSegment(
             config,
