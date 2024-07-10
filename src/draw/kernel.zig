@@ -1848,9 +1848,7 @@ pub const Rasterize = struct {
                 bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
             }
 
-            if (@abs(@as(i32, @intFromFloat(bit_winding))) % 2 == 1) {
-                merge_fragment.stencil_mask = merge_fragment.stencil_mask | bit_index;
-            }
+            merge_fragment.stencil_mask |= @as(u16, @intCast((@as(i16, @intFromFloat(bit_winding)) & 1))) * bit_index;
         }
     }
 
