@@ -212,7 +212,7 @@ pub const CpuRasterizer = struct {
         try self.flatten(&pool);
 
         // calculate scanline encoding
-        try self.kernelRasterize(&pool);
+        // try self.kernelRasterize(&pool);
 
         if (!self.config.runFlushTexture()) {
             return;
@@ -282,23 +282,21 @@ pub const CpuRasterizer = struct {
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
         const Flattener = kernel_module.Flatten(
-            kernel_writer_module.SimpleLineWriterFactory,
-            kernel_writer_module.SimpleLineWriter,
+            kernel_writer_module.SinglePassLineWriterFactory,
+            kernel_writer_module.SinglePassLineWriter,
         );
         const last_segment_offset = self.segment_offsets.getLast();
-        const flat_segments = try self.flat_segments.addManyAsSlice(
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(
             self.allocator,
-            last_segment_offset.sum.flat_segment,
-        );
-        const line_data = try self.line_data.addManyAsSlice(
-            self.allocator,
-            last_segment_offset.sum.line_offset,
+            last_segment_offset.sum.intersections,
         );
 
         const flattener = Flattener{
-            .factory = kernel_writer_module.SimpleLineWriterFactory{
-                .flat_segments = flat_segments,
-                .line_data = line_data,
+            .factory = kernel_writer_module.SinglePassLineWriterFactory{
+                .boundary_fragments = boundary_fragments,
+                .path_monoids = self.path_monoids.items,
+                .paths = self.paths.items,
+                .segment_offsets = self.segment_offsets.items,
             },
         };
 

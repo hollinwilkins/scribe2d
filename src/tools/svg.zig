@@ -88,7 +88,7 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
         .debug_flags = 0,
         .kernel_config = draw.KernelConfig.SERIAL,
         // .flush_texture_span = false,
