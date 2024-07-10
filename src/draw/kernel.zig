@@ -913,6 +913,7 @@ pub const Flatten = struct {
                 cap0,
                 cap1,
                 point,
+                1,
                 std.math.pi,
                 transform,
                 writer,
@@ -997,6 +998,7 @@ pub const Flatten = struct {
                         back1,
                         back0,
                         p0,
+                        1,
                         @abs(std.math.atan2(cr, d)),
                         transform,
                         right_writer,
@@ -1004,17 +1006,12 @@ pub const Flatten = struct {
 
                     left_writer.write(LineF32.create(front0, front1).affineTransform(transform));
                 } else {
-                    std.debug.print("FlattenArc, Front0({}), Front1({}), P0({}), Angle({})\n", .{
-                        transform.apply(front0),
-                        transform.apply(front1),
-                        transform.apply(p0),
-                        @abs(std.math.atan2(cr, d)),
-                    });
                     flattenArc(
                         config,
                         front0,
                         front1,
                         p0,
+                        -1,
                         @abs(std.math.atan2(cr, d)),
                         transform,
                         left_writer,
@@ -1031,6 +1028,7 @@ pub const Flatten = struct {
         start: PointF32,
         end: PointF32,
         center: PointF32,
+        theta_sign: i2,
         angle: f32,
         transform: TransformF32.Matrix,
         writer: *LineWriter,
@@ -1044,37 +1042,19 @@ pub const Flatten = struct {
         const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
 
         // let (s, c) = theta.sin_cos();
-        const s = std.math.sin(theta);
-        const c = std.math.cos(theta);
+        const i_theta = theta * @as(f32, @floatFromInt(theta_sign));
+        const s = std.math.sin(i_theta);
+        const c = std.math.cos(i_theta);
         const rot = TransformF32.Matrix{
-            .coefficients = [_]f32{ c, -s, 0.0, s, c, 0.0 },
+            .coefficients = [_]f32{
+                c, -s, 0.0,
+                s, c,  0.0,
+            },
         };
 
-        const DEBUG_POINT = PointF32{ .x = 6.223242e1, .y = 4.248633e1 };
-        if (std.meta.eql(DEBUG_POINT, transform.apply(center))) {
-            std.debug.print("DEBUG PARAMS({},{},{},{},{},{},{})\n", .{
-                r,
-                radius,
-                theta,
-                n_lines,
-                s,
-                c,
-                rot,
-            });
-        }
-
-        for (0..n_lines - 1) |n| {
+        for (0..n_lines - 1) |_| {
             r = rot.apply(r);
             const p1 = transform.apply(center.add(r));
-
-            if (std.meta.eql(DEBUG_POINT, transform.apply(center))) {
-                std.debug.print("DEBUG POINT({},{}): {}\n", .{
-                    n,
-                    r,
-                    p1,
-                });
-            }
-
             writer.write(LineF32.create(p0, p1));
             p0 = p1;
         }
@@ -1879,7 +1859,7 @@ pub const Rasterize = struct {
             }
 
             if (@abs(@as(i32, @intFromFloat(bit_winding))) % 2 == 1) {
-                merge_fragment.stencil_mask = merge_fragment.stencil_mask | bit_index; 
+                merge_fragment.stencil_mask = merge_fragment.stencil_mask | bit_index;
             }
         }
     }
