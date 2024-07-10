@@ -73,8 +73,8 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_EXPAND_MONOIDS,
-        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_EXPAND_MONOIDS,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .kernel_config = draw.KernelConfig.SERIAL,
     };
     var rasterizer = try draw.CpuRasterizer.init(
