@@ -2030,28 +2030,50 @@ pub const Blend = struct {
             if (merge_fragment.is_scanline and merge_fragment.pixel.y >= 0 and merge_fragment.pixel.y < texture.dimensions.height) {
                 const y: u32 = @intCast(merge_fragment.pixel.y);
 
+                var start_span_fragment: ?BoundaryFragment = null;
                 var previous_merge_fragment = merge_fragment;
                 for (boundary_fragments[merge_index + 1 ..]) |current_merge_fragment| {
-                    if (current_merge_fragment.pixel.y != previous_merge_fragment.pixel.y) {
+                    if (current_merge_fragment.pixel.y != merge_fragment.pixel.y) {
                         break;
-                    }
-
-                    if (y == 19) {
-                        std.debug.assert(true);
-                        std.debug.assert(true);
                     }
 
                     if (!current_merge_fragment.is_merge) {
                         continue;
                     }
 
-                    if (previous_merge_fragment.pixel.x + 1 == current_merge_fragment.pixel.x or current_merge_fragment.main_ray_winding == 0) {
-                        previous_merge_fragment = current_merge_fragment;
-                        continue;
+                    if (current_merge_fragment.main_ray_winding != 0) {
+                        if (start_span_fragment == null) {
+                            start_span_fragment = previous_merge_fragment;
+                        }
+                    } else if (start_span_fragment) |start| {
+                        // flush start_span to previous fragment
+
+                        const start_x = start.pixel.x + 1;
+                        const end_x = previous_merge_fragment.pixel.x;
+                        const x_range: u32 = @intCast(end_x - start_x);
+
+                        for (0..x_range) |x_offset| {
+                            const x: u32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
+                            if (x >= 0 and x < texture.dimensions.width) {
+                                const texture_pixel = PointU32{
+                                    .x = x,
+                                    .y = y,
+                                };
+                                const texture_color = texture.getPixelUnsafe(texture_pixel);
+                                const blend_color = color_blend.blend(brush_color, texture_color);
+                                texture.setPixelUnsafe(texture_pixel, blend_color);
+                            }
+                        }
+
+                        start_span_fragment = null;
                     }
 
-                    const start_x = previous_merge_fragment.pixel.x + 1;
-                    const end_x = current_merge_fragment.pixel.x;
+                    previous_merge_fragment = current_merge_fragment;
+                }
+
+                if (start_span_fragment) |start| {
+                    const start_x = start.pixel.x + 1;
+                    const end_x = previous_merge_fragment.pixel.x;
                     const x_range: u32 = @intCast(end_x - start_x);
 
                     for (0..x_range) |x_offset| {
@@ -2066,8 +2088,6 @@ pub const Blend = struct {
                             texture.setPixelUnsafe(texture_pixel, blend_color);
                         }
                     }
-
-                    previous_merge_fragment = current_merge_fragment;
                 }
             }
         }
