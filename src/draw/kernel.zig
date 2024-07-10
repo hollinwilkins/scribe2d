@@ -398,16 +398,20 @@ pub const Flatten = struct {
     half_planes: *const HalfPlanesU16,
     path_monoids: []const PathMonoid,
     segment_offsets: []const SegmentOffset,
+    line_data: []u8,
+    intersections: []GridIntersection,
     boundary_fragments: []BoundaryFragment,
     paths: []Path,
+    debug: bool = false,
 
+    // TODO: flatten_offset calculation requires a lot of math, avoid it
+    //         using comptime. Only needed for debug mode.
     pub fn createLineWriter(
         self: @This(),
         kind: FlatSegment.Kind,
         segment_index: u32,
         flatten_offset: FlatSegmentOffset,
     ) LineWriter {
-        _ = flatten_offset;
         const path_monoid = self.path_monoids[segment_index];
         const path = &self.paths[path_monoid.path_index];
         const path_offset = PathOffset.create(
@@ -417,6 +421,7 @@ pub const Flatten = struct {
         );
         const reverse = kind == .stroke_back;
         var bump: BumpAllocator = undefined;
+        var flat_segment: FlatSegment = undefined;
 
         switch (kind) {
             .fill => {
@@ -425,21 +430,58 @@ pub const Flatten = struct {
                     .end = path_offset.end_fill_boundary_offset,
                     .offset = &path.fill_bump,
                 };
+                flat_segment = FlatSegment{
+                    .kind = .fill,
+                    .segment_index = segment_index,
+                    .start_line_data_offset = flatten_offset.start_fill_line_offset,
+                    .end_line_data_offset = flatten_offset.end_fill_line_offset,
+                    .start_intersection_offset = flatten_offset.start_fill_intersection_offset,
+                    .end_intersection_offset = flatten_offset.end_fill_intersection_offset,
+                };
             },
-            else => {
+            .stroke_front => {
                 bump = BumpAllocator{
                     .start = path_offset.start_stroke_boundary_offset,
                     .end = path_offset.end_stroke_boundary_offset,
                     .offset = &path.stroke_bump,
                 };
+                flat_segment = FlatSegment{
+                    .kind = .fill,
+                    .segment_index = segment_index,
+                    .start_line_data_offset = flatten_offset.start_front_stroke_line_offset,
+                    .end_line_data_offset = flatten_offset.end_front_stroke_line_offset,
+                    .start_intersection_offset = flatten_offset.start_front_stroke_intersection_offset,
+                    .end_intersection_offset = flatten_offset.end_front_stroke_intersection_offset,
+                };
+            },
+            .stroke_back => {
+                bump = BumpAllocator{
+                    .start = path_offset.start_stroke_boundary_offset,
+                    .end = path_offset.end_stroke_boundary_offset,
+                    .offset = &path.stroke_bump,
+                };
+                flat_segment = FlatSegment{
+                    .kind = .fill,
+                    .segment_index = segment_index,
+                    .start_line_data_offset = flatten_offset.start_back_stroke_line_offset,
+                    .end_line_data_offset = flatten_offset.end_back_stroke_line_offset,
+                    .start_intersection_offset = flatten_offset.start_back_stroke_intersection_offset,
+                    .end_intersection_offset = flatten_offset.end_back_stroke_intersection_offset,
+                };
             },
         }
 
+        const line_data = if (self.debug) self.line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset] else &.{};
+        const intersections = if (self.debug) self.intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset] else &.{};
         return LineWriter{
             .half_planes = self.half_planes,
             .bump = bump,
             .boundary_fragments = self.boundary_fragments,
             .reverse = reverse,
+            .flat_segment = flat_segment,
+            .line_data = line_data,
+            .intersections = intersections,
+            .debug = self.debug,
         };
     }
 
@@ -1269,13 +1311,18 @@ pub const LineWriter = struct {
 
     half_planes: *const HalfPlanesU16,
     bump: BumpAllocator,
-    boundary_fragments: []BoundaryFragment,
     bounds: RectF32 = RectF32.NONE,
     lines: u32 = 0,
+    line_offset: u32 = 0,
+    intersection_offset: u32 = 0,
     debug: bool = true,
     previous_point: ?PointF32 = null,
     previous_grid_intersection: ?GridIntersection = null,
     reverse: bool = false,
+    flat_segment: FlatSegment,
+    line_data: []u8,
+    intersections: []GridIntersection,
+    boundary_fragments: []BoundaryFragment,
 
     pub fn write(self: *@This(), line: LineF32) void {
         if (std.meta.eql(line.p0, line.p1)) {
@@ -1283,15 +1330,20 @@ pub const LineWriter = struct {
         }
 
         if (self.debug) {
+            if (self.lines == 0) {
+
+            } else {
+
+            }
             std.debug.print("WriteLine: {}\n", .{line});
         }
-
-        // intersect
-        // boundary
 
         self.intersect(line);
 
         self.lines += 1;
+    }
+
+    fn addPoint(self: *@This(), point: PointF32) void {
     }
 
     fn intersect(self: *@This(), line: LineF32) void {

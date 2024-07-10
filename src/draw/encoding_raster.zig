@@ -46,6 +46,7 @@ pub const CpuRasterizer = struct {
 
         run_flags: u8 = RUN_FLAG_FLUSH_TEXTURE,
         debug_flags: u8 = RUN_FLAG_ALL,
+        debug: bool = false,
         flush_texture_boundary: bool = true,
         flush_texture_span: bool = true,
         kernel_config: KernelConfig = KernelConfig.DEFAULT,
@@ -281,6 +282,12 @@ pub const CpuRasterizer = struct {
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
         const last_segment_offset = self.segment_offsets.getLast();
+        var line_data: []u8 = &.{};
+        var intersections: []GridIntersection = &.{};
+        if (self.config.debug) {
+            line_data = try self.line_data.addManyAsSlice(self.allocator, last_segment_offset.sum.line_offset);
+            intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
+        }
         const boundary_fragments = try self.boundary_fragments.addManyAsSlice(
             self.allocator,
             last_segment_offset.sum.intersections,
@@ -292,6 +299,9 @@ pub const CpuRasterizer = struct {
             .path_monoids = self.path_monoids.items,
             .paths = self.paths.items,
             .segment_offsets = self.segment_offsets.items,
+            .line_data = line_data,
+            .intersections = intersections,
+            .debug = self.config.debug,
         };
 
         const range = RangeU32{
