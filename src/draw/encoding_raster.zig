@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core/root.zig");
 const encoding_module = @import("./encoding.zig");
 const kernel_module = @import("./kernel.zig");
+const kernel_writer_module = @import("./kernel_writer.zig");
 const texture_module = @import("./texture.zig");
 const msaa_module = @import("./msaa.zig");
 const mem = std.mem;
@@ -280,7 +281,10 @@ pub const CpuRasterizer = struct {
 
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
-        const flattener = kernel_module.Flatten;
+        const Flattener = kernel_module.Flatten(
+            kernel_writer_module.SimpleLineWriterFactory,
+            kernel_writer_module.SimpleLineWriter,
+        );
         const last_segment_offset = self.segment_offsets.getLast();
         const flat_segments = try self.flat_segments.addManyAsSlice(
             self.allocator,
@@ -291,6 +295,13 @@ pub const CpuRasterizer = struct {
             last_segment_offset.sum.line_offset,
         );
 
+        const flattener = Flattener{
+            .factory = kernel_writer_module.SimpleLineWriterFactory{
+                .flat_segments = flat_segments,
+                .line_data = line_data,
+            },
+        };
+
         const range = RangeU32{
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
@@ -300,8 +311,9 @@ pub const CpuRasterizer = struct {
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
-                flattener.flatten,
+                Flattener.flatten,
                 .{
+                    flattener,
                     self.config.kernel_config,
                     self.encoding.path_tags,
                     self.path_monoids.items,
@@ -312,8 +324,6 @@ pub const CpuRasterizer = struct {
                     chunk,
                     self.paths.items,
                     self.segment_offsets.items,
-                    flat_segments,
-                    line_data,
                 },
             );
         }
