@@ -212,7 +212,7 @@ pub const CpuRasterizer = struct {
         try self.flatten(&pool);
 
         // calculate scanline encoding
-        // try self.kernelRasterize(&pool);
+        try self.kernelRasterize(&pool);
 
         if (!self.config.runFlushTexture()) {
             return;
@@ -337,64 +337,12 @@ pub const CpuRasterizer = struct {
 
         var wg = std.Thread.WaitGroup{};
         const rasterizer = kernel_module.Rasterize;
-        const last_segment_offset = self.segment_offsets.getLast();
-        const grid_intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
-
-        const flat_segment_range = RangeU32{
-            .start = 0,
-            .end = @intCast(self.flat_segments.items.len),
-        };
-
-        var chunk_iter = flat_segment_range.chunkIterator(self.config.kernel_config.chunk_size);
-        while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.intersect,
-                .{
-                    self.line_data.items,
-                    chunk,
-                    self.flat_segments.items,
-                    grid_intersections,
-                },
-            );
-        }
-
-        wg.wait();
-        wg.reset();
-
-        if (!self.config.runBoundary()) {
-            return;
-        }
-
-        chunk_iter.reset();
-        while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.boundary,
-                .{
-                    self.half_planes,
-                    self.encoding.path_tags,
-                    self.path_monoids.items,
-                    self.subpaths.items,
-                    self.flat_segments.items,
-                    grid_intersections,
-                    self.segment_offsets.items,
-                    chunk,
-                    self.paths.items,
-                    boundary_fragments,
-                },
-            );
-        }
-
-        wg.wait();
-        wg.reset();
-
+        
         const path_range = RangeU32{
             .start = 0,
             .end = @intCast(self.paths.items.len),
         };
-        chunk_iter = path_range.chunkIterator(self.config.kernel_config.chunk_size);
+        var chunk_iter = path_range.chunkIterator(self.config.kernel_config.chunk_size);
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
                 &wg,
@@ -404,7 +352,7 @@ pub const CpuRasterizer = struct {
                     self.segment_offsets.items,
                     chunk,
                     self.paths.items,
-                    boundary_fragments,
+                    self.boundary_fragments.items,
                 },
             );
         }
