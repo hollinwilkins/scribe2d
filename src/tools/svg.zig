@@ -89,7 +89,8 @@ pub fn main() !void {
 
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        .debug_flags = 0,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .debug = true,
         .kernel_config = draw.KernelConfig.SERIAL,
         // .flush_texture_span = false,
     };

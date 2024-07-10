@@ -398,6 +398,7 @@ pub const Flatten = struct {
     half_planes: *const HalfPlanesU16,
     path_monoids: []const PathMonoid,
     segment_offsets: []const SegmentOffset,
+    flat_segments: []FlatSegment,
     line_data: []u8,
     intersections: []GridIntersection,
     boundary_fragments: []BoundaryFragment,
@@ -421,6 +422,7 @@ pub const Flatten = struct {
         );
         const reverse = kind == .stroke_back;
         var bump: BumpAllocator = undefined;
+        var flat_segment_index: u32 = undefined;
         var flat_segment: FlatSegment = undefined;
 
         switch (kind) {
@@ -430,6 +432,7 @@ pub const Flatten = struct {
                     .end = path_offset.end_fill_boundary_offset,
                     .offset = &path.fill_bump,
                 };
+                flat_segment_index = flatten_offset.fill_flat_segment_index;
                 flat_segment = FlatSegment{
                     .kind = .fill,
                     .segment_index = segment_index,
@@ -445,6 +448,7 @@ pub const Flatten = struct {
                     .end = path_offset.end_stroke_boundary_offset,
                     .offset = &path.stroke_bump,
                 };
+                flat_segment_index = flatten_offset.front_stroke_flat_segment_index;
                 flat_segment = FlatSegment{
                     .kind = .fill,
                     .segment_index = segment_index,
@@ -460,6 +464,7 @@ pub const Flatten = struct {
                     .end = path_offset.end_stroke_boundary_offset,
                     .offset = &path.stroke_bump,
                 };
+                flat_segment_index = flatten_offset.back_stroke_flat_segment_index;
                 flat_segment = FlatSegment{
                     .kind = .fill,
                     .segment_index = segment_index,
@@ -471,14 +476,16 @@ pub const Flatten = struct {
             },
         }
 
-        const line_data = if (self.debug) self.line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset] else &.{};
-        const intersections = if (self.debug) self.intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset] else &.{};
+        const line_data: []u8 = if (self.debug) self.line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset] else &.{};
+        const intersections: []GridIntersection = if (self.debug) self.intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset] else &.{};
         return LineWriter{
             .half_planes = self.half_planes,
             .bump = bump,
             .boundary_fragments = self.boundary_fragments,
             .reverse = reverse,
+            .flat_segment_index = flat_segment_index,
             .flat_segment = flat_segment,
+            .flat_segments = self.flat_segments,
             .line_data = line_data,
             .intersections = intersections,
             .debug = self.debug,
@@ -1319,7 +1326,9 @@ pub const LineWriter = struct {
     previous_point: ?PointF32 = null,
     previous_grid_intersection: ?GridIntersection = null,
     reverse: bool = false,
+    flat_segment_index: u32 = 0,
     flat_segment: FlatSegment,
+    flat_segments: []FlatSegment,
     line_data: []u8,
     intersections: []GridIntersection,
     boundary_fragments: []BoundaryFragment,
@@ -1329,13 +1338,21 @@ pub const LineWriter = struct {
             return;
         }
 
-        if (self.debug) {
-            if (self.lines == 0) {
+        if (self.previous_point) |previous_point| {
+            std.debug.assert(std.meta.eql(previous_point, line.p0));
+            self.bounds.extendByInPlace(line.p1);
 
-            } else {
-
+            if (self.debug) {
+                self.addPoint(line.p1);
             }
-            std.debug.print("WriteLine: {}\n", .{line});
+        } else {
+            self.bounds.extendByInPlace(line.p0);
+            self.bounds.extendByInPlace(line.p1);
+
+            if (self.debug) {
+                self.addPoint(line.p0);
+                self.addPoint(line.p1);
+            }
         }
 
         self.intersect(line);
@@ -1344,6 +1361,13 @@ pub const LineWriter = struct {
     }
 
     fn addPoint(self: *@This(), point: PointF32) void {
+        std.mem.bytesAsValue(PointF32, self.line_data[self.line_offset .. self.line_offset + @sizeOf(PointF32)]).* = point;
+        self.line_offset += @sizeOf(PointF32);
+    }
+
+    fn addIntersection(self: *@This(), grid_intersection: GridIntersection) void {
+        self.intersections[self.intersection_offset] = grid_intersection;
+        self.intersection_offset += 1;
     }
 
     fn intersect(self: *@This(), line: LineF32) void {
@@ -1458,13 +1482,7 @@ pub const LineWriter = struct {
 
     fn writeIntersection(self: *@This(), grid_intersection: GridIntersection) void {
         if (self.debug) {
-            std.debug.print("GridIntersection({},{}), T({}), Intersection({},{})\n", .{
-                grid_intersection.pixel.x,
-                grid_intersection.pixel.y,
-                grid_intersection.intersection.t,
-                grid_intersection.intersection.point.x,
-                grid_intersection.intersection.point.y,
-            });
+            self.addIntersection(grid_intersection);
         }
 
         var grid_intersection2 = grid_intersection;
@@ -1507,13 +1525,6 @@ pub const LineWriter = struct {
     }
 
     fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
-        if (self.debug) {
-            std.debug.print("BoundaryFragment({},{})\n", .{
-                boundary_fragment.pixel.x,
-                boundary_fragment.pixel.y,
-            });
-        }
-
         const boundary_fragment_index = self.bump.bump(1);
         self.boundary_fragments[boundary_fragment_index] = boundary_fragment;
     }
@@ -1565,8 +1576,9 @@ pub const LineWriter = struct {
     }
 
     pub fn close(self: *@This()) void {
-        _ = self;
-        // do nothing
+        if (self.debug) {
+            self.flat_segments[self.flat_segment_index] = self.flat_segment;
+        }
     }
 };
 

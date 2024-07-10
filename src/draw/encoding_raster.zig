@@ -282,9 +282,11 @@ pub const CpuRasterizer = struct {
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
         const last_segment_offset = self.segment_offsets.getLast();
+        var flat_segments: []FlatSegment = &.{};
         var line_data: []u8 = &.{};
         var intersections: []GridIntersection = &.{};
         if (self.config.debug) {
+            flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.sum.flat_segment);
             line_data = try self.line_data.addManyAsSlice(self.allocator, last_segment_offset.sum.line_offset);
             intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
         }
@@ -299,6 +301,7 @@ pub const CpuRasterizer = struct {
             .path_monoids = self.path_monoids.items,
             .paths = self.paths.items,
             .segment_offsets = self.segment_offsets.items,
+            .flat_segments = flat_segments,
             .line_data = line_data,
             .intersections = intersections,
             .debug = self.config.debug,
