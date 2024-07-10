@@ -919,13 +919,13 @@ pub const Flatten = struct {
             const p0 = start.add(v);
             const p1 = end.add(v);
             writer.write(LineF32.create(start, p0));
-            writer.write(LineF32.create(p1, end));
+            writer.write(LineF32.create(p0, p1));
 
-            start = p0;
-            end = p1;
+            start = p1;
+            end = end;
         }
 
-        writer.write(LineF32.create(cap0, cap1));
+        writer.write(LineF32.create(start, end));
     }
 
     fn drawJoin(

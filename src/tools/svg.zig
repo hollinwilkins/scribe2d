@@ -37,8 +37,8 @@ pub fn main() !void {
     style.setStroke(draw.Style.Stroke{
         .brush = .color,
         .join = .round,
-        .start_cap = .round,
-        .end_cap = .round,
+        .start_cap = .square,
+        .end_cap = .square,
         .width = outline_width,
     });
     try encoder.encodeStyle(style);
