@@ -46,6 +46,8 @@ pub const CpuRasterizer = struct {
 
         run_flags: u8 = RUN_FLAG_FLUSH_TEXTURE,
         debug_flags: u8 = RUN_FLAG_ALL,
+        flush_texture_boundary: bool = true,
+        flush_texture_span: bool = true,
         kernel_config: KernelConfig = KernelConfig.DEFAULT,
 
         pub fn runExpandMonoids(self: @This()) bool {
@@ -476,43 +478,47 @@ pub const CpuRasterizer = struct {
                     .end = path.end_fill_boundary_offset,
                 };
 
-                var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
-                while (chunk_iter.next()) |chunk| {
-                    pool.spawnWg(
-                        &wg,
-                        blender.fill,
-                        .{
-                            style.fill.brush,
-                            style_offset.fill_brush_offset,
-                            self.boundary_fragments.items,
-                            self.encoding.draw_data,
-                            chunk,
-                            texture,
-                        },
-                    );
+                if (self.config.flush_texture_boundary) {
+                    var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
+                    while (chunk_iter.next()) |chunk| {
+                        pool.spawnWg(
+                            &wg,
+                            blender.fill,
+                            .{
+                                style.fill.brush,
+                                style_offset.fill_brush_offset,
+                                self.boundary_fragments.items,
+                                self.encoding.draw_data,
+                                chunk,
+                                texture,
+                            },
+                        );
+                    }
+
+                    wg.wait();
+                    wg.reset();
                 }
 
-                wg.wait();
-                wg.reset();
+                if (self.config.flush_texture_span) {
+                    var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
+                    while (chunk_iter.next()) |chunk| {
+                        pool.spawnWg(
+                            &wg,
+                            blender.fillSpan,
+                            .{
+                                style.fill.brush,
+                                style_offset.fill_brush_offset,
+                                self.boundary_fragments.items,
+                                self.encoding.draw_data,
+                                chunk,
+                                texture,
+                            },
+                        );
+                    }
 
-                chunk_iter.reset();
-                while (chunk_iter.next()) |chunk| {
-                    pool.spawnWg(
-                        &wg,
-                        blender.fillSpan,
-                        .{
-                            style.fill.brush,
-                            style_offset.fill_brush_offset,
-                            self.boundary_fragments.items,
-                            self.encoding.draw_data,
-                            chunk,
-                            texture,
-                        },
-                    );
+                    wg.wait();
+                    wg.reset();
                 }
-
-                wg.wait();
-                wg.reset();
             }
 
             if (style.isStroke()) {
@@ -521,43 +527,47 @@ pub const CpuRasterizer = struct {
                     .end = path.end_stroke_boundary_offset,
                 };
 
-                var chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
-                while (chunk_iter.next()) |chunk| {
-                    pool.spawnWg(
-                        &wg,
-                        blender.fill,
-                        .{
-                            style.stroke.brush,
-                            style_offset.stroke_brush_offset,
-                            self.boundary_fragments.items,
-                            self.encoding.draw_data,
-                            chunk,
-                            texture,
-                        },
-                    );
+                if (self.config.flush_texture_boundary) {
+                    var chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
+                    while (chunk_iter.next()) |chunk| {
+                        pool.spawnWg(
+                            &wg,
+                            blender.fill,
+                            .{
+                                style.stroke.brush,
+                                style_offset.stroke_brush_offset,
+                                self.boundary_fragments.items,
+                                self.encoding.draw_data,
+                                chunk,
+                                texture,
+                            },
+                        );
+                    }
+
+                    wg.wait();
+                    wg.reset();
                 }
 
-                wg.wait();
-                wg.reset();
+                if (self.config.flush_texture_span) {
+                    var chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
+                    while (chunk_iter.next()) |chunk| {
+                        pool.spawnWg(
+                            &wg,
+                            blender.fillSpan,
+                            .{
+                                style.stroke.brush,
+                                style_offset.stroke_brush_offset,
+                                self.boundary_fragments.items,
+                                self.encoding.draw_data,
+                                chunk,
+                                texture,
+                            },
+                        );
+                    }
 
-                chunk_iter.reset();
-                while (chunk_iter.next()) |chunk| {
-                    pool.spawnWg(
-                        &wg,
-                        blender.fillSpan,
-                        .{
-                            style.stroke.brush,
-                            style_offset.stroke_brush_offset,
-                            self.boundary_fragments.items,
-                            self.encoding.draw_data,
-                            chunk,
-                            texture,
-                        },
-                    );
+                    wg.wait();
+                    wg.reset();
                 }
-
-                wg.wait();
-                wg.reset();
             }
         }
     }
