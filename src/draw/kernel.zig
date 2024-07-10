@@ -1248,7 +1248,7 @@ pub const Rasterize = struct {
         const intersections = grid_intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset];
 
         var intersection_writer = IntersectionWriter{
-            .slice = intersections,
+            .intersections = intersections,
         };
         const segment_line_data = line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset];
         var line_iter = LineIterator{
@@ -1380,7 +1380,7 @@ pub const Rasterize = struct {
             intersection_writer.write(end_intersection);
 
             const end_intersection_index = intersection_writer.index;
-            const line_intersections = intersection_writer.slice[start_intersection_index..end_intersection_index];
+            const line_intersections = intersection_writer.intersections[start_intersection_index..end_intersection_index];
 
             // need to sort by T for each curve, in order
             std.mem.sort(
@@ -1836,37 +1836,28 @@ pub const Rasterize = struct {
         }
     }
 
-    pub fn Writer(comptime T: type) type {
-        return struct {
-            slice: []T,
-            index: u16 = 0,
+    pub const IntersectionWriter = struct {
+        intersections: []GridIntersection,
+        index: u16 = 0,
+        check_index: ?u16 = null,
 
-            pub fn create(slice: []T) @This() {
-                return @This(){
-                    .slice = slice,
-                };
-            }
+        pub fn write(self: *@This(), intersection: GridIntersection) void {
+            std.debug.print("Write Intersection: {}\n", .{intersection});
 
-            pub fn write(self: *@This(), intersection: GridIntersection) void {
-                std.debug.print("Write Intersection: {}\n", .{intersection});
+            self.intersections[self.index] = intersection;
 
-                const DEBUG_POINT = PointF32{ .x = -4.655325e0, .y = 9.6848106e-1 };
-                if (std.meta.eql(intersection.intersection.point, DEBUG_POINT)) {
-                    std.debug.assert(true);
-                    std.debug.assert(true);
+            if (intersection.intersection.t == 0.0) {
+                self.check_index = null;
+            } else {
+                if (self.check_index) |check| {
+                    std.debug.assert(self.intersections[check].intersection.t < intersection.intersection.t);
                 }
-
-                self.slice[self.index] = intersection;
-                self.index += 1;
+                self.check_index = self.index;
             }
 
-            pub fn toSlice(self: @This()) []T {
-                return self.slice[0..self.index];
-            }
-        };
-    }
-
-    const IntersectionWriter = Writer(GridIntersection);
+            self.index += 1;
+        }
+    };
 
     pub const IntersectionIterator = struct {
         index: u32 = 0,
