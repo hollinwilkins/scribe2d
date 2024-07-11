@@ -10,7 +10,7 @@ const PointI32 = core.PointI32;
 const RectI32 = core.RectI32;
 const TransformF32 = core.TransformF32;
 const Encoder = draw.Encoder;
-const PathEncoderI16 = draw.PathEncoderI16;
+const PathEncoderF32 = draw.PathEncoderF32;
 const ColorU8 = draw.ColorU8;
 const Style = draw.Style;
 
@@ -123,9 +123,9 @@ pub const Svg = struct {
         }
 
         if (path_el.attr("d")) |path| {
-            var path_encoder = encoder.pathEncoder(i16);
+            var path_encoder = encoder.pathEncoder(f32);
             defer path_encoder.finish();
-            var iterator = PathEncodeIterator{
+            var iterator = PathParser{
                 .parser = Parser.create(path),
                 .encoder = &path_encoder,
             };
@@ -140,12 +140,12 @@ pub const Svg = struct {
         var transform: TransformF32 = TransformF32{};
         if (std.mem.eql(u8, id, "translate")) {
             _ = parser.readExpected('(');
-            const x = parser.readInt() orelse @panic("invalid translate");
+            const x = parser.readFloat() orelse @panic("invalid translate");
             _ = parser.readExpected(',');
-            const y = parser.readInt() orelse @panic("invalid translate");
+            const y = parser.readFloat() orelse @panic("invalid translate");
             transform.translate = PointF32{
-                .x = @floatFromInt(x),
-                .y = @floatFromInt(y),
+                .x = x,
+                .y = y,
             };
             _ = parser.readExpected(')');
         }
@@ -172,72 +172,201 @@ pub const Svg = struct {
         };
     }
 
-    pub const PathEncodeIterator = struct {
-        encoder: *PathEncoderI16,
+    pub const PathParser = struct {
+        encoder: *PathEncoderF32,
         parser: Parser,
+        state: State = State.START,
         index: u32 = 0,
 
         pub fn encodeNext(self: *@This()) !bool {
-            const start_index = self.parser.index;
-            if (self.parser.readByte()) |byte| {
-                switch (byte) {
-                    'M' => {
-                        const x = self.parser.readInt() orelse return self.parser.err();
-                        _ = self.parser.readExpected(',') orelse return self.parser.err();
-                        const y = self.parser.readInt() orelse return self.parser.err();
-                        try self.encoder.moveTo(x, y);
-                    },
-                    'm' => {
-                        const x = self.parser.readInt() orelse return self.parser.err();
-                        _ = self.parser.readExpected(',') orelse return self.parser.err();
-                        const y = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.currentPoint();
-                        try self.encoder.moveTo(p0.x + x, p0.y + y);
-                    },
-                    'H' => {
-                        const y = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.currentPoint();
-                        try self.encoder.lineTo(p0.x, y);
-                    },
-                    'h' => {
-                        const y = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.currentPoint();
-                        try self.encoder.lineTo(p0.x, p0.y + y);
-                    },
-                    'V' => {
-                        const x = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.currentPoint();
-                        try self.encoder.lineTo(x, p0.y);
-                    },
-                    'v' => {
-                        const x = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.currentPoint();
-                        try self.encoder.lineTo(p0.x + x, p0.y);
-                    },
-                    'L' => {
-                        const x = self.parser.readInt() orelse return self.parser.err();
-                        _ = self.parser.readExpected(',') orelse return self.parser.err();
-                        const y = self.parser.readInt() orelse return self.parser.err();
-                        try self.encoder.lineTo(x, y);
-                    },
-                    'l' => {
-                        const x = self.parser.readInt() orelse return self.parser.err();
-                        _ = self.parser.readExpected(',') orelse return self.parser.err();
-                        const y = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.currentPoint();
-                        try self.encoder.lineTo(p0.x + x, p0.y + y);
-                    },
-                    else => {
-                        std.debug.print("HEEEY({s}): Head({s})\n", .{ &[_]u8{byte}, self.parser.bytes[start_index..self.parser.index] });
-                        @panic("invalid path");
-                    },
-                }
-            } else {
-                return false;
+            switch (self.state.parser_state) {
+                .start => {
+                    self.state = self.parseNextState();
+                    return try self.encodeNext();
+                },
+                .draw => {
+                    switch (self.state.draw_state) {
+                        .move_to => {
+                            var point_parser = PointParser{
+                                .parser = &self.parser,
+                            };
+
+                            while (point_parser.next()) |point| {
+                                switch (self.state.draw_position) {
+                                    .absolute => {
+                                        try self.encoder.moveToPoint(point);
+                                    },
+                                    .relative => {
+                                        const current = self.encoder.currentPoint();
+                                        try self.encoder.moveToPoint(current.add(point));
+                                    },
+                                }
+                            }
+                        },
+                        .horizontal_line_to => {
+                            var float_parser = FloatParser{
+                                .parser = &self.parser,
+                            };
+
+                            while (float_parser.next()) |y| {
+                                const current = self.encoder.currentPoint();
+                                switch (self.state.draw_position) {
+                                    .absolute => {
+                                        try self.encoder.lineTo(current.x, y);
+                                    },
+                                    .relative => {
+                                        try self.encoder.lineTo(current.x, current.y + y);
+                                    },
+                                }
+                            }
+                        },
+                        .vertical_line_to => {
+                            var float_parser = FloatParser{
+                                .parser = &self.parser,
+                            };
+
+                            while (float_parser.next()) |x| {
+                                const current = self.encoder.currentPoint();
+                                switch (self.state.draw_position) {
+                                    .absolute => {
+                                        try self.encoder.lineTo(x, current.y);
+                                    },
+                                    .relative => {
+                                        try self.encoder.lineTo(current.x + x, current.y);
+                                    },
+                                }
+                            }
+                        },
+                        .line_to => {
+                            var point_parser = PointParser{
+                                .parser = &self.parser,
+                            };
+
+                            while (point_parser.next()) |point| {
+                                switch (self.state.draw_position) {
+                                    .absolute => {
+                                        try self.encoder.lineToPoint(point);
+                                    },
+                                    .relative => {
+                                        const current = self.encoder.currentPoint();
+                                        try self.encoder.lineToPoint(current.add(point));
+                                    },
+                                }
+                            }
+                        },
+                        else => @panic("unsupported draw state"),
+                    }
+                },
+                .done => {
+                    return false;
+                },
             }
 
-            return true;
+            self.state = self.parseNextState();
+            return self.state.parser_state == .draw;
         }
+
+        fn parseNextState(self: *@This()) State {
+            self.parser.skipWhitespace();
+            if (self.parser.readByte()) |byte| {
+                return switch (byte) {
+                    'M' => State.draw(.move_to, .absolute),
+                    'm' => State.draw(.move_to, .relative),
+                    'H' => State.draw(.horizontal_line_to, .absolute),
+                    'h' => State.draw(.horizontal_line_to, .relative),
+                    'V' => State.draw(.vertical_line_to, .absolute),
+                    'v' => State.draw(.vertical_line_to, .relative),
+                    'L' => State.draw(.line_to, .absolute),
+                    'l' => State.draw(.line_to, .relative),
+                    else => @panic("unsupported path movement"),
+                };
+            }
+
+            return State.DONE;
+        }
+
+        pub const State = struct {
+            pub const START: State = State{
+                .parser_state = .start,
+            };
+            pub const DONE: State = State{
+                .parser_state = .done,
+            };
+
+            parser_state: ParserState = .start,
+            draw_state: DrawState = .move_to,
+            draw_position: DrawPosition = .absolute,
+
+            pub fn draw(draw_state: DrawState, draw_position: DrawPosition) State {
+                return State{
+                    .parser_state = .draw,
+                    .draw_state = draw_state,
+                    .draw_position = draw_position,
+                };
+            }
+        };
+
+        pub const ParserState = enum {
+            start,
+            draw,
+            done,
+        };
+
+        pub const DrawPosition = enum {
+            absolute,
+            relative,
+        };
+
+        pub const DrawState = enum {
+            move_to,
+            line_to,
+            horizontal_line_to,
+            vertical_line_to,
+            arc_to,
+            quad_to,
+            cubic_to,
+        };
+
+        pub const PointParser = struct {
+            parser: *Parser,
+
+            pub fn next(self: *@This()) ?PointF32 {
+                self.parser.skipWhitespace();
+
+                const next_byte = self.parser.peekByte() orelse return null;
+
+                if (Parser.isDigit(next_byte)) {
+                    const x = self.parser.readFloat() orelse @panic("invalid point");
+                    self.parser.skipWhitespace();
+                    _ = self.parser.readExpected(',') orelse @panic("invalid point");
+                    self.parser.skipWhitespace();
+                    const y = self.parser.readFloat() orelse @panic("invalid point");
+                    self.parser.skipWhitespace();
+
+                    return PointF32.create(x, y);
+                }
+
+                return null;
+            }
+        };
+
+        pub const FloatParser = struct {
+            parser: *Parser,
+
+            pub fn next(self: *@This()) ?f32 {
+                self.parser.skipWhitespace();
+
+                const next_byte = self.parser.peekByte() orelse return null;
+
+                if (Parser.isDigit(next_byte)) {
+                    const x = self.parser.readFloat() orelse @panic("invalid float");
+                    self.parser.skipWhitespace();
+                    return x;
+                }
+
+                return null;
+            }
+        };
     };
 
     pub const Parser = struct {
@@ -278,12 +407,12 @@ pub const Svg = struct {
             return byte;
         }
 
-        pub fn readInt(self: *@This()) ?i16 {
+        pub fn readFloat(self: *@This()) ?f32 {
             const start_index = self.index;
             var end_index = self.index;
 
             for (self.bytes[start_index..]) |byte| {
-                if (!isDigitOrMinus(byte)) {
+                if (!isFloatByte(byte)) {
                     break;
                 }
 
@@ -295,10 +424,9 @@ pub const Svg = struct {
             }
             self.index = end_index;
 
-            const int = std.fmt.parseInt(
-                i16,
+            const int = std.fmt.parseFloat(
+                f32,
                 self.bytes[start_index..end_index],
-                10,
             ) catch @panic("invalid integer");
             return int;
         }
@@ -345,7 +473,7 @@ pub const Svg = struct {
         }
 
         pub fn skipWhitespace(self: *@This()) void {
-            var end_index: u32 = 0;
+            var end_index: u32 = self.index;
 
             while (self.peekByte()) |byte| {
                 if (!isWhitespace(byte)) {
@@ -374,8 +502,8 @@ pub const Svg = struct {
             return byte == ' ' or byte == '\t' or byte == '\n' or byte == '\r';
         }
 
-        pub fn isDigitOrMinus(byte: u8) bool {
-            return isDigit(byte) or byte == '-';
+        pub fn isFloatByte(byte: u8) bool {
+            return isDigit(byte) or byte == '-' or byte == '.';
         }
 
         pub fn isDigit(byte: u8) bool {
