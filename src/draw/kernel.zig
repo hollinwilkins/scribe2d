@@ -2286,7 +2286,7 @@ pub const Blend = struct {
             },
             .even_odd => {
                 fillSpan2(
-                    .non_zero,
+                    .even_odd,
                     brush,
                     brush_offset,
                     boundary_fragments,
@@ -2336,43 +2336,50 @@ pub const Blend = struct {
                                     start_span_fragment = previous_merge_fragment;
                                 }
                                 flush_span = false;
+                            } else {
+                                flush_span = true;
                             }
                         },
                         .even_odd => {
+                            if (current_merge_fragment.main_ray_winding == -2.0) {
+                                std.debug.assert(true);
+                                std.debug.assert(true);
+                            }
+
                             if (@as(u16, @intFromFloat(@abs(current_merge_fragment.main_ray_winding))) & 1 == 1) {
                                 if (start_span_fragment == null) {
                                     start_span_fragment = previous_merge_fragment;
                                 }
                                 flush_span = false;
+                            } else {
+                                flush_span = true;
                             }
                         },
                     }
 
-                    if (current_merge_fragment.main_ray_winding != 0) {
-                        if (start_span_fragment == null) {
-                            start_span_fragment = previous_merge_fragment;
-                        }
-                    } else if (start_span_fragment) |start| {
-                        // flush start_span to previous fragment
+                    if (flush_span) {
+                        if (start_span_fragment) |start| {
+                            // flush start_span to previous fragment
 
-                        const start_x = start.pixel.x + 1;
-                        const end_x = previous_merge_fragment.pixel.x;
-                        const x_range: u32 = @intCast(end_x - start_x);
+                            const start_x = start.pixel.x + 1;
+                            const end_x = previous_merge_fragment.pixel.x;
+                            const x_range: u32 = @intCast(end_x - start_x);
 
-                        for (0..x_range) |x_offset| {
-                            const x: i32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
-                            if (x >= 0 and x < texture.dimensions.width) {
-                                const texture_pixel = PointU32{
-                                    .x = @intCast(x),
-                                    .y = y,
-                                };
-                                const texture_color = texture.getPixelUnsafe(texture_pixel);
-                                const blend_color = color_blend.blend(brush_color, texture_color);
-                                texture.setPixelUnsafe(texture_pixel, blend_color);
+                            for (0..x_range) |x_offset| {
+                                const x: i32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
+                                if (x >= 0 and x < texture.dimensions.width) {
+                                    const texture_pixel = PointU32{
+                                        .x = @intCast(x),
+                                        .y = y,
+                                    };
+                                    const texture_color = texture.getPixelUnsafe(texture_pixel);
+                                    const blend_color = color_blend.blend(brush_color, texture_color);
+                                    texture.setPixelUnsafe(texture_pixel, blend_color);
+                                }
                             }
-                        }
 
-                        start_span_fragment = null;
+                            start_span_fragment = null;
+                        }
                     }
 
                     previous_merge_fragment = current_merge_fragment;
