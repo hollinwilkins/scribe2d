@@ -42,20 +42,20 @@ pub fn main() !void {
     //     .width = outline_width,
     // });
     try encoder.encodeStyle(style);
-    // try encoder.encodeTransform((core.TransformF32{
-    //     .scale = core.PointF32{
-    //         .x = 2.0,
-    //         .y = 2.0,
-    //     }
-    // }).toAffine());
+    try encoder.encodeTransform((core.TransformF32{
+        .scale = core.PointF32{
+            .x = 20.0,
+            .y = 20.0,
+        }
+    }).toAffine());
 
     var path_encoder = encoder.pathEncoder(f32);
     try path_encoder.moveTo(core.PointF32{
-        .x = 5.0,
+        .x = 6.0,
         .y = 1.0,
     });
-    _ = try path_encoder.arcTo(core.PointF32.create(11.0, 5.0), core.PointF32.create(5.0, 9.0));
-    _ = try path_encoder.arcTo(core.PointF32.create(1.0, 5.0), core.PointF32.create(5.0, 1.0));
+    _ = try path_encoder.arcTo(core.PointF32.create(11.0, 6.0), core.PointF32.create(6.0, 11.0));
+    _ = try path_encoder.arcTo(core.PointF32.create(1.0, 6.0), core.PointF32.create(6.0, 1.0));
     // _ = try path_encoder.lineTo(core.PointF32{
     //     .x = 5.2,
     //     .y = 5.5,

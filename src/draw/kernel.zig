@@ -812,8 +812,8 @@ pub const Flatten = struct {
         const mid2 = line2.midpoint();
 
         // position normals at midpoint of line
-        normal1 = normal1.add(mid1.sub(line1.p0));
-        normal2 = normal2.add(mid2.sub(line2.p0));
+        normal1 = normal1.add(mid1);
+        normal2 = normal2.add(mid2);
 
         // intersect normal lines
         const normal_line1 = LineF32.create(mid1, normal1);
