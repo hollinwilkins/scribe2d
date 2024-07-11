@@ -1150,7 +1150,7 @@ pub const Flatten = struct {
                             .normal => {
                                 const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
                                 s = (inv - b) / a;
-                                // TODO: may need to reenable this if artifacts show up again
+                                // TODO: why is this needed?
                                 s = std.math.clamp(s, 0.0, 1.0);
                             },
                         }
