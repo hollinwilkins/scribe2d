@@ -140,9 +140,9 @@ pub const Svg = struct {
         var transform: TransformF32 = TransformF32{};
         if (std.mem.eql(u8, id, "translate")) {
             _ = parser.readExpected('(');
-            const x = parser.readFloat() orelse @panic("invalid translate");
+            const x = parser.readF32() orelse @panic("invalid translate");
             _ = parser.readExpected(',');
-            const y = parser.readFloat() orelse @panic("invalid translate");
+            const y = parser.readF32() orelse @panic("invalid translate");
             transform.translate = PointF32{
                 .x = x,
                 .y = y,
@@ -155,21 +155,52 @@ pub const Svg = struct {
 
     fn parseColor(value: []const u8) ColorU8 {
         var parser = Parser.create(value);
-        _ = parser.readExpected('#') orelse @panic("invalid color");
-        const rs = parser.readN(2) orelse @panic("invalid color");
-        const gs = parser.readN(2) orelse @panic("invalid color");
-        const bs = parser.readN(2) orelse @panic("invalid color");
 
-        const r = std.fmt.parseInt(u8, rs, 16) catch @panic("invalid color");
-        const g = std.fmt.parseInt(u8, gs, 16) catch @panic("invalid color");
-        const b = std.fmt.parseInt(u8, bs, 16) catch @panic("invalid color");
+        const next_byte = parser.peekByte() orelse @panic("invalid color");
 
-        return ColorU8{
-            .r = r,
-            .g = g,
-            .b = b,
-            .a = 255,
-        };
+        switch (next_byte) {
+            '#' => {
+                _ = parser.readByte();
+                const r: u8 = @intCast(parser.readHexN(2) orelse @panic("invalid color"));
+                const g: u8 = @intCast(parser.readHexN(2) orelse @panic("invalid color"));
+                const b: u8 = @intCast(parser.readHexN(2) orelse @panic("invalid color"));
+                return ColorU8{
+                    .r = r,
+                    .g = g,
+                    .b = b,
+                    .a = 255,
+                };
+            },
+            'r' => {
+                const id = parser.readIdentifier().?;
+
+                if (std.mem.eql(u8, id, "rgb")) {
+                    _ = parser.readExpected('(') orelse @panic("invalid color");
+                    parser.skipWhitespace();
+                    const r: u8 = @intCast(parser.readI32() orelse @panic("invalid color"));
+                    parser.skipWhitespace();
+                    _ = parser.readExpected(',') orelse @panic("invalid color");
+                    parser.skipWhitespace();
+                    const g: u8 = @intCast(parser.readI32() orelse @panic("invalid color"));
+                    parser.skipWhitespace();
+                    _ = parser.readExpected(',') orelse @panic("invalid color");
+                    parser.skipWhitespace();
+                    const b: u8 = @intCast(parser.readI32() orelse @panic("invalid color"));
+                    parser.skipWhitespace();
+                    _ = parser.readExpected(')') orelse @panic("invalid color");
+
+                    return ColorU8{
+                        .r = r,
+                        .g = g,
+                        .b = b,
+                        .a = 255,
+                    };
+                }
+            },
+            else => @panic("invalid color"),
+        }
+
+        @panic("invalid color");
     }
 
     pub const PathParser = struct {
@@ -336,11 +367,11 @@ pub const Svg = struct {
                 const next_byte = self.parser.peekByte() orelse return null;
 
                 if (Parser.isDigit(next_byte)) {
-                    const x = self.parser.readFloat() orelse @panic("invalid point");
+                    const x = self.parser.readF32() orelse @panic("invalid point");
                     self.parser.skipWhitespace();
                     _ = self.parser.readExpected(',') orelse @panic("invalid point");
                     self.parser.skipWhitespace();
-                    const y = self.parser.readFloat() orelse @panic("invalid point");
+                    const y = self.parser.readF32() orelse @panic("invalid point");
                     self.parser.skipWhitespace();
 
                     return PointF32.create(x, y);
@@ -359,7 +390,7 @@ pub const Svg = struct {
                 const next_byte = self.parser.peekByte() orelse return null;
 
                 if (Parser.isDigit(next_byte)) {
-                    const x = self.parser.readFloat() orelse @panic("invalid float");
+                    const x = self.parser.readF32() orelse @panic("invalid float");
                     self.parser.skipWhitespace();
                     return x;
                 }
@@ -407,7 +438,19 @@ pub const Svg = struct {
             return byte;
         }
 
-        pub fn readFloat(self: *@This()) ?f32 {
+        pub fn readHexN(self: *@This(), n: u32) ?u32 {
+            const bytes = self.readN(n) orelse return null;
+
+            const value = std.fmt.parseInt(
+                u32,
+                bytes,
+                16,
+            ) catch @panic("invalid i32");
+
+            return value;
+        }
+
+        pub fn readI32(self: *@This()) ?i32 {
             const start_index = self.index;
             var end_index = self.index;
 
@@ -424,11 +467,36 @@ pub const Svg = struct {
             }
             self.index = end_index;
 
-            const int = std.fmt.parseFloat(
+            const value = std.fmt.parseInt(
+                i32,
+                self.bytes[start_index..end_index],
+                10,
+            ) catch @panic("invalid i32");
+            return value;
+        }
+
+        pub fn readF32(self: *@This()) ?f32 {
+            const start_index = self.index;
+            var end_index = self.index;
+
+            for (self.bytes[start_index..]) |byte| {
+                if (!isFloatByte(byte)) {
+                    break;
+                }
+
+                end_index += 1;
+            }
+
+            if (start_index == end_index) {
+                return null;
+            }
+            self.index = end_index;
+
+            const value = std.fmt.parseFloat(
                 f32,
                 self.bytes[start_index..end_index],
-            ) catch @panic("invalid integer");
-            return int;
+            ) catch @panic("invalid f32");
+            return value;
         }
 
         pub fn readExpected(self: *@This(), expected: u8) ?u8 {
@@ -473,16 +541,12 @@ pub const Svg = struct {
         }
 
         pub fn skipWhitespace(self: *@This()) void {
-            var end_index: u32 = self.index;
-
             while (self.peekByte()) |byte| {
                 if (!isWhitespace(byte)) {
                     break;
                 }
-                end_index += 1;
+                self.index += 1;
             }
-
-            self.index = end_index;
         }
 
         fn err(self: *@This()) bool {
