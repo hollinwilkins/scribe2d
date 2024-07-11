@@ -23,6 +23,13 @@ pub fn main() !void {
 
     try svg.encode(&encoder);
 
+    const scale = (core.TransformF32{
+        .scale = core.PointF32.create(0.1, 0.1),
+    }).toAffine();
+    for (encoder.transforms.items) |*t| {
+        t.* = scale.mul(t.*);
+    }
+
     const bounds = encoder.calculateBounds();
 
     const dimensions = core.DimensionsU32{
@@ -38,7 +45,7 @@ pub fn main() !void {
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        .debug_single_pass = false,
+        .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
         // .flush_texture_span = false,
     };

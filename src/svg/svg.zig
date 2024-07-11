@@ -15,7 +15,7 @@ const ColorU8 = draw.ColorU8;
 const Style = draw.Style;
 
 pub const Svg = struct {
-    pub const EncodeError = error {
+    pub const EncodeError = error{
         OutOfMemory,
     };
 
@@ -123,15 +123,12 @@ pub const Svg = struct {
 
         if (path_el.attr("d")) |path| {
             var path_encoder = encoder.pathEncoder(i16);
+            defer path_encoder.finish();
             var iterator = PathEncodeIterator{
                 .parser = Parser.create(path),
                 .encoder = &path_encoder,
             };
-            while (try iterator.encodeNext()) {
-                std.debug.assert(true);
-                std.debug.assert(true);
-            }
-            try path_encoder.finish();
+            while (try iterator.encodeNext()) {}
         }
     }
 
@@ -205,7 +202,7 @@ pub const Svg = struct {
                         try self.encoder.lineTo(x, y);
                     },
                     else => {
-                        std.debug.print("HEEEY({s}): Head({s})\n", .{&[_]u8{byte}, self.parser.bytes[start_index..self.parser.index]});
+                        std.debug.print("HEEEY({s}): Head({s})\n", .{ &[_]u8{byte}, self.parser.bytes[start_index..self.parser.index] });
                         @panic("invalid path");
                     },
                 }

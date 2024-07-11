@@ -686,18 +686,16 @@ pub fn PathEncoder(comptime T: type) type {
             return self.start_path_offset == self.encoder.segment_data.items.len;
         }
 
-        // TODO: this does not need to error
-        pub fn finish(self: *@This()) !void {
+        pub fn finish(self: *@This()) void {
             if (self.isEmpty() or self.state == .start) {
                 return;
             }
 
-            try self.close();
+            self.close();
             self.encoder.staged.subpath = false;
         }
 
-        // TODO: don't draw closing line, handle in kernel
-        pub fn close(self: *@This()) !void {
+        pub fn close(self: *@This()) void {
             if (self.state != .draw or self.isEmpty()) {
                 return;
             }
@@ -711,10 +709,6 @@ pub fn PathEncoder(comptime T: type) type {
 
                     if (self.encoder.currentPathTag()) |tag| {
                         tag.segment.cap = true;
-                    }
-
-                    if (self.is_fill) {
-                        try self.lineToPoint(start_point.*);
                     }
                 }
             }
@@ -765,7 +759,7 @@ pub fn PathEncoder(comptime T: type) type {
                     self.encoder.pathTailSegment(PPoint).?.* = p0;
                 },
                 .draw => {
-                    try self.close();
+                    self.close();
                     (try self.encoder.extendPath(PPoint, null)).* = p0;
                     self.state = .move_to;
                 },
@@ -926,9 +920,7 @@ pub fn PathEncoder(comptime T: type) type {
 
             fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                b.close() catch {
-                    unreachable;
-                };
+                b.close();
 
                 const scale = (TransformF32{
                     .scale = PointF32{
