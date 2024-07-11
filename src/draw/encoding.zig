@@ -702,10 +702,10 @@ pub fn PathEncoder(comptime T: type) type {
             }
 
             cap_and_close_fill: {
-                const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).* orelse break :cap_and_close_fill;
+                const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset) orelse break :cap_and_close_fill;
                 const end_point = self.encoder.pathTailSegment(PPoint) orelse break :cap_and_close_fill;
 
-                if (!std.meta.eql(start_point, end_point.*)) {
+                if (!std.meta.eql(start_point.*, end_point.*)) {
                     self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
 
                     if (self.encoder.currentPathTag()) |tag| {
@@ -713,7 +713,7 @@ pub fn PathEncoder(comptime T: type) type {
                     }
 
                     if (self.is_fill) {
-                        try self.lineToPoint(start_point);
+                        try self.lineToPoint(start_point.*);
                     }
                 }
             }
@@ -760,7 +760,8 @@ pub fn PathEncoder(comptime T: type) type {
                 },
                 .move_to => {
                     // update the current cursors position
-                    self.encoder.pathTailSegment(PPoint).* = p0;
+                    // SAFETY: we only get to the state after pushing a point
+                    self.encoder.pathTailSegment(PPoint).?.* = p0;
                 },
                 .draw => {
                     try self.close();
@@ -781,7 +782,8 @@ pub fn PathEncoder(comptime T: type) type {
                     try self.moveToPoint(p1);
                 },
                 else => {
-                    const last_point = self.encoder.pathTailSegment(PPoint).*;
+                    // SAFETY: we are not in start state, so we have written at least one point
+                    const last_point = self.encoder.pathTailSegment(PPoint).?.*;
 
                     if (std.meta.eql(last_point, p1)) {
                         return;
@@ -832,7 +834,8 @@ pub fn PathEncoder(comptime T: type) type {
                     try self.moveToPoint(p2);
                 },
                 else => {
-                    const last_point = self.encoder.pathTailSegment(PPoint).*;
+                    // SAFETY: we are not in start state, so we must have written at least one point
+                    const last_point = self.encoder.pathTailSegment(PPoint).?.*;
 
                     if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2)) {
                         return;

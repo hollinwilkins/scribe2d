@@ -15,6 +15,10 @@ const ColorU8 = draw.ColorU8;
 const Style = draw.Style;
 
 pub const Svg = struct {
+    pub const EncodeError = error {
+        OutOfMemory,
+    };
+
     viewbox: RectI32,
     doc: xml.Document,
 
@@ -62,7 +66,7 @@ pub const Svg = struct {
         self.doc.deinit();
     }
 
-    pub fn encode(self: *@This(), encoder: *Encoder) !void {
+    pub fn encode(self: *@This(), encoder: *Encoder) EncodeError!void {
         self.doc.acquire();
         defer self.doc.release();
         const root = self.doc.root;
@@ -72,8 +76,8 @@ pub const Svg = struct {
         }
     }
 
-    pub fn encodeNode(encoder: *Encoder, node: xml.NodeIndex) !void {
-        switch (node) {
+    pub fn encodeNode(encoder: *Encoder, node: xml.NodeIndex) EncodeError!void {
+        switch (node.v()) {
             .element => |el| {
                 try encodeElement(encoder, el);
             },
@@ -97,7 +101,7 @@ pub const Svg = struct {
         }
 
         for (group.children()) |child| {
-            try encodeNode(encoder, child.v());
+            try encodeNode(encoder, child);
         }
     }
 
@@ -108,13 +112,13 @@ pub const Svg = struct {
             try encoder.encodeColor(parseColor(fill));
 
             style = if (style == null) Style{} else style;
-            style.setFill(Style.Fill{
+            style.?.setFill(Style.Fill{
                 .brush = .color,
             });
         }
 
         if (style) |s| {
-            encoder.encodeStyle(s);
+            try encoder.encodeStyle(s);
         }
 
         if (path_el.attr("path")) |path| {
@@ -123,7 +127,7 @@ pub const Svg = struct {
                 .parser = Parser.create(path),
                 .encoder = &path_encoder,
             };
-            while (iterator.encodeNext()) {}
+            while (try iterator.encodeNext()) {}
             try path_encoder.finish();
         }
     }
@@ -135,7 +139,6 @@ pub const Svg = struct {
         var transform: TransformF32 = TransformF32{};
         if (std.mem.eql(u8, id, "translate")) {
             _ = parser.readExpected('(');
-            // const x = (try parser.readInt())
             const x = parser.readInt() orelse @panic("invalid translate");
             const y = parser.readInt() orelse @panic("invalid translate");
             transform.translate = PointF32{
@@ -145,7 +148,7 @@ pub const Svg = struct {
             _ = parser.readExpected(')');
         }
 
-        return transform;
+        return transform.toAffine();
     }
 
     fn parseColor(value: []const u8) ColorU8 {
@@ -172,28 +175,31 @@ pub const Svg = struct {
         index: u32 = 0,
 
         pub fn encodeNext(self: *@This()) !bool {
-            if (self.readByte()) |byte| {
+            if (self.parser.readByte()) |byte| {
                 switch (std.ascii.toLower(byte)) {
                     'm' => {
-                        const x = self.parser.readInt() orelse return self.err();
-                        const y = self.parser.readInt() orelse return self.err();
+                        const x = self.parser.readInt() orelse return self.parser.err();
+                        const y = self.parser.readInt() orelse return self.parser.err();
                         try self.encoder.moveTo(x, y);
                     },
                     'h' => {
-                        const y = self.parser.readInt() orelse return self.err();
-                        const p0 = self.encoder.lastPoint() orelse return self.err();
+                        const y = self.parser.readInt() orelse return self.parser.err();
+                        const p0 = self.encoder.lastPoint() orelse return self.parser.err();
                         try self.encoder.lineTo(p0.x, y);
                     },
                     'v' => {
-                        const x = self.parser.readInt() orelse return self.err();
-                        const p0 = self.encoder.lastPoint() orelse return self.err();
+                        const x = self.parser.readInt() orelse return self.parser.err();
+                        const p0 = self.encoder.lastPoint() orelse return self.parser.err();
                         try self.encoder.lineTo(x, p0.y);
                     },
                     'l' => {
-                        const x = self.parser.readInt() orelse return self.err();
-                        _ = self.parser.readExpected(',') orelse return self.err();
-                        const y = self.parser.readInt() orelse return self.err();
+                        const x = self.parser.readInt() orelse return self.parser.err();
+                        _ = self.parser.readExpected(',') orelse return self.parser.err();
+                        const y = self.parser.readInt() orelse return self.parser.err();
                         try self.encoder.lineTo(x, y);
+                    },
+                    else => {
+                        @panic("invalid path");
                     },
                 }
             }
@@ -222,21 +228,21 @@ pub const Svg = struct {
         }
 
         pub fn readN(self: *@This(), n: u32) ?[]const u8 {
-            if (self.index + n >= self.path.len) {
+            if (self.index + n > self.bytes.len) {
                 return null;
             }
 
-            const bytes = self.path[self.index .. self.index + n];
+            const bytes = self.bytes[self.index .. self.index + n];
             self.index += n;
             return bytes;
         }
 
         pub fn peekByte(self: *@This()) ?u8 {
-            if (self.index >= self.path.len) {
+            if (self.index >= self.bytes.len) {
                 return null;
             }
 
-            const byte = self.path[self.index];
+            const byte = self.bytes[self.index];
             return byte;
         }
 
@@ -244,7 +250,7 @@ pub const Svg = struct {
             const start_index = self.index;
             var end_index = self.index;
 
-            for (self.path[start_index]) |byte| {
+            for (self.bytes[start_index..]) |byte| {
                 if (!isDigitOrMinus(byte)) {
                     break;
                 }
@@ -256,7 +262,11 @@ pub const Svg = struct {
                 return null;
             }
 
-            const int = std.fmt.parseInt(i16, self.path[start_index..end_index]) catch @panic("invalid integer");
+            const int = std.fmt.parseInt(
+                i16,
+                self.bytes[start_index..end_index],
+                10,
+            ) catch @panic("invalid integer");
             return int;
         }
 
@@ -274,7 +284,7 @@ pub const Svg = struct {
         pub fn readIdentifier(self: *@This()) ?[]const u8 {
             const start_index = self.index;
             var end_index = start_index;
-            
+
             _ = self.readAlpha() orelse return null;
             for (self.bytes[start_index..]) |byte| {
                 if (!isAlphaNumeric(byte)) {
@@ -288,6 +298,7 @@ pub const Svg = struct {
                 return null;
             }
 
+            self.index = end_index;
             return self.bytes[start_index..end_index];
         }
 
@@ -314,7 +325,7 @@ pub const Svg = struct {
         }
 
         fn err(self: *@This()) bool {
-            self.index = self.path.len;
+            self.index = @intCast(self.bytes.len);
             return false;
         }
 

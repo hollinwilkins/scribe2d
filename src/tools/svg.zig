@@ -12,7 +12,7 @@ pub fn main() !void {
 
     var args = std.process.args();
     _ = args.next();
-    const svg_file = args.next() orelse @panic("need to provide svg file file");
+    const svg_file = args.next() orelse @panic("need to provide svg file");
 
     var svg = try scribe.svg.Svg.parseFileAlloc(allocator, svg_file);
     defer svg.deinit();
