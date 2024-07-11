@@ -361,7 +361,7 @@ pub const Estimate = struct {
 
         return RoundArcEstimate{
             .lines = arc_lines,
-            .length = 2.0 * std.math.sin(theta) * radius,
+            .length = 2.0 * std.math.pi * radius,
         };
     }
 
