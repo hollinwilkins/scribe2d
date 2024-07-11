@@ -37,7 +37,7 @@ pub const Svg = struct {
 
         std.debug.print("Parsed document: {s}...\n", .{doc.root.tag_name.slice()});
 
-        var viewbox_iter = std.mem.split(u8, doc.root.attr("viewBox").?, " ");
+        var viewbox_iter = std.mem.splitSequence(u8, doc.root.attr("viewBox").?, " ");
         var dims: [4]i32 = undefined;
         var i: u32 = 0;
         while (viewbox_iter.next()) |dim| {
@@ -121,13 +121,16 @@ pub const Svg = struct {
             try encoder.encodeStyle(s);
         }
 
-        if (path_el.attr("path")) |path| {
+        if (path_el.attr("d")) |path| {
             var path_encoder = encoder.pathEncoder(i16);
             var iterator = PathEncodeIterator{
                 .parser = Parser.create(path),
                 .encoder = &path_encoder,
             };
-            while (try iterator.encodeNext()) {}
+            while (try iterator.encodeNext()) {
+                std.debug.assert(true);
+                std.debug.assert(true);
+            }
             try path_encoder.finish();
         }
     }
@@ -140,6 +143,7 @@ pub const Svg = struct {
         if (std.mem.eql(u8, id, "translate")) {
             _ = parser.readExpected('(');
             const x = parser.readInt() orelse @panic("invalid translate");
+            _ = parser.readExpected(',');
             const y = parser.readInt() orelse @panic("invalid translate");
             transform.translate = PointF32{
                 .x = @floatFromInt(x),
@@ -175,10 +179,12 @@ pub const Svg = struct {
         index: u32 = 0,
 
         pub fn encodeNext(self: *@This()) !bool {
+            const start_index = self.parser.index;
             if (self.parser.readByte()) |byte| {
                 switch (std.ascii.toLower(byte)) {
                     'm' => {
                         const x = self.parser.readInt() orelse return self.parser.err();
+                        _ = self.parser.readExpected(',') orelse return self.parser.err();
                         const y = self.parser.readInt() orelse return self.parser.err();
                         try self.encoder.moveTo(x, y);
                     },
@@ -199,9 +205,12 @@ pub const Svg = struct {
                         try self.encoder.lineTo(x, y);
                     },
                     else => {
+                        std.debug.print("HEEEY({s}): Head({s})\n", .{&[_]u8{byte}, self.parser.bytes[start_index..self.parser.index]});
                         @panic("invalid path");
                     },
                 }
+            } else {
+                return false;
             }
 
             return true;
@@ -261,6 +270,7 @@ pub const Svg = struct {
             if (start_index == end_index) {
                 return null;
             }
+            self.index = end_index;
 
             const int = std.fmt.parseInt(
                 i16,

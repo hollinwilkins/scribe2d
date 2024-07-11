@@ -570,11 +570,12 @@ pub const Encoder = struct {
     }
 
     pub fn extendPath(self: *@This(), comptime T: type, kind: ?PathTag.Kind) !*T {
-        const bytes = try self.segment_data.addManyAsSlice(self.allocator, @sizeOf(T));
         if (kind) |k| {
             try self.encodePathTag(PathTag.curve(k));
         }
-        return @alignCast(std.mem.bytesAsValue(T, bytes));
+
+        const bytes = try self.segment_data.addManyAsSlice(self.allocator, @sizeOf(T));
+        return @alignCast(@ptrCast(bytes.ptr));
     }
 
     pub fn pathSegment(self: *@This(), comptime T: type, offset: usize) ?*T {
