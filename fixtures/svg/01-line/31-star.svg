@@ -7,7 +7,7 @@
 	 viewBox="0 0 512 512" enable-background="new 0 0 512 512" xml:space="preserve">
 	 
 <g transform="translate(250,100)">
-	<path id="L1" fill="#00FF00" d="L0,0 50,0 21,90 98,35 2,35 79,90 50,0"/>
+	<path id="L1" fill="#00FF00" d="L50,0 21,90 98,35 2,35 79,90"/>
 </g>
 
 <!--

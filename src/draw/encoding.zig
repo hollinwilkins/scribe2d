@@ -710,6 +710,10 @@ pub fn PathEncoder(comptime T: type) type {
                     if (self.encoder.currentPathTag()) |tag| {
                         tag.segment.cap = true;
                     }
+
+                    if (self.is_fill) {
+                        self.lineToPoint(start_point.*) catch @panic("could not close subpath");
+                    }
                 }
             }
 
