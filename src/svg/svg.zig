@@ -109,7 +109,8 @@ pub const Svg = struct {
         var style: ?Style = null;
 
         if (path_el.attr("fill")) |fill| {
-            try encoder.encodeColor(parseColor(fill));
+            const color = parseColor(fill);
+            try encoder.encodeColor(color);
 
             style = if (style == null) Style{} else style;
             style.?.setFill(Style.Fill{
@@ -167,6 +168,7 @@ pub const Svg = struct {
             .r = r,
             .g = g,
             .b = b,
+            .a = 255,
         };
     }
 
@@ -178,28 +180,52 @@ pub const Svg = struct {
         pub fn encodeNext(self: *@This()) !bool {
             const start_index = self.parser.index;
             if (self.parser.readByte()) |byte| {
-                switch (std.ascii.toLower(byte)) {
-                    'm' => {
+                switch (byte) {
+                    'M' => {
                         const x = self.parser.readInt() orelse return self.parser.err();
                         _ = self.parser.readExpected(',') orelse return self.parser.err();
                         const y = self.parser.readInt() orelse return self.parser.err();
                         try self.encoder.moveTo(x, y);
                     },
+                    'm' => {
+                        const x = self.parser.readInt() orelse return self.parser.err();
+                        _ = self.parser.readExpected(',') orelse return self.parser.err();
+                        const y = self.parser.readInt() orelse return self.parser.err();
+                        const p0 = self.encoder.currentPoint();
+                        try self.encoder.moveTo(p0.x + x, p0.y + y);
+                    },
+                    'H' => {
+                        const y = self.parser.readInt() orelse return self.parser.err();
+                        const p0 = self.encoder.currentPoint();
+                        try self.encoder.lineTo(p0.x, y);
+                    },
                     'h' => {
                         const y = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.lastPoint() orelse return self.parser.err();
-                        try self.encoder.lineTo(p0.x, y);
+                        const p0 = self.encoder.currentPoint();
+                        try self.encoder.lineTo(p0.x, p0.y + y);
+                    },
+                    'V' => {
+                        const x = self.parser.readInt() orelse return self.parser.err();
+                        const p0 = self.encoder.currentPoint();
+                        try self.encoder.lineTo(x, p0.y);
                     },
                     'v' => {
                         const x = self.parser.readInt() orelse return self.parser.err();
-                        const p0 = self.encoder.lastPoint() orelse return self.parser.err();
-                        try self.encoder.lineTo(x, p0.y);
+                        const p0 = self.encoder.currentPoint();
+                        try self.encoder.lineTo(p0.x + x, p0.y);
+                    },
+                    'L' => {
+                        const x = self.parser.readInt() orelse return self.parser.err();
+                        _ = self.parser.readExpected(',') orelse return self.parser.err();
+                        const y = self.parser.readInt() orelse return self.parser.err();
+                        try self.encoder.lineTo(x, y);
                     },
                     'l' => {
                         const x = self.parser.readInt() orelse return self.parser.err();
                         _ = self.parser.readExpected(',') orelse return self.parser.err();
                         const y = self.parser.readInt() orelse return self.parser.err();
-                        try self.encoder.lineTo(x, y);
+                        const p0 = self.encoder.currentPoint();
+                        try self.encoder.lineTo(p0.x + x, p0.y + y);
                     },
                     else => {
                         std.debug.print("HEEEY({s}): Head({s})\n", .{ &[_]u8{byte}, self.parser.bytes[start_index..self.parser.index] });

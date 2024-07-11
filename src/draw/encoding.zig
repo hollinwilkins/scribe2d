@@ -718,6 +718,14 @@ pub fn PathEncoder(comptime T: type) type {
             self.encoder.staged.subpath = true;
         }
 
+        pub fn currentPoint(self: @This()) PPoint {
+            if (self.lastPoint()) |point| {
+                return point;
+            }
+
+            return PPoint{};
+        }
+
         pub fn lastPoint(self: @This()) ?PPoint {
             const point = self.encoder.pathTailSegment(PPoint) orelse return null;
             return point.*;
