@@ -23,12 +23,12 @@ pub fn main() !void {
 
     try svg.encode(&encoder);
 
-    const scale = (core.TransformF32{
-        .scale = core.PointF32.create(0.1, 0.1),
-    }).toAffine();
-    for (encoder.transforms.items) |*t| {
-        t.* = scale.mul(t.*);
-    }
+    // const scale = (core.TransformF32{
+    //     .scale = core.PointF32.create(0.1, 0.1),
+    // }).toAffine();
+    // for (encoder.transforms.items) |*t| {
+    //     t.* = scale.mul(t.*);
+    // }
 
     const bounds = encoder.calculateBounds();
 

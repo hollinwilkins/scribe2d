@@ -1735,19 +1735,26 @@ pub const LineWriter = struct {
 
         self.writeIntersection(start_intersection);
 
-        var start_x_intersection: GridIntersection = start_intersection;
-        var start_y_intersection: GridIntersection = start_intersection;
-        var start_scan_x = scanner.x_range.start;
-        var start_scan_y = scanner.y_range.start;
+        var previous_x_intersection = start_intersection;
         while (scanner.nextX()) |x| {
             if (scanX(x, line, scan_bounds)) |x_intersection| {
+                var diff_y: bool = undefined;
+                
+                if (scanner.inc_y < 0.0 and x_intersection.intersection.point.y > scanner.y_range.start) {
+                    diff_y = false;
+                } else if (scanner.inc_y > 0.0 and x_intersection.intersection.point.y < scanner.y_range.start) {
+                    diff_y = false;
+                } else {
+                    diff_y = @abs(previous_x_intersection.pixel.y - x_intersection.pixel.y) >= 1;
+                }
+
+                std.debug.assert(true);
+
                 scan_y: {
-                    if (@abs(start_scan_y - x_intersection.intersection.point.y) > 1.0) {
+                    if (diff_y) {
                         while (scanner.nextY()) |y| {
                             if (scanY(y, line, scan_bounds)) |y_intersection| {
                                 self.writeIntersection(y_intersection);
-                                start_scan_y = y;
-                                start_y_intersection = y_intersection;
                             }
 
                             const next_y = scanner.peekNextY();
@@ -1761,16 +1768,13 @@ pub const LineWriter = struct {
                 }
 
                 self.writeIntersection(x_intersection);
-                start_scan_x = x;
-                start_x_intersection = x_intersection;
+                previous_x_intersection = x_intersection;
             }
         }
 
         while (scanner.nextY()) |y| {
             if (scanY(y, line, scan_bounds)) |y_intersection| {
                 self.writeIntersection(y_intersection);
-                start_scan_y = y;
-                start_y_intersection = y_intersection;
             }
         }
 
