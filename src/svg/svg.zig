@@ -5,6 +5,7 @@ const draw = @import("../draw/root.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const GenericReader = std.io.GenericReader;
+const PointF32 = core.PointF32;
 const PointI32 = core.PointI32;
 const RectI32 = core.RectI32;
 const TransformF32 = core.TransformF32;
@@ -100,10 +101,10 @@ pub const Svg = struct {
         }
     }
 
-    pub fn encodePathEl(encoder: *Encoder, path: xml.Element) !void {
+    pub fn encodePathEl(encoder: *Encoder, path_el: xml.Element) !void {
         var style: ?Style = null;
 
-        if (path.attr("fill")) |fill| {
+        if (path_el.attr("fill")) |fill| {
             try encoder.encodeColor(parseColor(fill));
 
             style = if (style == null) Style{} else style;
@@ -116,10 +117,10 @@ pub const Svg = struct {
             encoder.encodeStyle(s);
         }
 
-        if (path.attr("path")) |path| {
+        if (path_el.attr("path")) |path| {
             var path_encoder = encoder.pathEncoder(i16);
             var iterator = PathEncodeIterator{
-                .path = path,
+                .parser = Parser.create(path),
                 .encoder = &path_encoder,
             };
             while (iterator.encodeNext()) {}
@@ -127,42 +128,88 @@ pub const Svg = struct {
         }
     }
 
-    fn parseTransform(value: []const u8) TransformF32.Affine {}
+    fn parseTransform(value: []const u8) TransformF32.Affine {
+        var parser = Parser.create(value);
+        const id = parser.readIdentifier() orelse @panic("invalid transform");
 
-    fn parseColor(value: []const u8) ColorU8 {}
+        var transform: TransformF32 = TransformF32{};
+        if (std.mem.eql(u8, id, "translate")) {
+            _ = parser.readExpected('(');
+            // const x = (try parser.readInt())
+            const x = parser.readInt() orelse @panic("invalid translate");
+            const y = parser.readInt() orelse @panic("invalid translate");
+            transform.translate = PointF32{
+                .x = @floatFromInt(x),
+                .y = @floatFromInt(y),
+            };
+            _ = parser.readExpected(')');
+        }
+
+        return transform;
+    }
+
+    fn parseColor(value: []const u8) ColorU8 {
+        var parser = Parser.create(value);
+        _ = parser.readExpected('#') orelse @panic("invalid color");
+        const rs = parser.readN(2) orelse @panic("invalid color");
+        const gs = parser.readN(2) orelse @panic("invalid color");
+        const bs = parser.readN(2) orelse @panic("invalid color");
+
+        const r = std.fmt.parseInt(u8, rs, 16) catch @panic("invalid color");
+        const g = std.fmt.parseInt(u8, gs, 16) catch @panic("invalid color");
+        const b = std.fmt.parseInt(u8, bs, 16) catch @panic("invalid color");
+
+        return ColorU8{
+            .r = r,
+            .g = g,
+            .b = b,
+        };
+    }
 
     pub const PathEncodeIterator = struct {
         encoder: *PathEncoderI16,
-        path: []const u8,
+        parser: Parser,
         index: u32 = 0,
 
         pub fn encodeNext(self: *@This()) !bool {
             if (self.readByte()) |byte| {
                 switch (std.ascii.toLower(byte)) {
                     'm' => {
-                        const x = try self.readInt() orelse return self.err();
-                        const y = try self.readInt() orelse return self.err();
+                        const x = self.parser.readInt() orelse return self.err();
+                        const y = self.parser.readInt() orelse return self.err();
                         try self.encoder.moveTo(x, y);
                     },
                     'h' => {
-                        const y = try self.readInt() orelse return self.err();
+                        const y = self.parser.readInt() orelse return self.err();
                         const p0 = self.encoder.lastPoint() orelse return self.err();
                         try self.encoder.lineTo(p0.x, y);
                     },
                     'v' => {
-                        const x = try self.readInt() orelse return self.err();
+                        const x = self.parser.readInt() orelse return self.err();
                         const p0 = self.encoder.lastPoint() orelse return self.err();
                         try self.encoder.lineTo(x, p0.y);
                     },
                     'l' => {
-                        const x = try self.readInt() orelse return self.err();
-                        const y = try self.readInt() orelse return self.err();
+                        const x = self.parser.readInt() orelse return self.err();
+                        _ = self.parser.readExpected(',') orelse return self.err();
+                        const y = self.parser.readInt() orelse return self.err();
                         try self.encoder.lineTo(x, y);
                     },
                 }
             }
 
             return true;
+        }
+    };
+
+    pub const Parser = struct {
+        bytes: []const u8,
+        index: u32 = 0,
+
+        pub fn create(bytes: []const u8) @This() {
+            return @This(){
+                .bytes = bytes,
+            };
         }
 
         pub fn readByte(self: *@This()) ?u8 {
@@ -174,6 +221,16 @@ pub const Svg = struct {
             return null;
         }
 
+        pub fn readN(self: *@This(), n: u32) ?[]const u8 {
+            if (self.index + n >= self.path.len) {
+                return null;
+            }
+
+            const bytes = self.path[self.index .. self.index + n];
+            self.index += n;
+            return bytes;
+        }
+
         pub fn peekByte(self: *@This()) ?u8 {
             if (self.index >= self.path.len) {
                 return null;
@@ -183,7 +240,7 @@ pub const Svg = struct {
             return byte;
         }
 
-        pub fn readInt(self: *@This()) !?i16 {
+        pub fn readInt(self: *@This()) ?i16 {
             const start_index = self.index;
             var end_index = self.index;
 
@@ -199,15 +256,45 @@ pub const Svg = struct {
                 return null;
             }
 
-            return try std.fmt.parseInt(i16, self.path[start_index..end_index]);
+            const int = std.fmt.parseInt(i16, self.path[start_index..end_index]) catch @panic("invalid integer");
+            return int;
         }
 
-        pub fn readComma(self: *@This()) ?u8 {
+        pub fn readExpected(self: *@This(), expected: u8) ?u8 {
             if (self.peekByte()) |byte| {
-                if (byte == ',') {
+                if (byte == expected) {
                     self.index += 1;
                     return byte;
                 }
+            }
+
+            return null;
+        }
+
+        pub fn readIdentifier(self: *@This()) ?[]const u8 {
+            const start_index = self.index;
+            var end_index = start_index;
+            
+            _ = self.readAlpha() orelse return null;
+            for (self.bytes[start_index..]) |byte| {
+                if (!isAlphaNumeric(byte)) {
+                    break;
+                }
+
+                end_index += 1;
+            }
+
+            if (start_index == end_index) {
+                return null;
+            }
+
+            return self.bytes[start_index..end_index];
+        }
+
+        pub fn readAlpha(self: *@This()) ?u8 {
+            const byte = self.peekByte() orelse return null;
+            if (isAlpha(byte)) {
+                return byte;
             }
 
             return null;
@@ -231,11 +318,23 @@ pub const Svg = struct {
             return false;
         }
 
+        pub fn isAlphaNumeric(byte: u8) bool {
+            return isAlpha(byte) or isDigit(byte);
+        }
+
+        pub fn isAlpha(byte: u8) bool {
+            return (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z');
+        }
+
         pub fn isWhitespace(byte: u8) bool {
             return byte == ' ' or byte == '\t' or byte == '\n' or byte == '\r';
         }
 
         pub fn isDigitOrMinus(byte: u8) bool {
+            return isDigit(byte) or byte == '-';
+        }
+
+        pub fn isDigit(byte: u8) bool {
             return (byte >= '0' and byte <= '9') or byte == '-';
         }
     };
