@@ -1506,8 +1506,14 @@ pub const Scanner = struct {
     inc_y: f32,
 
     pub fn nextX(self: *@This()) ?f32 {
-        if (self.x_range.end - self.x_range.start == -self.inc_x) {
-            return null;
+        if (self.inc_x < 0.0) {
+            if (self.x_range.end - self.x_range.start > 0) {
+                return null;
+            }
+        } else {
+            if (self.x_range.end - self.x_range.start < 0) {
+                return null;
+            }
         }
 
         const next = self.x_range.start;
@@ -1516,8 +1522,14 @@ pub const Scanner = struct {
     }
 
     pub fn nextY(self: *@This()) ?f32 {
-        if (self.y_range.end - self.y_range.start == -self.inc_y) {
-            return null;
+        if (self.inc_y < 0.0) {
+            if (self.y_range.end - self.y_range.start > 0) {
+                return null;
+            }
+        } else {
+            if (self.y_range.end - self.y_range.start < 0) {
+                return null;
+            }
         }
 
         const next = self.y_range.start;

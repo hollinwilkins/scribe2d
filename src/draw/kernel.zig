@@ -1481,37 +1481,41 @@ pub const LineWriter = struct {
 
         const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
         const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
-        var start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
-        var end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
-        var start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
-        var end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
+        const start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
+        const end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
+        const start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
+        const end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
         const inc_x: f32 = if (min_x) 1.0 else -1.0;
         const inc_y: f32 = if (min_y) 1.0 else -1.0;
 
+        var start_x2 = start_x;
         if (start_x == start_intersection.intersection.point.x) {
-            start_x += inc_x;
+            start_x2 += inc_x;
         }
 
+        var end_x2 = end_x;
         if (end_x == end_intersection.intersection.point.x) {
-            end_x -= inc_x;
+            end_x2 -= inc_x;
         }
 
+        var start_y2 = start_y;
         if (start_y == start_intersection.intersection.point.y) {
-            start_y += inc_y;
+            start_y2 += inc_y;
         }
 
+        var end_y2 = end_y;
         if (end_y == end_intersection.intersection.point.y) {
-            end_y -= inc_y;
+            end_y2 -= inc_y;
         }
 
         var scanner = Scanner{
             .x_range = RangeF32{
-                .start = start_x,
-                .end = end_x,
+                .start = start_x2,
+                .end = end_x2,
             },
             .y_range = RangeF32{
-                .start = start_y,
-                .end = end_y,
+                .start = start_y2,
+                .end = end_y2,
             },
             .inc_x = inc_x,
             .inc_y = inc_y,
