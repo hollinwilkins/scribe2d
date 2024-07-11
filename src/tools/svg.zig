@@ -76,13 +76,13 @@ pub fn main() !void {
         .height = @intFromFloat(@ceil(bounds.getHeight() + outline_width / 2.0 + 4.0)),
     };
 
-    // const translate_center = (core.TransformF32{
-    //     .translate = core.PointF32{
-    //         .x = 4.0,
-    //         .y = 2.0,
-    //     },
-    // }).toAffine();
-    // encoder.transforms.items[0] = translate_center.mul(encoder.transforms.items[0]);
+    const translate_center = (core.TransformF32{
+        .translate = core.PointF32{
+            .x = -16.8,
+            .y = -16.8,
+        },
+    }).toAffine();
+    encoder.transforms.items[0] = translate_center.mul(encoder.transforms.items[0]);
 
     const encoding = encoder.encode();
 
