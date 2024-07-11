@@ -1151,7 +1151,7 @@ pub const Flatten = struct {
                                 const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
                                 s = (inv - b) / a;
                                 // TODO: may need to reenable this if artifacts show up again
-                                // s = std.math.clamp(s, -1.0, 1.0);
+                                s = std.math.clamp(s, 0.0, 1.0);
                             },
                         }
                         lp1 = es.applyOffset(s, normalized_offset);
