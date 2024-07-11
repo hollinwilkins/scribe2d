@@ -6,8 +6,7 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const GenericReader = std.io.GenericReader;
 const PointF32 = core.PointF32;
-const PointI32 = core.PointI32;
-const RectI32 = core.RectI32;
+const RectF32 = core.RectF32;
 const TransformF32 = core.TransformF32;
 const Encoder = draw.Encoder;
 const PathEncoderF32 = draw.PathEncoderF32;
@@ -19,7 +18,7 @@ pub const Svg = struct {
         OutOfMemory,
     };
 
-    viewbox: RectI32,
+    viewbox: RectF32,
     doc: xml.Document,
 
     pub fn parseFileAlloc(allocator: Allocator, path: []const u8) !Svg {
@@ -38,18 +37,18 @@ pub const Svg = struct {
         std.debug.print("Parsed document: {s}...\n", .{doc.root.tag_name.slice()});
 
         var viewbox_iter = std.mem.splitSequence(u8, doc.root.attr("viewBox").?, " ");
-        var dims: [4]i32 = undefined;
+        var dims: [4]f32 = undefined;
         var i: u32 = 0;
         while (viewbox_iter.next()) |dim| {
-            dims[i] = try std.fmt.parseInt(i32, dim, 10);
+            dims[i] = try std.fmt.parseFloat(f32, dim);
             i += 1;
         }
-        const viewbox = RectI32{
-            .min = PointI32{
+        const viewbox = RectF32{
+            .min = PointF32{
                 .x = dims[0],
                 .y = dims[1],
             },
-            .max = PointI32{
+            .max = PointF32{
                 .x = dims[2],
                 .y = dims[3],
             },
