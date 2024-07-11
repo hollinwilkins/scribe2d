@@ -23,14 +23,17 @@ pub fn main() !void {
 
     try svg.encode(&encoder);
 
-    // const scale = (core.TransformF32{
-    //     .scale = core.PointF32.create(0.1, 0.1),
-    // }).toAffine();
-    // for (encoder.transforms.items) |*t| {
-    //     t.* = scale.mul(t.*);
-    // }
-
     const bounds = encoder.calculateBounds();
+
+    const center = (core.TransformF32{
+        .translate = core.PointF32{
+            .x = -bounds.min.x + 32.0,
+            .y = -bounds.min.y + 32.0,
+        },
+    }).toAffine();
+    for (encoder.transforms.items) |*t| {
+        t.* = center.mul(t.*);
+    }
 
     const dimensions = core.DimensionsU32{
         .width = @intFromFloat(@ceil(bounds.getWidth() + 64.0)),
