@@ -107,12 +107,12 @@ pub const Style = packed struct {
     };
 
     pub const FillRule = enum(u1) {
-        even_odd = 0,
-        non_zero = 1,
+        non_zero = 0,
+        even_odd = 1,
     };
 
     pub const Fill = packed struct {
-        rule: FillRule = .even_odd,
+        rule: FillRule = .non_zero,
         brush: Brush = .noop,
     };
 

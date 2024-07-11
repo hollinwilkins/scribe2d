@@ -415,7 +415,9 @@ pub const CpuRasterizer = struct {
                 rasterizer.mask,
                 .{
                     self.config.kernel_config,
+                    self.path_monoids.items,
                     self.paths.items,
+                    self.encoding.styles,
                     chunk,
                     self.boundary_fragments.items,
                 },

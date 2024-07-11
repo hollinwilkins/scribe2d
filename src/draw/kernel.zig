@@ -2085,12 +2085,16 @@ pub const Rasterize = struct {
 
     pub fn mask(
         config: KernelConfig,
+        path_monoids: []const PathMonoid,
         paths: []const Path,
+        styles: []const Style,
         range: RangeU32,
         boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |path_index| {
             const path = paths[path_index];
+            const path_monoid = path_monoids[path.segment_index];
+            const style = getStyle(styles, path_monoid.style_index);
 
             const fill_merge_range = RangeU32{
                 .start = 0,
@@ -2106,6 +2110,7 @@ pub const Rasterize = struct {
             var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
             while (chunk_iter.next()) |chunk| {
                 maskPath(
+                    style.fill.rule,
                     chunk,
                     fill_boundary_fragments,
                 );
@@ -2114,6 +2119,7 @@ pub const Rasterize = struct {
             chunk_iter = stroke_merge_range.chunkIterator(config.chunk_size);
             while (chunk_iter.next()) |chunk| {
                 maskPath(
+                    .non_zero,
                     chunk,
                     stroke_boundary_fragments,
                 );
@@ -2122,11 +2128,13 @@ pub const Rasterize = struct {
     }
 
     pub fn maskPath(
+        fill_rule: Style.FillRule,
         range: RangeU32,
         boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |boundary_fragment_index| {
             maskFragment(
+                fill_rule,
                 @intCast(boundary_fragment_index),
                 boundary_fragments,
             );
@@ -2134,6 +2142,7 @@ pub const Rasterize = struct {
     }
 
     pub fn maskFragment(
+        fill_rule: Style.FillRule,
         boundary_fragment_index: u32,
         boundary_fragments: []BoundaryFragment,
     ) void {
@@ -2160,20 +2169,18 @@ pub const Rasterize = struct {
         const merge_boundary_fragments = boundary_fragments[boundary_fragment_index..end_boundary_offset];
 
         // calculate stencil mask
-        for (0..16) |index| {
-            const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-            var bit_winding: f32 = merge_fragment.main_ray_winding;
-
-            for (merge_boundary_fragments) |boundary_fragment| {
-                const masks = boundary_fragment.masks;
-                const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
-                const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
-                const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
-                bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
-            }
-
-            merge_fragment.stencil_mask |= @as(u16, @intCast((@as(i16, @intFromFloat(bit_winding)) & 1))) * bit_index;
-        }
+        merge_fragment.stencil_mask = switch (fill_rule) {
+            .non_zero => maskStencil(
+                .non_zero,
+                merge_fragment.main_ray_winding,
+                merge_boundary_fragments,
+            ),
+            .even_odd => maskStencil(
+                .even_odd,
+                merge_fragment.main_ray_winding,
+                merge_boundary_fragments,
+            ),
+        };
     }
 
     pub fn maskStencil(
