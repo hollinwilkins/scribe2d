@@ -577,15 +577,24 @@ pub const Encoder = struct {
         return @alignCast(std.mem.bytesAsValue(T, bytes));
     }
 
-    pub fn pathSegment(self: *@This(), comptime T: type, offset: usize) *T {
+    pub fn pathSegment(self: *@This(), comptime T: type, offset: usize) ?*T {
+        if (offset + @sizeOf(T) > self.segment_data.items.len) {
+            return null;
+        }
+
         return @alignCast(std.mem.bytesAsValue(T, self.segment_data.items[offset .. offset + @sizeOf(T)]));
     }
 
-    pub fn pathTailSegment(self: *@This(), comptime T: type) *T {
+    pub fn pathTailSegment(self: *@This(), comptime T: type) ?*T {
+        if (self.segment_data.items.len < @sizeOf(T)) {
+            return null;
+        }
+
         return @alignCast(std.mem.bytesAsValue(T, self.segment_data.items[self.segment_data.items.len - @sizeOf(T) ..]));
     }
 
     pub fn encodeColor(self: *@This(), color: ColorU8) !void {
+        // need to allow encoding color w/ style to avoid errors
         const bytes = (try self.draw_data.addManyAsSlice(self.allocator, @sizeOf(ColorU8)));
         std.mem.bytesAsValue(ColorU8, bytes).* = color;
     }
@@ -676,39 +685,47 @@ pub fn PathEncoder(comptime T: type) type {
             return self.start_path_offset == self.encoder.segment_data.items.len;
         }
 
+        // TODO: this does not need to error
         pub fn finish(self: *@This()) !void {
             if (self.isEmpty() or self.state == .start) {
                 return;
             }
 
-            _ = try self.close();
-
+            try self.close();
             self.encoder.staged.subpath = false;
         }
 
+        // TODO: don't draw closing line, handle in kernel
         pub fn close(self: *@This()) !void {
             if (self.state != .draw or self.isEmpty()) {
                 return;
             }
 
-            const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).*;
-            const end_point = self.encoder.pathTailSegment(PPoint);
+            cap_and_close_fill: {
+                const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).* orelse break :cap_and_close_fill;
+                const end_point = self.encoder.pathTailSegment(PPoint) orelse break :cap_and_close_fill;
 
-            if (!std.meta.eql(start_point, end_point.*)) {
-                self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
+                if (!std.meta.eql(start_point, end_point.*)) {
+                    self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
 
-                if (self.encoder.currentPathTag()) |tag| {
-                    tag.segment.cap = true;
-                }
+                    if (self.encoder.currentPathTag()) |tag| {
+                        tag.segment.cap = true;
+                    }
 
-                if (self.is_fill) {
-                    _ = try self.lineToPoint(start_point);
+                    if (self.is_fill) {
+                        try self.lineToPoint(start_point);
+                    }
                 }
             }
 
             self.start_subpath_index = self.encoder.path_tags.items.len;
             self.start_subpath_offset = self.encoder.segment_data.items.len;
             self.encoder.staged.subpath = true;
+        }
+
+        pub fn lastPoint(self: @This()) ?PPoint {
+            const point = self.encoder.pathTailSegment(PPoint) orelse return null;
+            return point.*;
         }
 
         pub fn affineTransform(self: *@This(), transform: TransformF32.Affine) void {
@@ -943,6 +960,9 @@ pub fn PathEncoder(comptime T: type) type {
         };
     };
 }
+
+pub const PathEncoderF32 = PathEncoder(f32);
+pub const PathEncoderI16 = PathEncoder(i16);
 
 pub const EncodingCache = struct {
     const EncodingList = std.ArrayListUnmanaged(Encoding);

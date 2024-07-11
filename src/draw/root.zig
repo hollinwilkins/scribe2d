@@ -22,6 +22,9 @@ pub const HalfPlanesU16 = msaa.HalfPlanesU16;
 
 pub const KernelConfig = kernel.KernelConfig;
 
+pub const PathEncoder = encoding.PathEncoder;
+pub const PathEncoderF32 = encoding.PathEncoderF32;
+pub const PathEncoderI16 = encoding.PathEncoderI16;
 pub const Encoder = encoding.Encoder;
 pub const Style = encoding.Style;
 
