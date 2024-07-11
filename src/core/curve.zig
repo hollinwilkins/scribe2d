@@ -71,6 +71,13 @@ pub fn Line(comptime T: type) type {
             };
         }
 
+        pub fn reflectNormal(self: @This()) P {
+            return P{
+                .x = (self.p1.y - self.p0.y),
+                .y = -(self.p1.x - self.p0.x),
+            };
+        }
+
         pub fn midpoint(self: @This()) P {
             return self.apply(0.5);
         }

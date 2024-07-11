@@ -17,7 +17,7 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    const outline_width = 8.0;
+    const outline_width = 4.0;
     var style = draw.Style{};
     try encoder.encodeColor(draw.ColorU8{
         .r = 0,
@@ -25,15 +25,15 @@ pub fn main() !void {
         .b = 0,
         .a = 255,
     });
-    style.setFill(draw.Style.Fill{
-        .brush = .color,
-    });
-    try encoder.encodeColor(draw.ColorU8{
-        .r = 255,
-        .g = 0,
-        .b = 0,
-        .a = 255,
-    });
+    // style.setFill(draw.Style.Fill{
+    //     .brush = .color,
+    // });
+    // try encoder.encodeColor(draw.ColorU8{
+    //     .r = 255,
+    //     .g = 0,
+    //     .b = 0,
+    //     .a = 255,
+    // });
     style.setStroke(draw.Style.Stroke{
         .brush = .color,
         .join = .round,

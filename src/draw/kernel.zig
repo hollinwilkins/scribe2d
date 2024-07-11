@@ -724,9 +724,9 @@ pub const Flatten = struct {
             path_monoids,
             segment_data,
         );
-        var tan_prev = arcTangent(arc_points.p1, arc_points.p0);
+        var tan_prev = arcTangent(arc_points.p1, arc_points.p2);
         var tan_next = neighbor.tangent;
-        var tan_start = arcTangent(arc_points.p1, arc_points.p2);
+        var tan_start = arcTangent(arc_points.p1, arc_points.p0);
 
         if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
             tan_start = PointF32{
@@ -1602,7 +1602,7 @@ pub const Flatten = struct {
     }
 
     fn arcTangent(center: PointF32, point: PointF32) PointF32 {
-        return LineF32.create(center, point).normal();
+        return LineF32.create(center, point).reflectNormal();
     }
 };
 
