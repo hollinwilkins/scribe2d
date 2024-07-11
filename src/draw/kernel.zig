@@ -635,7 +635,20 @@ pub const Flatten = struct {
     ) void {
         const path_tag = path_tags[segment_index];
 
-        if (path_tag.isArc()) {} else {
+        if (path_tag.isArc()) {
+            flattenStrokeArc(
+                config,
+                stroke,
+                segment_index,
+                path_tags,
+                path_monoids,
+                transforms,
+                subpaths,
+                segment_data,
+                front_line_writer,
+                back_line_writer,
+            );
+        } else {
             flattenStrokeEuler(
                 config,
                 stroke,
@@ -652,6 +665,162 @@ pub const Flatten = struct {
 
         front_line_writer.close();
         back_line_writer.close();
+    }
+
+    fn flattenStrokeArc(
+        config: KernelConfig,
+        stroke: Style.Stroke,
+        segment_index: u32,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        transforms: []const TransformF32.Affine,
+        subpaths: []const Subpath,
+        segment_data: []const u8,
+        front_line_writer: *LineWriter,
+        back_line_writer: *LineWriter,
+    ) void {
+        const path_tag = path_tags[segment_index];
+        const path_monoid = path_monoids[segment_index];
+        const transform = getTransform(transforms, path_monoid.transform_index);
+        const subpath = subpaths[path_monoid.subpath_index];
+        const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) subpaths[path_monoid.subpath_index + 1] else null;
+        var last_segment_offset: u32 = undefined;
+        if (next_subpath) |ns| {
+            last_segment_offset = ns.segment_index;
+        } else {
+            last_segment_offset = @intCast(path_tags.len);
+        }
+        var last_path_tag: PathTag = undefined;
+        var last_path_monoid: PathMonoid = undefined;
+        if (last_segment_offset > 0) {
+            last_path_tag = path_tags[last_segment_offset - 1];
+            last_path_monoid = path_monoids[last_segment_offset - 1];
+        } else {
+            last_path_tag = path_tags[path_tags.len - 1];
+            last_path_monoid = path_monoids[path_monoids.len - 1];
+        }
+
+        const arc_points = getArcPoints(
+            path_tag,
+            path_monoid,
+            segment_data,
+        ).affineTransform(transform);
+
+        const offset = 0.5 * stroke.width;
+        const offset_point = PointF32{
+            .x = offset,
+            .y = offset,
+        };
+
+        const segment_range = RangeU32{
+            .start = subpath.segment_index,
+            .end = last_segment_offset,
+        };
+        const neighbor = readNeighborSegment(
+            config,
+            path_monoid.segment_index + 1,
+            segment_range,
+            path_tags,
+            path_monoids,
+            segment_data,
+        );
+        var tan_prev = arcTangent(arc_points.p1, arc_points.p0);
+        var tan_next = neighbor.tangent;
+        var tan_start = arcTangent(arc_points.p1, arc_points.p2);
+
+        if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
+            tan_start = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        if (tan_prev.dot(tan_prev) < config.tangent_threshold_pow2) {
+            tan_prev = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        if (tan_next.dot(tan_next) < config.tangent_threshold_pow2) {
+            tan_next = PointF32{
+                .x = config.tangent_threshold,
+                .y = 0.0,
+            };
+        }
+
+        const n_start = offset_point.mul((PointF32{
+            .x = -tan_start.y,
+            .y = tan_start.x,
+        }).normalizeUnsafe());
+        const offset_tangent = offset_point.mul(tan_prev.normalizeUnsafe());
+        const n_prev = PointF32{
+            .x = -offset_tangent.y,
+            .y = offset_tangent.x,
+        };
+        const tan_next_norm = tan_next.normalizeUnsafe();
+        const n_next = offset_point.mul(PointF32{
+            .x = -tan_next_norm.y,
+            .y = tan_next_norm.x,
+        });
+
+        if (last_path_tag.segment.cap and path_tag.index.subpath == 1) {
+            // draw start cap on left side
+            drawCap(
+                config,
+                stroke.start_cap,
+                arc_points.p0,
+                arc_points.p0.sub(n_start),
+                arc_points.p0.add(n_start),
+                offset_tangent.negate(),
+                front_line_writer,
+            );
+        }
+
+        flattenArcSegment(
+            config,
+            arc_points,
+            0.5 * transform.getScale(),
+            offset,
+            arc_points.p0.add(n_start),
+            arc_points.p2.add(n_prev),
+            front_line_writer,
+        );
+
+        flattenArcSegment(
+            config,
+            arc_points,
+            0.5 * transform.getScale(),
+            -offset,
+            arc_points.p0.sub(n_start),
+            arc_points.p2.sub(n_prev),
+            back_line_writer,
+        );
+
+        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+            // draw end cap on left side
+            drawCap(
+                config,
+                stroke.end_cap,
+                arc_points.p2,
+                arc_points.p2.add(n_prev),
+                arc_points.p2.sub(n_prev),
+                offset_tangent,
+                front_line_writer,
+            );
+        } else {
+            drawJoin(
+                config,
+                stroke,
+                arc_points.p2,
+                tan_prev,
+                tan_next,
+                n_prev,
+                n_next,
+                front_line_writer,
+                back_line_writer,
+            );
+        }
     }
 
     fn flattenStrokeEuler(
@@ -816,45 +985,24 @@ pub const Flatten = struct {
         scale: f32,
         offset: f32,
         start_point: PointF32,
-        end_poinit: PointF32,
+        end_point: PointF32,
         writer: *LineWriter,
     ) void {
         _ = scale;
         _ = offset;
-        const line1 = LineF32.create(arc_points.p0, arc_points.p1);
-        const line2 = LineF32.create(arc_points.p1, arc_points.p2);
+        const angle1 = arc_points.p0.sub(arc_points.p1).atan2();
+        const angle2 = arc_points.p2.sub(arc_points.p1).atan2();
+        const angle = @abs(angle1 - angle2);
 
-        // calculate normals
-        var normal1 = line1.normal();
-        var normal2 = line2.normal();
-
-        // calculate midpoints
-        const mid1 = line1.midpoint();
-        const mid2 = line2.midpoint();
-
-        // position normals at midpoint of line
-        normal1 = normal1.add(mid1);
-        normal2 = normal2.add(mid2);
-
-        // intersect normal lines
-        const normal_line1 = LineF32.create(mid1, normal1);
-        const normal_line2 = LineF32.create(mid2, normal2);
-
-        if (normal_line1.pointIntersectLine(normal_line2)) |center| {
-            const angle1 = arc_points.p0.sub(center).atan2();
-            const angle2 = arc_points.p2.sub(center).atan2();
-            const angle = @abs(angle1 - angle2);
-
-            flattenArc(
-                config,
-                start_point,
-                end_poinit,
-                center,
-                1,
-                angle,
-                writer,
-            );
-        }
+        flattenArc(
+            config,
+            start_point,
+            end_point,
+            arc_points.p1,
+            1,
+            angle,
+            writer,
+        );
     }
 
     fn flattenEuler(
@@ -1292,17 +1440,45 @@ pub const Flatten = struct {
             .segment_data = segment_data,
         };
 
+        var arc_points: ArcF32 = undefined;
         switch (path_tag.segment.kind) {
             .arc_f32 => {
-                return sd.getSegment(ArcF32, path_monoid);
+                arc_points = sd.getSegment(ArcF32, path_monoid);
             },
             .arc_i16 => {
-                return sd.getSegment(ArcI16, path_monoid).cast(f32);
+                arc_points = sd.getSegment(ArcI16, path_monoid).cast(f32);
             },
             else => {
                 @panic("Can only get arc points for Arc32 or ArcI16");
             },
         }
+
+        const line1 = LineF32.create(arc_points.p0, arc_points.p1);
+        const line2 = LineF32.create(arc_points.p1, arc_points.p2);
+
+        // calculate normals
+        var normal1 = line1.normal();
+        var normal2 = line2.normal();
+
+        // calculate midpoints
+        const mid1 = line1.midpoint();
+        const mid2 = line2.midpoint();
+
+        // position normals at midpoint of line
+        normal1 = normal1.add(mid1);
+        normal2 = normal2.add(mid2);
+
+        // intersect normal lines
+        const normal_line1 = LineF32.create(mid1, normal1);
+        const normal_line2 = LineF32.create(mid2, normal2);
+
+        if (normal_line1.pointIntersectLine(normal_line2)) |center| {
+            arc_points.p1 = center;
+        } else {
+            @panic("Invalid arc, straight line");
+        }
+
+        return arc_points;
     }
 
     pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) CubicBezierF32 {
@@ -1373,14 +1549,25 @@ pub const Flatten = struct {
         const index_shifted = (next_segment_index - segment_range.start) % segment_range.size() + segment_range.start;
         const next_path_tag = path_tags[index_shifted];
         const next_path_monoid = path_monoids[index_shifted];
-        const cubic_points = getCubicPoints(next_path_tag, next_path_monoid, segment_data);
-        const tangent = cubicStartTangent(
-            config,
-            cubic_points.p0,
-            cubic_points.p1,
-            cubic_points.p2,
-            cubic_points.p3,
-        );
+
+        var tangent: PointF32 = undefined;
+        if (next_path_tag.isArc()) {
+            const arc_points = getArcPoints(
+                next_path_tag,
+                next_path_monoid,
+                segment_data,
+            );
+            tangent = arcTangent(arc_points.p1, arc_points.p0);
+        } else {
+            const cubic_points = getCubicPoints(next_path_tag, next_path_monoid, segment_data);
+            tangent = cubicStartTangent(
+                config,
+                cubic_points.p0,
+                cubic_points.p1,
+                cubic_points.p2,
+                cubic_points.p3,
+            );
+        }
 
         return NeighborSegment{
             .tangent = tangent,
@@ -1412,6 +1599,10 @@ pub const Flatten = struct {
         } else {
             return d03;
         }
+    }
+
+    fn arcTangent(center: PointF32, point: PointF32) PointF32 {
+        return LineF32.create(center, point).normal();
     }
 };
 
