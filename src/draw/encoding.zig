@@ -702,7 +702,7 @@ pub fn PathEncoder(comptime T: type) type {
                 }
 
                 if (self.is_fill) {
-                    _ = try self.lineTo(start_point);
+                    _ = try self.lineToPoint(start_point);
                 }
             }
 
@@ -729,7 +729,11 @@ pub fn PathEncoder(comptime T: type) type {
             }
         }
 
-        pub fn moveTo(self: *@This(), p0: PPoint) !void {
+        pub fn moveTo(self: *@This(), x: T, y: T) !void {
+            try self.moveToPoint(PPoint.create(x, y));
+        }
+
+        pub fn moveToPoint(self: *@This(), p0: PPoint) !void {
             switch (self.state) {
                 .start => {
                     // add this move_to as a point to the end of the segments buffer
@@ -749,41 +753,46 @@ pub fn PathEncoder(comptime T: type) type {
             }
         }
 
-        pub fn lineTo(self: *@This(), p1: PPoint) Allocator.Error!bool {
+        pub fn lineTo(self: *@This(), x1: T, y1: T) !void {
+            try self.lineToPoint(PPoint.create(x1, y1));
+        }
+
+        pub fn lineToPoint(self: *@This(), p1: PPoint) Allocator.Error!void {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
-                    try self.moveTo(p1);
-                    return false;
+                    try self.moveToPoint(p1);
                 },
                 else => {
                     const last_point = self.encoder.pathTailSegment(PPoint).*;
 
                     if (std.meta.eql(last_point, p1)) {
-                        return false;
+                        return;
                     }
 
                     (try self.encoder.extendPath(ExtendLine, ExtendLine.KIND)).* = ExtendLine{
                         .p1 = p1,
                     };
                     self.state = .draw;
-                    return true;
                 },
             }
         }
 
-        pub fn arcTo(self: *@This(), p1: PPoint, p2: PPoint) !bool {
+        pub fn arcTo(self: *@This(), x1: T, y1: T, x2: T, y2: T) !void {
+            try self.arcToPoint(PPoint.create(x1, y1), PPoint.create(x2, y2));
+        }
+
+        pub fn arcToPoint(self: *@This(), p1: PPoint, p2: PPoint) !void {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
-                    try self.moveTo(p2);
-                    return false;
+                    try self.moveToPoint(p2);
                 },
                 else => {
                     const last_point = self.encoder.pathTailSegment(PPoint).*;
 
                     if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2)) {
-                        return false;
+                        return;
                     }
 
                     (try self.encoder.extendPath(ExtendArc, ExtendArc.KIND)).* = ExtendArc{
@@ -791,23 +800,25 @@ pub fn PathEncoder(comptime T: type) type {
                         .p2 = p2,
                     };
                     self.state = .draw;
-                    return true;
                 },
             }
         }
 
-        pub fn quadTo(self: *@This(), p1: PPoint, p2: PPoint) !bool {
+        pub fn quadTo(self: *@This(), x1: T, y1: T, x2: T, y2: T) !void {
+            try self.quadToPoint(PPoint.create(x1, y1), PPoint.create(x2, y2));
+        }
+
+        pub fn quadToPoint(self: *@This(), p1: PPoint, p2: PPoint) !void {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
-                    try self.moveTo(p2);
-                    return false;
+                    try self.moveToPoint(p2);
                 },
                 else => {
                     const last_point = self.encoder.pathTailSegment(PPoint).*;
 
                     if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2)) {
-                        return false;
+                        return;
                     }
 
                     (try self.encoder.extendPath(ExtendQuadraticBezier, ExtendQuadraticBezier.KIND)).* = ExtendQuadraticBezier{
@@ -815,23 +826,25 @@ pub fn PathEncoder(comptime T: type) type {
                         .p2 = p2,
                     };
                     self.state = .draw;
-                    return true;
                 },
             }
         }
 
-        pub fn cubicTo(self: *@This(), p1: PPoint, p2: PPoint, p3: PPoint) !bool {
+        pub fn cubicTo(self: *@This(), x1: T, y1: T, x2: T, y2: T, x3: T, y3: T) !void {
+            try self.quadToPoint(PPoint.create(x1, y1), PPoint.create(x2, y2), PPoint.create(x3, y3));
+        }
+
+        pub fn cubicToPoint(self: *@This(), p1: PPoint, p2: PPoint, p3: PPoint) !void {
             switch (self.state) {
                 .start => {
                     // just treat this as a moveTo
-                    try self.moveTo(p3);
-                    return false;
+                    try self.moveToPoint(p3);
                 },
                 else => {
                     const last_point = self.encoder.pathTailSegment(PPoint).*;
 
                     if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2) and std.meta.eql(last_point, p3)) {
-                        return false;
+                        return;
                     }
 
                     (try self.encoder.extendPath(ExtendCubicBezier, ExtendCubicBezier.KIND)).* = ExtendCubicBezier{
@@ -840,7 +853,6 @@ pub fn PathEncoder(comptime T: type) type {
                         .p3 = p3,
                     };
                     self.state = .draw;
-                    return true;
                 },
             }
         }
@@ -864,21 +876,21 @@ pub fn PathEncoder(comptime T: type) type {
         pub const GlyphPenFunctions = struct {
             fn moveTo(ctx: *anyopaque, point: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                b.moveTo(point) catch {
+                b.moveToPoint(point) catch {
                     unreachable;
                 };
             }
 
             fn lineTo(ctx: *anyopaque, p1: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                _ = b.lineTo(p1) catch {
+                _ = b.lineToPoint(p1) catch {
                     unreachable;
                 };
             }
 
             fn quadTo(ctx: *anyopaque, p1: PointF32, p2: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                _ = b.quadTo(p1, p2) catch {
+                _ = b.quadToPoint(p1, p2) catch {
                     unreachable;
                 };
             }
