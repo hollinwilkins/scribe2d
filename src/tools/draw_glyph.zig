@@ -110,7 +110,7 @@ pub fn main() !void {
 
     var texture = draw.TextureUnmanaged{
         .dimensions = dimensions,
-        .format = draw.TextureFormat.SrgbU8,
+        .format = draw.TextureFormat.RgbU8,
         .bytes = image.data,
     };
     texture.clear(draw.Colors.WHITE);
