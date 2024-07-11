@@ -83,6 +83,10 @@ pub const PathTag = packed struct {
             },
         };
     }
+
+    pub fn isArc(self: @This()) bool {
+        return self.segment.kind == .arc_f32 or self.segment.kind == .arc_i16;
+    }
 };
 
 pub const Style = packed struct {

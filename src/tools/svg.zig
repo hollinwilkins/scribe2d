@@ -28,19 +28,19 @@ pub fn main() !void {
     style.setFill(draw.Style.Fill{
         .brush = .color,
     });
-    // try encoder.encodeColor(draw.ColorU8{
-    //     .r = 255,
-    //     .g = 0,
-    //     .b = 0,
-    //     .a = 255,
-    // });
-    // style.setStroke(draw.Style.Stroke{
-    //     .brush = .color,
-    //     .join = .round,
-    //     .start_cap = .square,
-    //     .end_cap = .square,
-    //     .width = outline_width,
-    // });
+    try encoder.encodeColor(draw.ColorU8{
+        .r = 255,
+        .g = 0,
+        .b = 0,
+        .a = 255,
+    });
+    style.setStroke(draw.Style.Stroke{
+        .brush = .color,
+        .join = .round,
+        .start_cap = .square,
+        .end_cap = .square,
+        .width = outline_width,
+    });
     try encoder.encodeStyle(style);
     try encoder.encodeTransform((core.TransformF32{
         .scale = core.PointF32{

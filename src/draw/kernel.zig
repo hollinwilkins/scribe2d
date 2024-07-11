@@ -584,41 +584,37 @@ pub const Flatten = struct {
         const path_monoid = path_monoids[segment_index];
         const transform = getTransform(transforms, path_monoid.transform_index);
 
-        switch (path_tag.segment.kind) {
-            .arc_f32 => {
-                const arc_points = getArcPoints(
-                    path_tag,
-                    path_monoid,
-                    segment_data,
-                ).affineTransform(transform);
-                flattenArcSegment(
-                    config,
-                    arc_points,
-                    0.5 * transform.getScale(),
-                    0.0,
-                    arc_points.p0,
-                    arc_points.p2,
-                    line_writer,
-                );
-            },
-            .arc_i16 => {},
-            else => {
-                const cubic_points = getCubicPoints(
-                    path_tag,
-                    path_monoid,
-                    segment_data,
-                ).affineTransform(transform);
+        if (path_tag.isArc()) {
+            const arc_points = getArcPoints(
+                path_tag,
+                path_monoid,
+                segment_data,
+            ).affineTransform(transform);
+            flattenArcSegment(
+                config,
+                arc_points,
+                0.5 * transform.getScale(),
+                0.0,
+                arc_points.p0,
+                arc_points.p2,
+                line_writer,
+            );
+        } else {
+            const cubic_points = getCubicPoints(
+                path_tag,
+                path_monoid,
+                segment_data,
+            ).affineTransform(transform);
 
-                flattenEuler(
-                    config,
-                    cubic_points,
-                    0.5 * transform.getScale(),
-                    0.0,
-                    cubic_points.p0,
-                    cubic_points.p3,
-                    line_writer,
-                );
-            },
+            flattenEuler(
+                config,
+                cubic_points,
+                0.5 * transform.getScale(),
+                0.0,
+                cubic_points.p0,
+                cubic_points.p3,
+                line_writer,
+            );
         }
 
         // adjust lines to represent actual filled lines
@@ -626,6 +622,39 @@ pub const Flatten = struct {
     }
 
     pub fn flattenStroke(
+        config: KernelConfig,
+        stroke: Style.Stroke,
+        segment_index: u32,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+        transforms: []const TransformF32.Affine,
+        subpaths: []const Subpath,
+        segment_data: []const u8,
+        front_line_writer: *LineWriter,
+        back_line_writer: *LineWriter,
+    ) void {
+        const path_tag = path_tags[segment_index];
+
+        if (path_tag.isArc()) {} else {
+            flattenStrokeEuler(
+                config,
+                stroke,
+                segment_index,
+                path_tags,
+                path_monoids,
+                transforms,
+                subpaths,
+                segment_data,
+                front_line_writer,
+                back_line_writer,
+            );
+        }
+
+        front_line_writer.close();
+        back_line_writer.close();
+    }
+
+    fn flattenStrokeEuler(
         config: KernelConfig,
         stroke: Style.Stroke,
         segment_index: u32,
@@ -658,11 +687,6 @@ pub const Flatten = struct {
             last_path_monoid = path_monoids[path_monoids.len - 1];
         }
 
-        if (path_tag.segment.kind == .arc_f32 or path_tag.segment.kind == .arc_i16) {
-            std.debug.print("Cannot flatten ArcF32 yet.\n", .{});
-            return;
-        }
-
         const cubic_points = getCubicPoints(
             path_tag,
             path_monoid,
@@ -681,7 +705,7 @@ pub const Flatten = struct {
         };
         const neighbor = readNeighborSegment(
             config,
-            segment_index + 1,
+            path_monoid.segment_index + 1,
             segment_range,
             path_tags,
             path_monoids,
@@ -784,9 +808,6 @@ pub const Flatten = struct {
                 back_line_writer,
             );
         }
-
-        front_line_writer.close();
-        back_line_writer.close();
     }
 
     fn flattenArcSegment(
@@ -1280,7 +1301,7 @@ pub const Flatten = struct {
             },
             else => {
                 @panic("Can only get arc points for Arc32 or ArcI16");
-            }
+            },
         }
     }
 
