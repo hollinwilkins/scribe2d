@@ -1739,7 +1739,7 @@ pub const LineWriter = struct {
         while (scanner.nextX()) |x| {
             if (scanX(x, line, scan_bounds)) |x_intersection| {
                 var diff_y: bool = undefined;
-                
+
                 if (scanner.inc_y < 0.0 and x_intersection.intersection.point.y > scanner.y_range.start) {
                     diff_y = false;
                 } else if (scanner.inc_y > 0.0 and x_intersection.intersection.point.y < scanner.y_range.start) {
@@ -2264,6 +2264,7 @@ pub const Blend = struct {
     }
 
     pub fn fillSpan(
+        fill_rule: Style.FillRule,
         brush: Style.Brush,
         brush_offset: u32,
         boundary_fragments: []const BoundaryFragment,
@@ -2271,7 +2272,42 @@ pub const Blend = struct {
         range: RangeU32,
         texture: *TextureUnmanaged,
     ) void {
-        _ = brush; // only color for now
+        switch (fill_rule) {
+            .non_zero => {
+                fillSpan2(
+                    .non_zero,
+                    brush,
+                    brush_offset,
+                    boundary_fragments,
+                    draw_data,
+                    range,
+                    texture,
+                );
+            },
+            .even_odd => {
+                fillSpan2(
+                    .non_zero,
+                    brush,
+                    brush_offset,
+                    boundary_fragments,
+                    draw_data,
+                    range,
+                    texture,
+                );
+            },
+        }
+    }
+
+    pub fn fillSpan2(
+        comptime fill_rule: Style.FillRule,
+        brush: Style.Brush,
+        brush_offset: u32,
+        boundary_fragments: []const BoundaryFragment,
+        draw_data: []const u8,
+        range: RangeU32,
+        texture: *TextureUnmanaged,
+    ) void {
+        _ = brush;
         const color_blend = ColorBlend.Alpha;
         const brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
 
@@ -2290,6 +2326,26 @@ pub const Blend = struct {
 
                     if (!current_merge_fragment.is_merge) {
                         continue;
+                    }
+
+                    var flush_span: bool = undefined;
+                    switch (fill_rule) {
+                        .non_zero => {
+                            if (current_merge_fragment.main_ray_winding != 0) {
+                                if (start_span_fragment == null) {
+                                    start_span_fragment = previous_merge_fragment;
+                                }
+                                flush_span = false;
+                            }
+                        },
+                        .even_odd => {
+                            if (@as(u16, @intFromFloat(@abs(current_merge_fragment.main_ray_winding))) & 1 == 1) {
+                                if (start_span_fragment == null) {
+                                    start_span_fragment = previous_merge_fragment;
+                                }
+                                flush_span = false;
+                            }
+                        },
                     }
 
                     if (current_merge_fragment.main_ray_winding != 0) {
