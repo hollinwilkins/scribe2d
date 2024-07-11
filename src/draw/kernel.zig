@@ -1602,7 +1602,7 @@ pub const Flatten = struct {
     }
 
     fn arcTangent(center: PointF32, point: PointF32) PointF32 {
-        return LineF32.create(center, point).reflectNormal();
+        return LineF32.create(center, point).normal();
     }
 };
 
