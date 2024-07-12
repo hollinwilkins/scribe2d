@@ -33,7 +33,7 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    const outline_width = 2.0;
+    const outline_width = 8.0;
     var style = draw.Style{};
     try encoder.encodeColor(draw.ColorU8{
         .r = 255,

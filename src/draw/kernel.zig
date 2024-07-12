@@ -1151,7 +1151,8 @@ pub const Flatten = struct {
                                 const inv = EspcRobust.intInvApproximation(config, integral * t + int0);
                                 s = (inv - b) / a;
                                 // TODO: why is this needed?
-                                // s = std.math.clamp(s, 0.0, 1.0);
+                                // render roboto medium codepoint 400 at 400px with outline_width = 4.0 to see issue
+                                s = std.math.clamp(s, 0.0, 1.0);
                             },
                         }
                         lp1 = es.applyOffset(s, normalized_offset);
