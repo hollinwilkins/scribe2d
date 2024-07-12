@@ -2398,11 +2398,6 @@ pub const Blend = struct {
                             }
                         },
                         .even_odd => {
-                            if (current_merge_fragment.main_ray_winding == -2.0) {
-                                std.debug.assert(true);
-                                std.debug.assert(true);
-                            }
-
                             if (@as(u16, @intFromFloat(@abs(current_merge_fragment.main_ray_winding))) & 1 == 1) {
                                 if (start_span_fragment == null) {
                                     start_span_fragment = previous_merge_fragment;
