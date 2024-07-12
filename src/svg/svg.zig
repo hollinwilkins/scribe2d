@@ -611,6 +611,7 @@ pub const PathParser = struct {
                         p1 = p1.mulScalar(2.0).sub(ctl);
                     }
 
+                    self.last_point = p1;
                     const p2 = self.nextPoint(points, draw_mode.position) orelse break;
                     const p3 = self.nextPoint(points, draw_mode.position) orelse @panic("invalid smooth_cubic_to");
 
@@ -632,7 +633,7 @@ pub const PathParser = struct {
         var next_point = points.next() orelse return null;
 
         if (position == .relative) {
-            next_point = next_point.add(self.getPreviousPoint());
+            next_point = self.getPreviousPoint().add(next_point);
         }
 
         self.last_point = next_point;
@@ -678,7 +679,10 @@ pub const PathParser = struct {
             return last_point;
         }
 
-        return PointF32{};
+        return PointF32{
+            .x = 0,
+            .y = 0,
+        };
     }
 };
 
