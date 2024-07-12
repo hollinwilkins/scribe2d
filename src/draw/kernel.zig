@@ -1899,7 +1899,10 @@ pub const LineWriter = struct {
 
     pub fn close(self: *@This()) void {
         if (self.debug) {
-            self.flat_segments[self.flat_segment_index] = self.flat_segment;
+            const flat_segment = &self.flat_segments[self.flat_segment_index];
+            flat_segment.* = self.flat_segment;
+            flat_segment.end_line_data_offset = flat_segment.start_line_data_offset + self.line_offset;
+            flat_segment.end_intersection_offset = flat_segment.start_intersection_offset + self.intersection_offset;
         }
     }
 };

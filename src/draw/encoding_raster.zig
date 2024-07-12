@@ -837,7 +837,7 @@ pub const CpuRasterizer = struct {
                         .y = @intCast(y),
                     });
 
-                    if (pixel.r < 1.0 or pixel.g < 1.0 or pixel.b < 1.0 or pixel.a < 1.0) {
+                    if (pixel.r < 1.0 or pixel.g < 1.0 or pixel.b < 1.0) {
                         std.debug.print("#", .{});
                     } else {
                         std.debug.print(";", .{});

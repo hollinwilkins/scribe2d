@@ -117,14 +117,20 @@ pub const Svg = struct {
             }
         }
 
-        if (group.attr("stroke")) |stroke| {
-            const color = parseColor(stroke);
-            try encoder.encodeColor(color);
+        stroke: {
+            if (group.attr("stroke")) |stroke| {
+                if (std.mem.eql(u8, stroke, "none")) {
+                    break :stroke;
+                }
 
-            style = if (style == null) Style{} else style;
-            style.?.setStroke(Style.Stroke{
-                .brush = .color,
-            });
+                const color = parseColor(stroke);
+                try encoder.encodeColor(color);
+
+                style = if (style == null) Style{} else style;
+                style.?.setStroke(Style.Stroke{
+                    .brush = .color,
+                });
+            }
         }
 
         if (group.attr("stroke-width")) |stroke_width_str| {
@@ -156,14 +162,19 @@ pub const Svg = struct {
             });
         }
 
-        if (path_el.attr("stroke")) |stroke| {
-            const color = parseColor(stroke);
-            try encoder.encodeColor(color);
+        stroke: {
+            if (path_el.attr("stroke")) |stroke| {
+                if (std.mem.eql(u8, stroke, "none")) {
+                    break :stroke;
+                }
+                const color = parseColor(stroke);
+                try encoder.encodeColor(color);
 
-            style = if (style == null) Style{} else style;
-            style.?.setStroke(Style.Stroke{
-                .brush = .color,
-            });
+                style = if (style == null) Style{} else style;
+                style.?.setStroke(Style.Stroke{
+                    .brush = .color,
+                });
+            }
         }
 
         if (path_el.attr("stroke-width")) |stroke_width_str| {
@@ -196,7 +207,9 @@ pub const Svg = struct {
         if (std.mem.eql(u8, id, "translate")) {
             _ = parser.readExpected('(');
             const x = parser.readF32() orelse @panic("invalid translate");
+            parser.skipWhitespace();
             _ = parser.readExpected(',');
+            parser.skipWhitespace();
             const y = parser.readF32() orelse @panic("invalid translate");
             transform.translate = PointF32{
                 .x = x,
@@ -381,6 +394,25 @@ pub const Svg = struct {
                                 }
                             }
                         },
+                        .quad_to => {
+                            var point_parser = PointParser.create(&self.parser);
+
+                            while (point_parser.next()) |p1| {
+                                const p2 = point_parser.next() orelse @panic("invalid cubic");
+
+                                switch (self.state.draw_position) {
+                                    .absolute => {
+                                        try self.encoder.quadToPoint(p1, p2);
+                                        self.c2 = p2;
+                                    },
+                                    .relative => {
+                                        const current = self.encoder.currentPoint();
+                                        try self.encoder.quadToPoint(p1.add(current), p2.add(current));
+                                        self.c2 = p2;
+                                    },
+                                }
+                            }
+                        },
                         .cubic_to => {
                             var point_parser = PointParser.create(&self.parser);
 
@@ -454,6 +486,8 @@ pub const Svg = struct {
                     'v' => State.draw(.vertical_line_to, .relative),
                     'L' => State.draw(.line_to, .absolute),
                     'l' => State.draw(.line_to, .relative),
+                    'Q' => State.draw(.quad_to, .absolute),
+                    'q' => State.draw(.quad_to, .relative),
                     'C' => State.draw(.cubic_to, .absolute),
                     'c' => State.draw(.cubic_to, .relative),
                     'S' => State.draw(.smooth_cubic_to, .absolute),
