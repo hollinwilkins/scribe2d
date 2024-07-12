@@ -692,6 +692,7 @@ pub fn PathEncoder(comptime T: type) type {
             }
 
             self.close();
+            self.encoder.staged.path = false;
             self.encoder.staged.subpath = false;
         }
 

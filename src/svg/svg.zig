@@ -99,6 +99,45 @@ pub const Svg = struct {
             try encoder.encodeTransform(parseTransform(transform_str));
         }
 
+        var style: ?Style = null;
+
+        fill: {
+            if (group.attr("fill")) |fill| {
+                if (std.mem.eql(u8, fill, "none")) {
+                    break :fill;
+                }
+
+                const color = parseColor(fill);
+                try encoder.encodeColor(color);
+
+                style = if (style == null) Style{} else style;
+                style.?.setFill(Style.Fill{
+                    .brush = .color,
+                });
+            }
+        }
+
+        if (group.attr("stroke")) |stroke| {
+            const color = parseColor(stroke);
+            try encoder.encodeColor(color);
+
+            style = if (style == null) Style{} else style;
+            style.?.setStroke(Style.Stroke{
+                .brush = .color,
+            });
+        }
+
+        if (group.attr("stroke-width")) |stroke_width_str| {
+            const stroke_width = std.fmt.parseFloat(f32, stroke_width_str) catch @panic("invalid stroke-width");
+            if (style) |*s| {
+                s.stroke.width = stroke_width;
+            }
+        }
+
+        if (style) |s| {
+            try encoder.encodeStyle(s);
+        }
+
         for (group.children()) |child| {
             try encodeNode(encoder, child);
         }
@@ -115,6 +154,23 @@ pub const Svg = struct {
             style.?.setFill(Style.Fill{
                 .brush = .color,
             });
+        }
+
+        if (path_el.attr("stroke")) |stroke| {
+            const color = parseColor(stroke);
+            try encoder.encodeColor(color);
+
+            style = if (style == null) Style{} else style;
+            style.?.setStroke(Style.Stroke{
+                .brush = .color,
+            });
+        }
+
+        if (path_el.attr("stroke-width")) |stroke_width_str| {
+            const stroke_width = std.fmt.parseFloat(f32, stroke_width_str) catch @panic("invalid stroke-width");
+            if (style) |*s| {
+                s.stroke.width = stroke_width;
+            }
         }
 
         if (style) |s| {
@@ -147,6 +203,26 @@ pub const Svg = struct {
                 .y = y,
             };
             _ = parser.readExpected(')');
+            return transform.toAffine();
+        } else if (std.mem.eql(u8, id, "matrix")) {
+            var float_parser = FloatParser{
+                .parser = &parser,
+            };
+            _ = parser.readExpected('(');
+            const a = float_parser.next() orelse @panic("invalid matrix");
+            const b = float_parser.next() orelse @panic("invalid matrix");
+            const c = float_parser.next() orelse @panic("invalid matrix");
+            const d = float_parser.next() orelse @panic("invalid matrix");
+            const e = float_parser.next() orelse @panic("invalid matrix");
+            const f = float_parser.next() orelse @panic("invalid matrix");
+            _ = parser.readExpected(')');
+
+            return TransformF32.Affine{
+                .coefficients = [6]f32{
+                    a, c, e,
+                    b, d, f,
+                },
+            };
         }
 
         return transform.toAffine();
@@ -160,15 +236,33 @@ pub const Svg = struct {
         switch (next_byte) {
             '#' => {
                 _ = parser.readByte();
-                const r: u8 = @intCast(parser.readHexN(2) orelse @panic("invalid color"));
-                const g: u8 = @intCast(parser.readHexN(2) orelse @panic("invalid color"));
-                const b: u8 = @intCast(parser.readHexN(2) orelse @panic("invalid color"));
-                return ColorU8{
-                    .r = r,
-                    .g = g,
-                    .b = b,
-                    .a = 255,
-                };
+
+                if (parser.readHex()) |hex| {
+                    var r: u8 = undefined;
+                    var g: u8 = undefined;
+                    var b: u8 = undefined;
+
+                    if (hex.len == 3) {
+                        r = std.fmt.parseInt(u8, &[2]u8{ hex[0], hex[0] }, 16) catch @panic("invalid color");
+                        g = std.fmt.parseInt(u8, &[2]u8{ hex[1], hex[1] }, 16) catch @panic("invalid color");
+                        b = std.fmt.parseInt(u8, &[2]u8{ hex[2], hex[2] }, 16) catch @panic("invalid color");
+                    } else if (hex.len == 6) {
+                        r = std.fmt.parseInt(u8, hex[0..2], 16) catch @panic("invalid color");
+                        g = std.fmt.parseInt(u8, hex[2..4], 16) catch @panic("invalid color");
+                        b = std.fmt.parseInt(u8, hex[4..6], 16) catch @panic("invalid color");
+                    } else {
+                        @panic("invalid color");
+                    }
+
+                    return ColorU8{
+                        .r = r,
+                        .g = g,
+                        .b = b,
+                        .a = 255,
+                    };
+                } else {
+                    @panic("invalid color");
+                }
             },
             'r' => {
                 const id = parser.readIdentifier().?;
@@ -210,6 +304,8 @@ pub const Svg = struct {
         c2: ?PointF32 = null,
 
         pub fn encodeNext(self: *@This()) !bool {
+            std.debug.assert(true);
+
             switch (self.state.parser_state) {
                 .start => {
                     self.state = self.parseNextState();
@@ -219,9 +315,7 @@ pub const Svg = struct {
                     switch (self.state.draw_state) {
                         .move_to => {
                             self.c2 = null;
-                            var point_parser = PointParser{
-                                .parser = &self.parser,
-                            };
+                            var point_parser = PointParser.create(&self.parser);
 
                             while (point_parser.next()) |point| {
                                 switch (self.state.draw_position) {
@@ -273,9 +367,7 @@ pub const Svg = struct {
                         },
                         .line_to => {
                             self.c2 = null;
-                            var point_parser = PointParser{
-                                .parser = &self.parser,
-                            };
+                            var point_parser = PointParser.create(&self.parser);
 
                             while (point_parser.next()) |point| {
                                 switch (self.state.draw_position) {
@@ -290,9 +382,7 @@ pub const Svg = struct {
                             }
                         },
                         .cubic_to => {
-                            var point_parser = PointParser{
-                                .parser = &self.parser,
-                            };
+                            var point_parser = PointParser.create(&self.parser);
 
                             while (point_parser.next()) |p1| {
                                 const p2 = point_parser.next() orelse @panic("invalid cubic");
@@ -312,9 +402,7 @@ pub const Svg = struct {
                             }
                         },
                         .smooth_cubic_to => {
-                            var point_parser = PointParser{
-                                .parser = &self.parser,
-                            };
+                            var point_parser = PointParser.create(&self.parser);
 
                             while (point_parser.next()) |p2| {
                                 const p3 = point_parser.next() orelse @panic("invalid cubic");
@@ -337,6 +425,9 @@ pub const Svg = struct {
                                     },
                                 }
                             }
+                        },
+                        .close => {
+                            self.encoder.finish();
                         },
                         else => @panic("unsupported draw state"),
                     }
@@ -366,6 +457,7 @@ pub const Svg = struct {
                     'c' => State.draw(.cubic_to, .relative),
                     'S' => State.draw(.smooth_cubic_to, .absolute),
                     's' => State.draw(.smooth_cubic_to, .relative),
+                    'z' => State.draw(.close, .absolute),
                     else => @panic("unsupported path movement"),
                 };
             }
@@ -415,48 +507,54 @@ pub const Svg = struct {
             smooth_quad_to,
             cubic_to,
             smooth_cubic_to,
+            close,
         };
+    };
 
-        pub const PointParser = struct {
-            parser: *Parser,
+    pub const PointParser = struct {
+        float_parser: FloatParser,
 
-            pub fn next(self: *@This()) ?PointF32 {
+        pub fn create(parser: *Parser) @This() {
+            return @This(){
+                .float_parser = FloatParser{
+                    .parser = parser,
+                },
+            };
+        }
+
+        pub fn next(self: *@This()) ?PointF32 {
+            const x = self.float_parser.next() orelse return null;
+            const y = self.float_parser.next() orelse return null;
+
+            return PointF32{
+                .x = x,
+                .y = y,
+            };
+        }
+    };
+
+    pub const FloatParser = struct {
+        parser: *Parser,
+
+        pub fn next(self: *@This()) ?f32 {
+            self.parser.skipWhitespace();
+
+            var next_byte = self.parser.peekByte() orelse return null;
+            if (next_byte == ',') {
+                _ = self.parser.readByte();
                 self.parser.skipWhitespace();
-
-                const next_byte = self.parser.peekByte() orelse return null;
-
-                if (Parser.isDigit(next_byte)) {
-                    const x = self.parser.readF32() orelse @panic("invalid point");
-                    self.parser.skipWhitespace();
-                    _ = self.parser.readExpected(',') orelse @panic("invalid point");
-                    self.parser.skipWhitespace();
-                    const y = self.parser.readF32() orelse @panic("invalid point");
-                    self.parser.skipWhitespace();
-
-                    return PointF32.create(x, y);
-                }
-
-                return null;
+                next_byte = self.parser.peekByte() orelse return null;
             }
-        };
 
-        pub const FloatParser = struct {
-            parser: *Parser,
-
-            pub fn next(self: *@This()) ?f32 {
+            if (Parser.isDigit(next_byte) or next_byte == '-') {
                 self.parser.skipWhitespace();
-
-                const next_byte = self.parser.peekByte() orelse return null;
-
-                if (Parser.isDigit(next_byte)) {
-                    const x = self.parser.readF32() orelse @panic("invalid float");
-                    self.parser.skipWhitespace();
-                    return x;
-                }
-
-                return null;
+                const x = self.parser.readF32() orelse @panic("invalid float");
+                self.parser.skipWhitespace();
+                return x;
             }
-        };
+
+            return null;
+        }
     };
 
     pub const Parser = struct {
@@ -514,7 +612,7 @@ pub const Svg = struct {
             var end_index = self.index;
 
             for (self.bytes[start_index..]) |byte| {
-                if (!isFloatByte(byte)) {
+                if (!isDigit(byte)) {
                     break;
                 }
 
@@ -535,8 +633,15 @@ pub const Svg = struct {
         }
 
         pub fn readF32(self: *@This()) ?f32 {
-            const start_index = self.index;
+            var start_index = self.index;
             var end_index = self.index;
+
+            const next_byte = self.peekByte() orelse return null;
+            if (next_byte == '-') {
+                _ = self.readByte();
+                start_index += 1;
+                end_index += 1;
+            }
 
             for (self.bytes[start_index..]) |byte| {
                 if (!isFloatByte(byte)) {
@@ -551,9 +656,11 @@ pub const Svg = struct {
             }
             self.index = end_index;
 
+            const float_bytes = self.bytes[start_index..end_index];
+            std.debug.print("FLoat Bytes: {s}\n", .{float_bytes});
             const value = std.fmt.parseFloat(
                 f32,
-                self.bytes[start_index..end_index],
+                float_bytes,
             ) catch @panic("invalid f32");
             return value;
         }
@@ -567,6 +674,26 @@ pub const Svg = struct {
             }
 
             return null;
+        }
+
+        pub fn readHex(self: *@This()) ?[]const u8 {
+            const start_index = self.index;
+            var end_index = start_index;
+
+            for (self.bytes[start_index..]) |byte| {
+                if (!isHex(byte)) {
+                    break;
+                }
+
+                end_index += 1;
+            }
+
+            if (start_index == end_index) {
+                return null;
+            }
+
+            self.index = end_index;
+            return self.bytes[start_index..end_index];
         }
 
         pub fn readIdentifier(self: *@This()) ?[]const u8 {
@@ -613,6 +740,10 @@ pub const Svg = struct {
             return false;
         }
 
+        pub fn isHex(byte: u8) bool {
+            return (byte >= '0' and byte <= '8') or (byte >= 'a' and byte <= 'f') or (byte >= 'A' or byte <= 'F');
+        }
+
         pub fn isAlphaNumeric(byte: u8) bool {
             return isAlpha(byte) or isDigit(byte);
         }
@@ -626,11 +757,11 @@ pub const Svg = struct {
         }
 
         pub fn isFloatByte(byte: u8) bool {
-            return isDigit(byte) or byte == '-' or byte == '.';
+            return isDigit(byte) or byte == '.';
         }
 
         pub fn isDigit(byte: u8) bool {
-            return (byte >= '0' and byte <= '9') or byte == '-';
+            return (byte >= '0' and byte <= '9');
         }
     };
 };
