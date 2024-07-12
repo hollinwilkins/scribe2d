@@ -1665,11 +1665,6 @@ pub const LineWriter = struct {
             return;
         }
 
-        if (line.length() > 50) {
-            std.debug.assert(true);
-            std.debug.assert(true);
-        }
-
         if (self.previous_point) |previous_point| {
             std.debug.assert(std.meta.eql(previous_point, line.p0));
             self.bounds.extendByInPlace(line.p1);
@@ -1721,14 +1716,14 @@ pub const LineWriter = struct {
             .y = @floatFromInt(bounds.max.y + 1),
         });
 
-        const start_intersection = GridIntersection.create((IntersectionF32{
+        const start_intersection = GridIntersection.create(IntersectionF32{
             .t = 0.0,
             .point = start_point,
-        }).fitToGrid());
-        const end_intersection = GridIntersection.create((IntersectionF32{
+        });
+        const end_intersection = GridIntersection.create(IntersectionF32{
             .t = 1.0,
             .point = end_point,
-        }).fitToGrid());
+        });
 
         const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
         const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
@@ -1775,6 +1770,7 @@ pub const LineWriter = struct {
         self.writeIntersection(start_intersection);
 
         var previous_x_intersection = start_intersection;
+        var previous_y_intersection = start_intersection;
         while (scanner.nextX()) |x| {
             if (scanX(x, line, scan_bounds)) |x_intersection| {
                 var diff_y: bool = undefined;
@@ -1794,12 +1790,13 @@ pub const LineWriter = struct {
                         while (scanner.nextY()) |y| {
                             if (scanY(y, line, scan_bounds)) |y_intersection| {
                                 self.writeIntersection(y_intersection);
+                                previous_y_intersection = y_intersection;
                             }
 
                             const next_y = scanner.peekNextY();
-                            if (min_y and next_y >= x_intersection.intersection.point.y) {
+                            if (min_y and next_y > x_intersection.intersection.point.y) {
                                 break :scan_y;
-                            } else if (!min_y and next_y <= x_intersection.intersection.point.y) {
+                            } else if (!min_y and next_y < x_intersection.intersection.point.y) {
                                 break :scan_y;
                             }
                         }
@@ -1814,6 +1811,7 @@ pub const LineWriter = struct {
         while (scanner.nextY()) |y| {
             if (scanY(y, line, scan_bounds)) |y_intersection| {
                 self.writeIntersection(y_intersection);
+                previous_y_intersection = y_intersection;
             }
         }
 
@@ -1886,7 +1884,7 @@ pub const LineWriter = struct {
         );
 
         if (line.intersectVerticalLine(scan_line)) |intersection| {
-            return GridIntersection.create(intersection.fitToGrid());
+            return GridIntersection.create(intersection);
         }
 
         return null;
@@ -1909,7 +1907,7 @@ pub const LineWriter = struct {
         );
 
         if (line.intersectHorizontalLine(scan_line)) |intersection| {
-            return GridIntersection.create(intersection.fitToGrid());
+            return GridIntersection.create(intersection);
         }
 
         return null;
