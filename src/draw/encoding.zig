@@ -1524,6 +1524,10 @@ pub const GridIntersection = struct {
         };
     }
 
+    pub fn fitToGrid(self: @This()) @This() {
+        return create(self.intersection.fitToGrid());
+    }
+
     pub fn reverse(self: @This()) @This() {
         var intersection2 = self.intersection;
         intersection2.t = 1.0 - self.intersection.t;

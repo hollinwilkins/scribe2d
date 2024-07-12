@@ -1767,6 +1767,7 @@ pub const LineWriter = struct {
             .inc_y = inc_y,
         };
 
+        // std.debug.print("S: ", .{});
         self.writeIntersection(start_intersection);
 
         var previous_x_intersection = start_intersection;
@@ -1783,12 +1784,21 @@ pub const LineWriter = struct {
                     diff_y = @abs(previous_x_intersection.pixel.y - x_intersection.pixel.y) >= 1;
                 }
 
-                std.debug.assert(true);
-
+                var x_flushed: bool = false;
                 scan_y: {
                     if (diff_y) {
                         while (scanner.nextY()) |y| {
                             if (scanY(y, line, scan_bounds)) |y_intersection| {
+                                if (!x_flushed and y_intersection.intersection.t > x_intersection.intersection.t) {
+                                    // TODO: there is probably a better way to handle this...
+                                    // this mallarky is possible because of floating point errors
+                                    // std.debug.print("X: ", .{});
+                                    self.writeIntersection(x_intersection);
+                                    previous_x_intersection = x_intersection;
+                                    x_flushed = true;
+                                }
+
+                                // std.debug.print("Y: ", .{});
                                 self.writeIntersection(y_intersection);
                                 previous_y_intersection = y_intersection;
                             }
@@ -1803,22 +1813,29 @@ pub const LineWriter = struct {
                     }
                 }
 
-                self.writeIntersection(x_intersection);
-                previous_x_intersection = x_intersection;
+                if (!x_flushed) {
+                    // std.debug.print("X: ", .{});
+                    self.writeIntersection(x_intersection);
+                    previous_x_intersection = x_intersection;
+                }
             }
         }
 
         while (scanner.nextY()) |y| {
             if (scanY(y, line, scan_bounds)) |y_intersection| {
+                // std.debug.print("Y: ", .{});
                 self.writeIntersection(y_intersection);
                 previous_y_intersection = y_intersection;
             }
         }
 
+        // std.debug.print("E: ", .{});
         self.writeIntersection(end_intersection);
     }
 
     fn writeIntersection(self: *@This(), grid_intersection: GridIntersection) void {
+        // std.debug.print("{}\n", .{grid_intersection.intersection});
+
         if (self.debug) {
             self.addIntersection(grid_intersection);
         }
