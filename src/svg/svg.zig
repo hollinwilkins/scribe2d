@@ -563,6 +563,7 @@ pub const PathParser = struct {
 
         switch (draw_mode.draw) {
             .move_to => {
+                std.debug.assert(true);
                 while (self.nextPoint(points, draw_mode.position)) |point| {
                     try self.path_encoder.moveToPoint(point);
                 }
@@ -670,7 +671,8 @@ pub const PathParser = struct {
     }
 
     pub fn getPreviousPoint(self: @This()) PointF32 {
-        return self.path_encoder.currentPoint();
+        const previous_point = self.path_encoder.currentPoint();
+        return previous_point;
     }
 };
 

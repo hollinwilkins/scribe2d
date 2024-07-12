@@ -732,6 +732,10 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn lastPoint(self: @This()) ?PPoint {
+            if (self.state == .start) {
+                return null;
+            }
+
             const point = self.encoder.pathTailSegment(PPoint) orelse return null;
             return point.*;
         }
