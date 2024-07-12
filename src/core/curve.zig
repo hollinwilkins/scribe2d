@@ -64,6 +64,10 @@ pub fn Line(comptime T: type) type {
             };
         }
 
+        pub fn length(self: @This()) T {
+            return self.p1.sub(self.p0).length();
+        }
+
         pub fn normal(self: @This()) P {
             return P{
                 .x = -(self.p1.y - self.p0.y),

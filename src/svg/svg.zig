@@ -407,7 +407,6 @@ pub const Svg = struct {
             self.index = end_index;
 
             const float_bytes = self.bytes[real_start_index..end_index];
-            std.debug.print("FLoat Bytes: {s}\n", .{float_bytes});
             const value = std.fmt.parseFloat(
                 f32,
                 float_bytes,
@@ -806,7 +805,6 @@ pub const PathTokenizer = struct {
         }
 
         const float_bytes = self.bytes[start_index..end_index];
-        std.debug.print("Float Bytes: {s}\n", .{float_bytes});
         return try std.fmt.parseFloat(f32, float_bytes);
     }
 

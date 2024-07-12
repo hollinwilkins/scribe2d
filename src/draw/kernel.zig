@@ -1665,6 +1665,11 @@ pub const LineWriter = struct {
             return;
         }
 
+        if (line.length() > 50) {
+            std.debug.assert(true);
+            std.debug.assert(true);
+        }
+
         if (self.previous_point) |previous_point| {
             std.debug.assert(std.meta.eql(previous_point, line.p0));
             self.bounds.extendByInPlace(line.p1);
