@@ -25,15 +25,18 @@ pub fn main() !void {
 
     const bounds = encoder.calculateBounds();
 
-    const center = (core.TransformF32{
-        .translate = core.PointF32{
-            .x = -bounds.min.x + 32.0,
-            .y = -bounds.min.y + 32.0,
-        },
-    }).toAffine();
-    for (encoder.transforms.items) |*t| {
-        t.* = center.mul(t.*);
-    }
+    // const t = encoder.transforms.items[0];
+    // const scale = (core.TransformF32{
+    //     .scale = core.PointF32.create(0.01, 0.01),
+    // }).toAffine();
+    // encoder.transforms.items[0] = scale.mul(t);
+    // const transform = encoder.transforms.items[0];
+    // std.debug.print("Transform: {}\n", .{transform});
+    // const point = transform.apply(core.PointF32{
+    //     .x = 10.0,
+    //     .y = 10.0,
+    // });
+    // std.debug.print("Transform Point: {}\n", .{point});
 
     const dimensions = core.DimensionsU32{
         .width = @intFromFloat(@ceil(bounds.getWidth() + 64.0)),
@@ -48,7 +51,7 @@ pub fn main() !void {
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        .debug_single_pass = true,
+        // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
         // .flush_texture_span = false,
     };

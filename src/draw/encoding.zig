@@ -859,7 +859,7 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn cubicTo(self: *@This(), x1: T, y1: T, x2: T, y2: T, x3: T, y3: T) !void {
-            try self.quadToPoint(PPoint.create(x1, y1), PPoint.create(x2, y2), PPoint.create(x3, y3));
+            try self.cubicToPoint(PPoint.create(x1, y1), PPoint.create(x2, y2), PPoint.create(x3, y3));
         }
 
         pub fn cubicToPoint(self: *@This(), p1: PPoint, p2: PPoint, p3: PPoint) !void {
@@ -880,6 +880,7 @@ pub fn PathEncoder(comptime T: type) type {
                         .p2 = p2,
                         .p3 = p3,
                     };
+
                     self.state = .draw;
                 },
             }

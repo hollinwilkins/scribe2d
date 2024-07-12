@@ -121,13 +121,13 @@ pub const KernelConfig = struct {
 };
 
 pub const Estimate = struct {
-    const VIRTUAL_INTERSECTIONS: u16 = 2;
-    const INTERSECTION_FUDGE: u16 = 2;
+    const VIRTUAL_INTERSECTIONS: u32 = 2;
+    const INTERSECTION_FUDGE: u32 = 2;
     const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
-    const CUBIC_FUDGE: f32 = 3.0;
+    const CUBIC_FUDGE: f32 = 4.0;
 
     pub const RoundArcEstimate = struct {
-        lines: u16 = 0,
+        lines: u32 = 0,
         length: f32 = 0.0,
     };
 
@@ -239,7 +239,7 @@ pub const Estimate = struct {
                 return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
             },
             .miter => {
-                const MITER_FUDGE: u16 = 2;
+                const MITER_FUDGE: u32 = 2;
                 return Offsets.create(2, estimateLineWidthIntersections(scaled_width) * 2 * MITER_FUDGE);
             },
             .round => {
@@ -275,19 +275,19 @@ pub const Estimate = struct {
         return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
     }
 
-    pub fn estimateLineWidthIntersections(scaled_width: f32) u16 {
+    pub fn estimateLineWidthIntersections(scaled_width: f32) u32 {
         const dxdy = PointF32{
             .x = scaled_width,
             .y = scaled_width,
         };
 
-        const intersections: u16 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
         return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
     }
 
     pub fn estimateLine(line: LineF32) Offsets {
         const dxdy = line.p1.sub(line.p0);
-        var intersections: u16 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
+        var intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
         intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
 
         return Offsets.create(1, intersections);
@@ -301,7 +301,7 @@ pub const Estimate = struct {
     }
 
     pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Offsets {
-        const lines = @as(u16, @intFromFloat(Wang.quadratic(
+        const lines = @as(u32, @intFromFloat(Wang.quadratic(
             @floatCast(RSQRT_OF_TOL),
             quadratic_bezier.p0,
             quadratic_bezier.p1,
@@ -337,8 +337,8 @@ pub const Estimate = struct {
         return Offsets.create(lines, intersections);
     }
 
-    pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u16) u16 {
-        var intersections: u16 = 0;
+    pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u32) u32 {
+        var intersections: u32 = 0;
         const step = 1.0 / @as(f32, @floatFromInt(samples));
 
         var p0 = start;

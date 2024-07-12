@@ -377,6 +377,11 @@ pub fn Transform(comptime T: type) type {
                 // const x = z[0] * point.x + z[3] * point.y + z[2];
                 // const y = z[1] * point.x + z[4] * point.y + z[5];
 
+                if (x > 10000 or y > 10000) {
+                    std.debug.assert(true);
+                    std.debug.assert(true);
+                }
+
                 return P{
                     .x = x,
                     .y = y,

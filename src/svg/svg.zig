@@ -408,20 +408,21 @@ pub const Svg = struct {
                                 const p3 = point_parser.next() orelse @panic("invalid cubic");
                                 var p1: PointF32 = undefined;
 
-                                const last_point = self.encoder.currentPoint();
                                 if (self.c2) |c2| {
-                                    p1 = c2.reflectOn(last_point);
+                                    p1 = c2.reflectOn(self.encoder.currentPoint());
                                 } else {
-                                    p1 = last_point;
+                                    p1 = self.encoder.currentPoint();
                                 }
 
                                 switch (self.state.draw_position) {
                                     .absolute => {
                                         try self.encoder.cubicToPoint(p1, p2, p3);
+                                        self.c2 = p2;
                                     },
                                     .relative => {
                                         const current = self.encoder.currentPoint();
                                         try self.encoder.cubicToPoint(p1, p2.add(current), p3.add(current));
+                                        self.c2 = p2;
                                     },
                                 }
                             }
@@ -446,7 +447,7 @@ pub const Svg = struct {
             if (self.parser.readByte()) |byte| {
                 return switch (byte) {
                     'M' => State.draw(.move_to, .absolute),
-                    'm' => State.draw(.move_to, .relative),
+                    'm' => State.draw(.move_to, .absolute),
                     'H' => State.draw(.horizontal_line_to, .absolute),
                     'h' => State.draw(.horizontal_line_to, .relative),
                     'V' => State.draw(.vertical_line_to, .absolute),
