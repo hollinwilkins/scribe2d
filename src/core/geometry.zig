@@ -87,6 +87,10 @@ pub fn Point(comptime T: type) type {
             );
         }
 
+        pub fn reflectOn(self: @This(), other: @This()) @This() {
+            return other.add(other.sub(self));
+        }
+
         pub fn affineTransform(self: @This(), transform: Transform(T).Affine) @This() {
             return transform.apply(self);
         }

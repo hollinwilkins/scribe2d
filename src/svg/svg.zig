@@ -207,6 +207,7 @@ pub const Svg = struct {
         parser: Parser,
         state: State = State.START,
         index: u32 = 0,
+        c2: ?PointF32 = null,
 
         pub fn encodeNext(self: *@This()) !bool {
             switch (self.state.parser_state) {
@@ -217,6 +218,7 @@ pub const Svg = struct {
                 .draw => {
                     switch (self.state.draw_state) {
                         .move_to => {
+                            self.c2 = null;
                             var point_parser = PointParser{
                                 .parser = &self.parser,
                             };
@@ -234,6 +236,7 @@ pub const Svg = struct {
                             }
                         },
                         .horizontal_line_to => {
+                            self.c2 = null;
                             var float_parser = FloatParser{
                                 .parser = &self.parser,
                             };
@@ -251,6 +254,7 @@ pub const Svg = struct {
                             }
                         },
                         .vertical_line_to => {
+                            self.c2 = null;
                             var float_parser = FloatParser{
                                 .parser = &self.parser,
                             };
@@ -268,6 +272,7 @@ pub const Svg = struct {
                             }
                         },
                         .line_to => {
+                            self.c2 = null;
                             var point_parser = PointParser{
                                 .parser = &self.parser,
                             };
@@ -280,6 +285,55 @@ pub const Svg = struct {
                                     .relative => {
                                         const current = self.encoder.currentPoint();
                                         try self.encoder.lineToPoint(current.add(point));
+                                    },
+                                }
+                            }
+                        },
+                        .cubic_to => {
+                            var point_parser = PointParser{
+                                .parser = &self.parser,
+                            };
+
+                            while (point_parser.next()) |p1| {
+                                const p2 = point_parser.next() orelse @panic("invalid cubic");
+                                const p3 = point_parser.next() orelse @panic("invalid cubic");
+
+                                switch (self.state.draw_position) {
+                                    .absolute => {
+                                        try self.encoder.cubicToPoint(p1, p2, p3);
+                                        self.c2 = p2;
+                                    },
+                                    .relative => {
+                                        const current = self.encoder.currentPoint();
+                                        try self.encoder.cubicToPoint(p1.add(current), p2.add(current), p3.add(current));
+                                        self.c2 = p2;
+                                    },
+                                }
+                            }
+                        },
+                        .smooth_cubic_to => {
+                            var point_parser = PointParser{
+                                .parser = &self.parser,
+                            };
+
+                            while (point_parser.next()) |p2| {
+                                const p3 = point_parser.next() orelse @panic("invalid cubic");
+                                var p1: PointF32 = undefined;
+
+                                const last_point = self.encoder.currentPoint();
+                                if (self.c2) |c2| {
+                                    p1 = c2.reflectOn(last_point);
+                                } else {
+                                    p1 = last_point;
+                                }
+
+                                switch (self.state.draw_position) {
+                                    .absolute => {
+                                        try self.encoder.cubicToPoint(p1, p2, p3);
+                                    },
+                                    .relative => {
+                                        const current = self.encoder.currentPoint();
+                                        try self.encoder.cubicToPoint(p1, p2.add(current), p3.add(current));
                                     },
                                 }
                             }
@@ -308,6 +362,10 @@ pub const Svg = struct {
                     'v' => State.draw(.vertical_line_to, .relative),
                     'L' => State.draw(.line_to, .absolute),
                     'l' => State.draw(.line_to, .relative),
+                    'C' => State.draw(.cubic_to, .absolute),
+                    'c' => State.draw(.cubic_to, .relative),
+                    'S' => State.draw(.smooth_cubic_to, .absolute),
+                    's' => State.draw(.smooth_cubic_to, .relative),
                     else => @panic("unsupported path movement"),
                 };
             }
@@ -354,7 +412,9 @@ pub const Svg = struct {
             vertical_line_to,
             arc_to,
             quad_to,
+            smooth_quad_to,
             cubic_to,
+            smooth_cubic_to,
         };
 
         pub const PointParser = struct {

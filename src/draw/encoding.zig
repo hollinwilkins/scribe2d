@@ -868,7 +868,7 @@ pub fn PathEncoder(comptime T: type) type {
                     try self.moveToPoint(p3);
                 },
                 else => {
-                    const last_point = self.encoder.pathTailSegment(PPoint).*;
+                    const last_point = self.encoder.pathTailSegment(PPoint).?.*;
 
                     if (std.meta.eql(last_point, p1) and std.meta.eql(last_point, p2) and std.meta.eql(last_point, p3)) {
                         return;
