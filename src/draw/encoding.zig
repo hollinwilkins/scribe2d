@@ -434,7 +434,7 @@ pub const Encoding = struct {
 
 // This encoding can get sent to kernels
 pub const Encoder = struct {
-    pub const StageFlags = packed struct {
+    pub const StageFlags = struct {
         path: bool = false,
         subpath: bool = false,
         transform: bool = false,
@@ -558,9 +558,7 @@ pub const Encoder = struct {
 
     pub fn encodeStyle(self: *@This(), style: Style) !void {
         if (self.currentStyle()) |current| {
-            if (std.meta.eql(current.*, style)) {
-                return;
-            } else if (self.staged.style) {
+            if (self.staged.style) {
                 current.* = style;
             }
         }
