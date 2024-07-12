@@ -527,7 +527,6 @@ pub const PathParser = struct {
     tokenizer: PathTokenizer,
     path_encoder: *PathEncoderF32,
     draw_mode: ?PathTokenizer.DrawMode = null,
-    last_point: ?PointF32 = null,
     last_control_point: ?PointF32 = null,
 
     pub fn create(path: []const u8, path_encoder: *PathEncoderF32) @This() {
@@ -605,13 +604,11 @@ pub const PathParser = struct {
             },
             .smooth_cubic_to => {
                 while (true) {
-                    const previous_point = self.getPreviousPoint();
-                    var p1 = previous_point;
+                    var p1 = self.getPreviousPoint();
                     if (self.last_control_point) |ctl| {
                         p1 = p1.mulScalar(2.0).sub(ctl);
                     }
 
-                    self.last_point = p1;
                     const p2 = self.nextPoint(points, draw_mode.position) orelse break;
                     const p3 = self.nextPoint(points, draw_mode.position) orelse @panic("invalid smooth_cubic_to");
 
@@ -630,13 +627,13 @@ pub const PathParser = struct {
         points: *PathTokenizer.PointIterator,
         position: PathTokenizer.Position,
     ) ?PointF32 {
+        const previous_point = self.getPreviousPoint();
         var next_point = points.next() orelse return null;
 
         if (position == .relative) {
-            next_point = self.getPreviousPoint().add(next_point);
+            next_point = previous_point.add(next_point);
         }
 
-        self.last_point = next_point;
         return next_point;
     }
 
@@ -653,7 +650,6 @@ pub const PathParser = struct {
             point.y += previous_point.y;
         }
 
-        self.last_point = point;
         return point;
     }
 
@@ -670,19 +666,11 @@ pub const PathParser = struct {
             point.x += previous_point.x;
         }
 
-        self.last_point = point;
         return point;
     }
 
     pub fn getPreviousPoint(self: @This()) PointF32 {
-        if (self.last_point) |last_point| {
-            return last_point;
-        }
-
-        return PointF32{
-            .x = 0,
-            .y = 0,
-        };
+        return self.path_encoder.currentPoint();
     }
 };
 
