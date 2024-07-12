@@ -218,16 +218,13 @@ pub const Svg = struct {
             _ = parser.readExpected(')');
             return transform.toAffine();
         } else if (std.mem.eql(u8, id, "matrix")) {
-            var float_parser = FloatParser{
-                .parser = &parser,
-            };
             _ = parser.readExpected('(');
-            const a = float_parser.next() orelse @panic("invalid matrix");
-            const b = float_parser.next() orelse @panic("invalid matrix");
-            const c = float_parser.next() orelse @panic("invalid matrix");
-            const d = float_parser.next() orelse @panic("invalid matrix");
-            const e = float_parser.next() orelse @panic("invalid matrix");
-            const f = float_parser.next() orelse @panic("invalid matrix");
+            const a = parser.readF32() orelse @panic("invalid matrix");
+            const b = parser.readF32() orelse @panic("invalid matrix");
+            const c = parser.readF32() orelse @panic("invalid matrix");
+            const d = parser.readF32() orelse @panic("invalid matrix");
+            const e = parser.readF32() orelse @panic("invalid matrix");
+            const f = parser.readF32() orelse @panic("invalid matrix");
             _ = parser.readExpected(')');
 
             return TransformF32.Affine{
@@ -308,288 +305,6 @@ pub const Svg = struct {
 
         @panic("invalid color");
     }
-
-    pub const PathParser = struct {
-        encoder: *PathEncoderF32,
-        parser: Parser,
-        state: State = State.START,
-        index: u32 = 0,
-        c2: ?PointF32 = null,
-
-        pub fn encodeNext(self: *@This()) !bool {
-            std.debug.assert(true);
-
-            switch (self.state.parser_state) {
-                .start => {
-                    self.state = self.parseNextState();
-                    return try self.encodeNext();
-                },
-                .draw => {
-                    switch (self.state.draw_state) {
-                        .move_to => {
-                            self.c2 = null;
-                            var point_parser = PointParser.create(&self.parser);
-
-                            while (point_parser.next()) |point| {
-                                switch (self.state.draw_position) {
-                                    .absolute => {
-                                        try self.encoder.moveToPoint(point);
-                                    },
-                                    .relative => {
-                                        const current = self.encoder.currentPoint();
-                                        try self.encoder.moveToPoint(current.add(point));
-                                    },
-                                }
-                            }
-                        },
-                        .horizontal_line_to => {
-                            self.c2 = null;
-                            var float_parser = FloatParser{
-                                .parser = &self.parser,
-                            };
-
-                            while (float_parser.next()) |y| {
-                                const current = self.encoder.currentPoint();
-                                switch (self.state.draw_position) {
-                                    .absolute => {
-                                        try self.encoder.lineTo(current.x, y);
-                                    },
-                                    .relative => {
-                                        try self.encoder.lineTo(current.x, current.y + y);
-                                    },
-                                }
-                            }
-                        },
-                        .vertical_line_to => {
-                            self.c2 = null;
-                            var float_parser = FloatParser{
-                                .parser = &self.parser,
-                            };
-
-                            while (float_parser.next()) |x| {
-                                const current = self.encoder.currentPoint();
-                                switch (self.state.draw_position) {
-                                    .absolute => {
-                                        try self.encoder.lineTo(x, current.y);
-                                    },
-                                    .relative => {
-                                        try self.encoder.lineTo(current.x + x, current.y);
-                                    },
-                                }
-                            }
-                        },
-                        .line_to => {
-                            self.c2 = null;
-                            var point_parser = PointParser.create(&self.parser);
-
-                            while (point_parser.next()) |point| {
-                                switch (self.state.draw_position) {
-                                    .absolute => {
-                                        try self.encoder.lineToPoint(point);
-                                    },
-                                    .relative => {
-                                        const current = self.encoder.currentPoint();
-                                        try self.encoder.lineToPoint(current.add(point));
-                                    },
-                                }
-                            }
-                        },
-                        .quad_to => {
-                            var point_parser = PointParser.create(&self.parser);
-
-                            while (point_parser.next()) |p1| {
-                                const p2 = point_parser.next() orelse @panic("invalid cubic");
-
-                                switch (self.state.draw_position) {
-                                    .absolute => {
-                                        try self.encoder.quadToPoint(p1, p2);
-                                        self.c2 = p2;
-                                    },
-                                    .relative => {
-                                        const current = self.encoder.currentPoint();
-                                        try self.encoder.quadToPoint(p1.add(current), p2.add(current));
-                                        self.c2 = p2;
-                                    },
-                                }
-                            }
-                        },
-                        .cubic_to => {
-                            var point_parser = PointParser.create(&self.parser);
-
-                            while (point_parser.next()) |p1| {
-                                const p2 = point_parser.next() orelse @panic("invalid cubic");
-                                const p3 = point_parser.next() orelse @panic("invalid cubic");
-
-                                switch (self.state.draw_position) {
-                                    .absolute => {
-                                        try self.encoder.cubicToPoint(p1, p2, p3);
-                                        self.c2 = p2;
-                                    },
-                                    .relative => {
-                                        const current = self.encoder.currentPoint();
-                                        try self.encoder.cubicToPoint(p1.add(current), p2.add(current), p3.add(current));
-                                        self.c2 = p2;
-                                    },
-                                }
-                            }
-                        },
-                        .smooth_cubic_to => {
-                            var point_parser = PointParser.create(&self.parser);
-
-                            while (point_parser.next()) |p2| {
-                                const p3 = point_parser.next() orelse @panic("invalid cubic");
-                                var p1: PointF32 = undefined;
-
-                                if (self.c2) |c2| {
-                                    p1 = self.encoder.currentPoint().mulScalar(2.0).min(c2);
-                                } else {
-                                    p1 = self.encoder.currentPoint();
-                                }
-
-                                switch (self.state.draw_position) {
-                                    .absolute => {
-                                        try self.encoder.cubicToPoint(p1, p2, p3);
-                                        self.c2 = p2;
-                                    },
-                                    .relative => {
-                                        const current = self.encoder.currentPoint();
-                                        try self.encoder.cubicToPoint(p1, p2.add(current), p3.add(current));
-                                        self.c2 = p2;
-                                    },
-                                }
-                            }
-                        },
-                        .close => {
-                            self.encoder.finish();
-                        },
-                        else => @panic("unsupported draw state"),
-                    }
-                },
-                .done => {
-                    return false;
-                },
-            }
-
-            self.state = self.parseNextState();
-            return self.state.parser_state == .draw;
-        }
-
-        fn parseNextState(self: *@This()) State {
-            self.parser.skipWhitespace();
-            if (self.parser.readByte()) |byte| {
-                return switch (byte) {
-                    'M' => State.draw(.move_to, .absolute),
-                    'm' => State.draw(.move_to, .absolute),
-                    'H' => State.draw(.horizontal_line_to, .absolute),
-                    'h' => State.draw(.horizontal_line_to, .relative),
-                    'V' => State.draw(.vertical_line_to, .absolute),
-                    'v' => State.draw(.vertical_line_to, .relative),
-                    'L' => State.draw(.line_to, .absolute),
-                    'l' => State.draw(.line_to, .relative),
-                    'Q' => State.draw(.quad_to, .absolute),
-                    'q' => State.draw(.quad_to, .relative),
-                    'C' => State.draw(.cubic_to, .absolute),
-                    'c' => State.draw(.cubic_to, .relative),
-                    'S' => State.draw(.smooth_cubic_to, .absolute),
-                    's' => State.draw(.smooth_cubic_to, .relative),
-                    'z' => State.draw(.close, .absolute),
-                    else => @panic("unsupported path movement"),
-                };
-            }
-
-            return State.DONE;
-        }
-
-        pub const State = struct {
-            pub const START: State = State{
-                .parser_state = .start,
-            };
-            pub const DONE: State = State{
-                .parser_state = .done,
-            };
-
-            parser_state: ParserState = .start,
-            draw_state: DrawState = .move_to,
-            draw_position: DrawPosition = .absolute,
-
-            pub fn draw(draw_state: DrawState, draw_position: DrawPosition) State {
-                return State{
-                    .parser_state = .draw,
-                    .draw_state = draw_state,
-                    .draw_position = draw_position,
-                };
-            }
-        };
-
-        pub const ParserState = enum {
-            start,
-            draw,
-            done,
-        };
-
-        pub const DrawPosition = enum {
-            absolute,
-            relative,
-        };
-
-        pub const DrawState = enum {
-            move_to,
-            line_to,
-            horizontal_line_to,
-            vertical_line_to,
-            arc_to,
-            quad_to,
-            smooth_quad_to,
-            cubic_to,
-            smooth_cubic_to,
-            close,
-        };
-    };
-
-    pub const PointParser = struct {
-        float_parser: FloatParser,
-
-        pub fn create(parser: *Parser) @This() {
-            return @This(){
-                .float_parser = FloatParser{
-                    .parser = parser,
-                },
-            };
-        }
-
-        pub fn next(self: *@This()) ?PointF32 {
-            const x = self.float_parser.next() orelse return null;
-            const y = self.float_parser.next() orelse return null;
-
-            return PointF32{
-                .x = x,
-                .y = y,
-            };
-        }
-    };
-
-    pub const FloatParser = struct {
-        parser: *Parser,
-
-        pub fn next(self: *@This()) ?f32 {
-            self.parser.skipWhitespace();
-
-            var next_byte = self.parser.peekByte() orelse return null;
-            if (next_byte == ',') {
-                _ = self.parser.readByte();
-                self.parser.skipWhitespace();
-                next_byte = self.parser.peekByte() orelse return null;
-            }
-
-            if (Parser.isDigit(next_byte) or next_byte == '-') {
-                const x = self.parser.readF32() orelse @panic("invalid float");
-                self.parser.skipWhitespace();
-                return x;
-            }
-
-            return null;
-        }
-    };
 
     pub const Parser = struct {
         bytes: []const u8,
@@ -798,5 +513,399 @@ pub const Svg = struct {
         pub fn isDigit(byte: u8) bool {
             return (byte >= '0' and byte <= '9');
         }
+    };
+};
+
+pub const PathParser = struct {
+    tokenizer: *PathTokenizer,
+    path_encoder: *PathEncoderF32,
+    draw_mode: ?PathTokenizer.DrawMode = null,
+    last_point: ?PointF32 = null,
+    last_control_point: ?PointF32 = null,
+
+    pub fn create(tokenizer: *PathTokenizer, path_encoder: *PathEncoderF32) @This() {
+        return @This(){
+            .tokenizer = tokenizer,
+            .path_encoder = path_encoder,
+        };
+    }
+
+    pub fn encode(self: *@This()) bool {
+        while (self.tokenizer.next()) |token| {
+            switch (token) {
+                .draw_mode => |draw_mode| {
+                    self.setDrawMode(draw_mode);
+                },
+                .points => |points| {
+                    self.drawPoints(&points);
+                },
+            }
+        }
+    }
+
+    pub fn setDrawMode(self: *@This(), new_draw_mode: PathTokenizer.DrawMode) void {
+        self.draw_mode = new_draw_mode;
+
+        if (!new_draw_mode.isCubic()) {
+            self.last_control_point = null;
+        }
+    }
+
+    pub fn drawPoints(self: *@This(), points: *PathTokenizer.PointIterator) void {
+        const draw_mode = self.draw_mode orelse @panic("not drawing");
+
+        switch (draw_mode.draw) {
+            .move_to => {
+                while (self.nextPoint(points, draw_mode.position)) |point| {
+                    try self.path_encoder.moveToPoint(point);
+                }
+                self.last_control_point = null;
+            },
+            .horizontal_line_to => {
+                while (self.nextHorizontalPoint(points, draw_mode.position)) |point| {
+                    try self.path_encoder.lineToPoint(point);
+                }
+                self.last_control_point = null;
+            },
+            .vertical_line_to => {
+                while (self.nextVerticalPoint(points, draw_mode.position)) |point| {
+                    try self.path_encoder.lineToPoint(point);
+                }
+                self.last_control_point = null;
+            },
+            .line_to => {
+                while (self.nextPoint(points, draw_mode.position)) |point| {
+                    try self.path_encoder.lineToPoint(point);
+                }
+                self.last_control_point = null;
+            },
+            .quad_to => {
+                while (self.nextPoint(points, draw_mode.position)) |p1| {
+                    const p2 = self.nextPoint(points, draw_mode.position) orelse @panic("invalid quad_to");
+                    try self.path_encoder.quadToPoint(p1, p2);
+                }
+                self.last_control_point = null;
+            },
+            .cubic_to => {
+                while (self.nextPoint(points, draw_mode.position)) |p1| {
+                    const p2 = self.nextPoint(points, draw_mode.position) orelse @panic("invalid cubic_to");
+                    const p3 = self.nextPoint(points, draw_mode.position) orelse @panic("invalid cubic_to");
+
+                    self.last_control_point = p2;
+                    try self.path_encoder.cubicToPoint(p1, p2, p3);
+                }
+            },
+            .smooth_cubic_to => {
+                while (true) {
+                    const previous_point = self.getPreviousPoint();
+                    var p1 = previous_point;
+                    if (self.last_control_point) |ctl| {
+                        p1 = p1.mulScalar(2.0).sub(ctl);
+                    }
+
+                    const p2 = self.nextPoint(points, draw_mode.position) orelse break;
+                    const p3 = self.nextPoint(points, draw_mode.position) orelse @panic("invalid smooth_cubic_to");
+
+                    self.last_control_point = p2;
+                    try self.path_encoder.cubicToPoint(p1, p2, p3);
+                }
+            },
+            .close => {
+                self.path_encoder.close();
+            },
+        }
+    }
+
+    pub fn nextPoint(
+        self: *@This(),
+        points: *PathTokenizer.PointIterator,
+        position: PathTokenizer.Position,
+    ) ?PointF32 {
+        var next_point = points.next() orelse return null;
+
+        if (position == .relative) {
+            next_point = next_point.add(self.getPreviousPoint());
+        }
+
+        self.last_point = next_point;
+        return next_point;
+    }
+
+    pub fn nextHorizontalPoint(
+        self: *@This(),
+        points: *PathTokenizer.PointIterator,
+        position: PathTokenizer.Position,
+    ) ?PointF32 {
+        const next_float = points.nextFloat() orelse return null;
+        const previous_point = self.getPreviousPoint();
+        var point = PointF32.create(previous_point.x, next_float);
+
+        if (position == .relative) {
+            point.y += previous_point.y;
+        }
+
+        self.last_point = point;
+        return point;
+    }
+
+    pub fn nextVerticalPoint(
+        self: *@This(),
+        points: *PathTokenizer.PointIterator,
+        position: PathTokenizer.Position,
+    ) ?PointF32 {
+        const next_float = points.nextFloat() orelse return null;
+        const previous_point = self.getPreviousPoint();
+        var point = PointF32.create(next_float, previous_point.y);
+
+        if (position == .relative) {
+            point.x += previous_point.x;
+        }
+
+        self.last_point = point;
+        return point;
+    }
+
+    pub fn getPreviousPoint(self: @This()) PointF32 {
+        if (self.last_point) |last_point| {
+            return last_point;
+        }
+
+        return PointF32{};
+    }
+};
+
+pub const PathTokenizer = struct {
+    bytes: []const u8,
+    index: u32 = 0,
+
+    pub fn create(bytes: []const u8) @This() {
+        return @This(){
+            .bytes = bytes,
+        };
+    }
+
+    pub fn next(self: *@This()) ?Token {
+        self.skip();
+        const next_byte = self.peekByte() orelse return null;
+
+        switch (next_byte) {
+            'M' => {
+                self.advance();
+                return Token.drawMode(.move_to, .absolute);
+            },
+            'm' => {
+                self.advance();
+                return Token.drawMode(.move_to, .relative);
+            },
+            'H' => {
+                self.advance();
+                return Token.drawMode(.horizontal_line_to, .absolute);
+            },
+            'h' => {
+                self.advance();
+                return Token.drawMode(.horizontal_line_to, .relative);
+            },
+            'V' => {
+                self.advance();
+                return Token.drawMode(.vertical_line_to, .absolute);
+            },
+            'v' => {
+                self.advance();
+                return Token.drawMode(.vertical_line_to, .relative);
+            },
+            'L' => {
+                self.advance();
+                return Token.drawMode(.line_to, .absolute);
+            },
+            'l' => {
+                self.advance();
+                return Token.drawMode(.line_to, .relative);
+            },
+            'Q' => {
+                self.advance();
+                return Token.drawMode(.quad_to, .absolute);
+            },
+            'q' => {
+                self.advance();
+                return Token.drawMode(.quad_to, .relative);
+            },
+            'C' => {
+                self.advance();
+                return Token.drawMode(.cubic_to, .absolute);
+            },
+            'c' => {
+                self.advance();
+                return Token.drawMode(.cubic_to, .relative);
+            },
+            'S' => {
+                self.advance();
+                return Token.drawMode(.smooth_cubic_to, .absolute);
+            },
+            's' => {
+                self.advance();
+                return Token.drawMode(.smooth_cubic_to, .relative);
+            },
+            'Z' => {
+                self.advance();
+                return Token.drawMode(.vertical_line_to, .absolute);
+            },
+            'z' => {
+                self.advance();
+                return Token.drawMode(.vertical_line_to, .absolute);
+            },
+            else => {
+                // continue for further processing
+            },
+        }
+
+        if (isStartPoint(next_byte)) {
+            return Token{
+                .points = PointIterator.create(self),
+            };
+        }
+
+        @panic("invalid path");
+    }
+
+    pub fn peekByte(self: @This()) ?u8 {
+        if (self.index >= self.bytes.len) {
+            return null;
+        }
+
+        return self.bytes[self.index];
+    }
+
+    pub fn skip(self: *@This()) void {
+        var end_index = self.index;
+        while (self.peekByte()) |byte| {
+            if (!isSkip(byte)) {
+                break;
+            }
+
+            end_index += 1;
+        }
+
+        self.index = end_index;
+    }
+
+    pub fn advance(self: *@This()) void {
+        self.index += 1;
+    }
+
+    pub fn readF32(self: *@This()) !f32 {
+        const start_index = self.index;
+        var end_index = self.index + 1;
+
+        while (self.peekByte()) |byte| {
+            if (!isFloatByte(byte)) {
+                break;
+            }
+
+            end_index += 1;
+        }
+
+        const float_bytes = self.bytes[start_index..end_index];
+        return try std.fmt.parseFloat(f32, float_bytes);
+    }
+
+    pub fn isStartPoint(byte: u8) bool {
+        return isDigit(byte) or byte == '-';
+    }
+
+    pub fn isFloatByte(byte: u8) bool {
+        return isDigit(byte) or byte == '.';
+    }
+
+    pub fn isDigit(byte: u8) bool {
+        return byte >= '0' and byte <= '9';
+    }
+
+    pub fn isSkip(byte: u8) bool {
+        return isWhitespace(byte) or byte == ',';
+    }
+
+    pub fn isWhitespace(byte: u8) bool {
+        return byte == ' ' or byte == '\n' or byte == '\r' or byte == '\t';
+    }
+
+    pub const PointIterator = struct {
+        tokenizer: *PathTokenizer,
+
+        pub fn create(tokenizer: *PathTokenizer) PointIterator {
+            return @This(){
+                .tokenizer = tokenizer,
+            };
+        }
+
+        pub fn next(self: *@This()) ?PointF32 {
+            self.tokenizer.skip();
+            const next_byte = self.tokenizer.peekByte() orelse return null;
+
+            if (!isStartPoint(next_byte)) {
+                return null;
+            }
+
+            const x = self.tokenizer.readF32() catch @panic("invalid point");
+            const y = self.tokenizer.readF32() catch @panic("invalid point");
+
+            return PointF32.create(x, y);
+        }
+
+        pub fn nextFloat(self: *@This()) ?f32 {
+            self.tokenizer.skip();
+            const next_byte = self.tokenizer.peekByte() orelse return null;
+
+            if (!isStartPoint(next_byte)) {
+                return null;
+            }
+
+            const x = self.tokenizer.readF32() catch @panic("invalid point");
+            return x;
+        }
+    };
+
+    pub const Token = union(enum) {
+        draw_mode: DrawMode,
+        points: PointIterator,
+
+        pub fn drawMode(d: Draw, p: Position) @This() {
+            return @This(){
+                .draw_mode = DrawMode.create(d, p),
+            };
+        }
+    };
+
+    pub const DrawMode = struct {
+        draw: Draw,
+        position: Position,
+
+        pub fn create(d: Draw, p: Position) @This() {
+            return @This(){
+                .draw = d,
+                .position = p,
+            };
+        }
+
+        pub fn isCubic(self: @This()) bool {
+            return self.draw == .cubic_to or self.draw == .smooth_cubic_to;
+        }
+    };
+
+    pub const Draw = enum {
+        move_to,
+        line_to,
+        horizontal_line_to,
+        vertical_line_to,
+        arc_to,
+        quad_to,
+        smooth_quad_to,
+        cubic_to,
+        smooth_cubic_to,
+        close,
+    };
+
+    pub const Position = enum {
+        absolute,
+        relative,
     };
 };
