@@ -702,14 +702,16 @@ pub fn PathEncoder(comptime T: type) type {
             }
 
             cap_and_close_fill: {
-                const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset) orelse break :cap_and_close_fill;
-                const end_point = self.encoder.pathTailSegment(PPoint) orelse break :cap_and_close_fill;
+                const start_point_p = self.encoder.pathSegment(PPoint, self.start_subpath_offset) orelse break :cap_and_close_fill;
+                const end_point_p = self.encoder.pathTailSegment(PPoint) orelse break :cap_and_close_fill;
+                const start_point = start_point_p.*;
+                const end_point = end_point_p.*;
 
-                if (!std.meta.eql(start_point.*, end_point.*)) {
+                if (!std.meta.eql(start_point, end_point)) {
                     self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
 
                     if (self.is_fill) {
-                        self.lineToPoint(start_point.*) catch @panic("could not close subpath");
+                        self.lineToPoint(start_point) catch @panic("could not close subpath");
                     }
 
                     if (self.encoder.currentPathTag()) |tag| {
@@ -916,7 +918,7 @@ pub fn PathEncoder(comptime T: type) type {
 
             fn lineTo(ctx: *anyopaque, p1: PointF32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                _ = b.lineToPoint(p1) catch {
+                b.lineToPoint(p1) catch {
                     unreachable;
                 };
             }
