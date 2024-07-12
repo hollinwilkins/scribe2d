@@ -635,6 +635,19 @@ pub const Flatten = struct {
         back_line_writer: *LineWriter,
     ) void {
         const path_tag = path_tags[segment_index];
+        const path_monoid = path_monoids[segment_index];
+        const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) subpaths[path_monoid.subpath_index + 1] else null;
+        var last_subpath_segment_index: u32 = undefined;
+        if (next_subpath) |ns| {
+            last_subpath_segment_index = ns.segment_index;
+        } else {
+            last_subpath_segment_index = @intCast(path_tags.len - 1);
+        }
+
+        if (path_tag.segment.cap and path_monoid.segment_index == last_subpath_segment_index) {
+            front_line_writer.close();
+            back_line_writer.close();
+        }
 
         if (path_tag.isArc()) {
             flattenStrokeArc(

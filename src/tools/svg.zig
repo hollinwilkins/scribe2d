@@ -74,7 +74,7 @@ pub fn main() !void {
         .format = draw.TextureFormat.RgbU8,
         .bytes = image.data,
     };
-    texture.clear(draw.Colors.WHITE);
+    texture.clear(draw.Colors.BLACK);
 
     try rasterizer.rasterize(&texture);
 
