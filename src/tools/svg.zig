@@ -46,7 +46,7 @@ pub fn main() !void {
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        .debug_single_pass = true,
+        // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
         // .flush_texture_span = false,
     };
@@ -74,7 +74,7 @@ pub fn main() !void {
         .format = draw.TextureFormat.RgbU8,
         .bytes = image.data,
     };
-    texture.clear(draw.Colors.BLACK);
+    texture.clear(draw.Colors.WHITE);
 
     try rasterizer.rasterize(&texture);
 

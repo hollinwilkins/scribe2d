@@ -441,7 +441,7 @@ pub const Svg = struct {
                                 var p1: PointF32 = undefined;
 
                                 if (self.c2) |c2| {
-                                    p1 = c2.reflectOn(self.encoder.currentPoint());
+                                    p1 = self.encoder.currentPoint().mulScalar(2.0).min(c2);
                                 } else {
                                     p1 = self.encoder.currentPoint();
                                 }
@@ -582,7 +582,6 @@ pub const Svg = struct {
             }
 
             if (Parser.isDigit(next_byte) or next_byte == '-') {
-                self.parser.skipWhitespace();
                 const x = self.parser.readF32() orelse @panic("invalid float");
                 self.parser.skipWhitespace();
                 return x;
@@ -668,6 +667,7 @@ pub const Svg = struct {
         }
 
         pub fn readF32(self: *@This()) ?f32 {
+            const real_start_index = self.index;
             var start_index = self.index;
             var end_index = self.index;
 
@@ -686,12 +686,12 @@ pub const Svg = struct {
                 end_index += 1;
             }
 
-            if (start_index == end_index) {
+            if (real_start_index == end_index) {
                 return null;
             }
             self.index = end_index;
 
-            const float_bytes = self.bytes[start_index..end_index];
+            const float_bytes = self.bytes[real_start_index..end_index];
             std.debug.print("FLoat Bytes: {s}\n", .{float_bytes});
             const value = std.fmt.parseFloat(
                 f32,
