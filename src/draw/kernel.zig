@@ -586,6 +586,7 @@ pub const Flatten = struct {
 
         if (path_tag.isArc()) {
             const arc_points = getArcPoints(
+                config,
                 path_tag,
                 path_monoid,
                 segment_data,
@@ -701,6 +702,7 @@ pub const Flatten = struct {
         }
 
         const arc_points = getArcPoints(
+            config,
             path_tag,
             path_monoid,
             segment_data,
@@ -1433,7 +1435,7 @@ pub const Flatten = struct {
         };
     }
 
-    pub fn getArcPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) ArcF32 {
+    pub fn getArcPoints(config: KernelConfig, path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) ArcF32 {
         const sd = SegmentData{
             .segment_data = segment_data,
         };
@@ -1451,8 +1453,28 @@ pub const Flatten = struct {
             },
         }
 
-        const line1 = LineF32.create(arc_points.p0, arc_points.p1);
-        const line2 = LineF32.create(arc_points.p1, arc_points.p2);
+        var line1 = LineF32.create(arc_points.p0, arc_points.p1);
+        var line2 = LineF32.create(arc_points.p1, arc_points.p2);
+        const delta_y1 = line1.p1.y - line1.p0.y;
+        const delta_x1 = line1.p1.x - line1.p0.x;
+        const delta_y2 = line2.p1.y - line2.p0.y;
+        const delta_x2 = line2.p1.x - line2.p0.x;
+
+        if (delta_y1 < config.robust_eps) {
+            line1.p0.y = line1.p0.y;
+        }
+
+        if (delta_x1 < config.robust_eps) {
+            line1.p0.x = line1.p0.x;
+        }
+
+        if (delta_y2 < config.robust_eps) {
+            line2.p0.y = line2.p0.y;
+        }
+
+        if (delta_x2 < config.robust_eps) {
+            line2.p0.x = line2.p0.x;
+        }
 
         // calculate normals
         var normal1 = line1.normal();
@@ -1551,6 +1573,7 @@ pub const Flatten = struct {
         var tangent: PointF32 = undefined;
         if (next_path_tag.isArc()) {
             const arc_points = getArcPoints(
+                config,
                 next_path_tag,
                 next_path_monoid,
                 segment_data,
