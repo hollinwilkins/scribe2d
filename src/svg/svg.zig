@@ -191,11 +191,9 @@ pub const Svg = struct {
         if (path_el.attr("d")) |path| {
             var path_encoder = encoder.pathEncoder(f32);
             defer path_encoder.finish();
-            var iterator = PathParser{
-                .parser = Parser.create(path),
-                .encoder = &path_encoder,
-            };
-            while (try iterator.encodeNext()) {}
+
+            var path_parser = PathParser.create(path, &path_encoder);
+            try path_parser.encode();
         }
     }
 
@@ -382,6 +380,8 @@ pub const Svg = struct {
         }
 
         pub fn readF32(self: *@This()) ?f32 {
+            self.skipWhitespace();
+            self.skipComma();
             const real_start_index = self.index;
             var start_index = self.index;
             var end_index = self.index;
@@ -485,6 +485,13 @@ pub const Svg = struct {
             }
         }
 
+        pub fn skipComma(self: *@This()) void {
+            const next_byte = self.peekByte() orelse return;
+            if (next_byte == ',') {
+                _ = self.readByte();
+            }
+        }
+
         fn err(self: *@This()) bool {
             self.index = @intCast(self.bytes.len);
             return false;
@@ -517,27 +524,28 @@ pub const Svg = struct {
 };
 
 pub const PathParser = struct {
-    tokenizer: *PathTokenizer,
+    tokenizer: PathTokenizer,
     path_encoder: *PathEncoderF32,
     draw_mode: ?PathTokenizer.DrawMode = null,
     last_point: ?PointF32 = null,
     last_control_point: ?PointF32 = null,
 
-    pub fn create(tokenizer: *PathTokenizer, path_encoder: *PathEncoderF32) @This() {
+    pub fn create(path: []const u8, path_encoder: *PathEncoderF32) @This() {
         return @This(){
-            .tokenizer = tokenizer,
+            .tokenizer = PathTokenizer.create(path),
             .path_encoder = path_encoder,
         };
     }
 
-    pub fn encode(self: *@This()) bool {
+    pub fn encode(self: *@This()) !void {
         while (self.tokenizer.next()) |token| {
             switch (token) {
                 .draw_mode => |draw_mode| {
                     self.setDrawMode(draw_mode);
                 },
                 .points => |points| {
-                    self.drawPoints(&points);
+                    var points2 = points;
+                    try self.drawPoints(&points2);
                 },
             }
         }
@@ -551,7 +559,7 @@ pub const PathParser = struct {
         }
     }
 
-    pub fn drawPoints(self: *@This(), points: *PathTokenizer.PointIterator) void {
+    pub fn drawPoints(self: *@This(), points: *PathTokenizer.PointIterator) !void {
         const draw_mode = self.draw_mode orelse @panic("not drawing");
 
         switch (draw_mode.draw) {
@@ -776,16 +784,13 @@ pub const PathTokenizer = struct {
     }
 
     pub fn skip(self: *@This()) void {
-        var end_index = self.index;
         while (self.peekByte()) |byte| {
             if (!isSkip(byte)) {
                 break;
             }
 
-            end_index += 1;
+            self.advance();
         }
-
-        self.index = end_index;
     }
 
     pub fn advance(self: *@This()) void {
@@ -796,15 +801,18 @@ pub const PathTokenizer = struct {
         const start_index = self.index;
         var end_index = self.index + 1;
 
+        self.advance();
         while (self.peekByte()) |byte| {
             if (!isFloatByte(byte)) {
                 break;
             }
 
+            self.advance();
             end_index += 1;
         }
 
         const float_bytes = self.bytes[start_index..end_index];
+        std.debug.print("Float Bytes: {s}\n", .{float_bytes});
         return try std.fmt.parseFloat(f32, float_bytes);
     }
 
@@ -846,6 +854,7 @@ pub const PathTokenizer = struct {
             }
 
             const x = self.tokenizer.readF32() catch @panic("invalid point");
+            self.tokenizer.skip();
             const y = self.tokenizer.readF32() catch @panic("invalid point");
 
             return PointF32.create(x, y);
@@ -896,9 +905,7 @@ pub const PathTokenizer = struct {
         line_to,
         horizontal_line_to,
         vertical_line_to,
-        arc_to,
         quad_to,
-        smooth_quad_to,
         cubic_to,
         smooth_cubic_to,
         close,
