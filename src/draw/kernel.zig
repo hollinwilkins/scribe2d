@@ -1152,7 +1152,7 @@ pub const Flatten = struct {
                                 s = (inv - b) / a;
                                 // TODO: why is this needed?
                                 // render roboto medium codepoint 400 at 400px with outline_width = 4.0 to see issue
-                                s = std.math.clamp(s, 0.0, 1.0);
+                                // s = std.math.clamp(s, 0.0, 1.0);
                             },
                         }
                         lp1 = es.applyOffset(s, normalized_offset);
@@ -1385,7 +1385,7 @@ pub const Flatten = struct {
             var a: f32 = undefined;
 
             if (y < 0.7010707591262915) {
-                a = std.math.asin(x * config.sin_scale * (1.0 / config.sin_scale));
+                a = std.math.asin(x * config.sin_scale) * (1.0 / config.sin_scale);
             } else if (y < 0.903249293595206) {
                 const b = y - (std.math.pi / 4.0);
                 const u = std.math.copysign(std.math.pow(f32, @abs(b), 2.0 / 3.0), b);
