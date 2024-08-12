@@ -23,6 +23,12 @@ pub fn main() !void {
 
     try svg.encode(&encoder);
 
+    const bigger = (core.TransformF32{
+        .scale = core.PointF32.create(2.0, 2.0),
+    }).toAffine();
+    for (encoder.transforms.items) |*tf| {
+        tf.* = bigger.mul(tf.*);
+    }
     const bounds = encoder.calculateBounds();
 
     const center = (core.TransformF32{
@@ -45,11 +51,11 @@ pub fn main() !void {
 
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        .debug_flags = 0,
-        // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
+        // .debug_flags = 0,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
-        // .flush_texture_span = false,
+        .flush_texture_span = false,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,

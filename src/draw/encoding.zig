@@ -1506,6 +1506,10 @@ pub const BoundaryFragment = struct {
     pub fn getIntensity(self: @This()) f32 {
         return @as(f32, @floatFromInt(@popCount(self.stencil_mask))) / 16.0;
     }
+
+    pub fn debugPrint(self: @This()) void {
+        self.masks.debugPrint();
+    }
 };
 
 pub const GridIntersection = struct {
