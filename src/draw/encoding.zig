@@ -1503,6 +1503,41 @@ pub const BoundaryFragment = struct {
         return 0.0;
     }
 
+    pub fn maskStencil(
+        comptime fill_rule: Style.FillRule,
+        merge_boundary_fragments: []const BoundaryFragment,
+    ) u16 {
+        std.debug.assert(merge_boundary_fragments.len > 0);
+
+        const main_ray_winding = merge_boundary_fragments[0].main_ray_winding;
+        var stencil_mask: u16 = 0;
+
+        // calculate stencil mask
+        for (0..16) |index| {
+            const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
+            var bit_winding: f32 = main_ray_winding;
+
+            for (merge_boundary_fragments) |boundary_fragment| {
+                const masks = boundary_fragment.masks;
+                const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
+                const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
+                const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
+                bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
+            }
+
+            switch (fill_rule) {
+                .non_zero => {
+                    stencil_mask |= @as(u16, @intFromBool(@as(i16, @intFromFloat(bit_winding)) != 0)) * bit_index;
+                },
+                .even_odd => {
+                    stencil_mask |= @as(u16, @intCast((@as(i16, @intFromFloat(bit_winding)) & 1))) * bit_index;
+                },
+            }
+        }
+
+        return stencil_mask;
+    }
+
     pub fn getIntensity(self: @This()) f32 {
         return @as(f32, @floatFromInt(@popCount(self.stencil_mask))) / 16.0;
     }

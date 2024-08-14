@@ -2231,50 +2231,9 @@ pub const Rasterize = struct {
 
         // calculate stencil mask
         merge_fragment.stencil_mask = switch (fill_rule) {
-            .non_zero => maskStencil(
-                .non_zero,
-                merge_fragment.main_ray_winding,
-                merge_boundary_fragments,
-            ),
-            .even_odd => maskStencil(
-                .even_odd,
-                merge_fragment.main_ray_winding,
-                merge_boundary_fragments,
-            ),
+            .non_zero => BoundaryFragment.maskStencil(.non_zero, merge_boundary_fragments),
+            .even_odd => BoundaryFragment.maskStencil(.even_odd, merge_boundary_fragments),
         };
-    }
-
-    pub fn maskStencil(
-        comptime fill_rule: Style.FillRule,
-        main_ray_winding: f32,
-        merge_boundary_fragments: []const BoundaryFragment,
-    ) u16 {
-        var stencil_mask: u16 = 0;
-
-        // calculate stencil mask
-        for (0..16) |index| {
-            const bit_index: u16 = @as(u16, 1) << @as(u4, @intCast(index));
-            var bit_winding: f32 = main_ray_winding;
-
-            for (merge_boundary_fragments) |boundary_fragment| {
-                const masks = boundary_fragment.masks;
-                const vertical_winding0 = masks.vertical_sign0 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask0 & bit_index != 0)));
-                const vertical_winding1 = masks.vertical_sign1 * @as(f32, @floatFromInt(@intFromBool(masks.vertical_mask1 & bit_index != 0)));
-                const horizontal_winding = masks.horizontal_sign * @as(f32, @floatFromInt(@intFromBool(masks.horizontal_mask & bit_index != 0)));
-                bit_winding += vertical_winding0 + vertical_winding1 + horizontal_winding;
-            }
-
-            switch (fill_rule) {
-                .non_zero => {
-                    stencil_mask |= @as(u16, @intFromBool(@as(i16, @intFromFloat(bit_winding)) != 0)) * bit_index;
-                },
-                .even_odd => {
-                    stencil_mask |= @as(u16, @intCast((@as(i16, @intFromFloat(bit_winding)) & 1))) * bit_index;
-                },
-            }
-        }
-
-        return stencil_mask;
     }
 };
 
