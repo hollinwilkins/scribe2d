@@ -53,7 +53,7 @@ pub fn main() !void {
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         // .debug_flags = 0,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
-        // .debug_single_pass = true,
+        .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
         .flush_texture_span = false,
     };
@@ -88,4 +88,39 @@ pub fn main() !void {
     rasterizer.debugPrint(texture);
 
     try image.writeToFile(output_file, .png);
+
+    // 91x61
+    const DEBUG_POINT: ?core.PointI32 = core.PointI32.create(91, 61);
+
+    if (DEBUG_POINT) |dbg_point| {
+        std.debug.print("===================== Debug Point: {} =====================\n", .{dbg_point});
+        std.debug.print("------------- Grid Intersections ------------\n", .{});
+        for (rasterizer.grid_intersections.items) |grid_intersection| {
+            if (std.meta.eql(grid_intersection.pixel, dbg_point)) {
+                std.debug.print("GridIntersection({},{}): T({})\n", .{
+                    grid_intersection.intersection.point.x,
+                    grid_intersection.intersection.point.y,
+                    grid_intersection.intersection.t,
+                });
+            }
+        }
+        std.debug.print("------------- End Grid Intersections ------------\n", .{});
+
+        std.debug.print("------------- Boundary Fragments ------------\n", .{});
+        for (rasterizer.boundary_fragments.items) |boundary_fragment| {
+            if (std.meta.eql(boundary_fragment.pixel, dbg_point)) {
+                std.debug.print("BoundaryFragment({},{})-({},{}): StencilMask({}), MainRayWinding({})\n", .{
+                    boundary_fragment.intersections[0].point.x,
+                    boundary_fragment.intersections[0].point.y,
+                    boundary_fragment.intersections[1].point.x,
+                    boundary_fragment.intersections[1].point.y,
+                    boundary_fragment.stencil_mask,
+                    boundary_fragment.main_ray_winding,
+                });
+                std.debug.print("-----\n", .{});
+                boundary_fragment.masks.debugPrint();
+            }
+        }
+        std.debug.print("------------- End Boundary Fragments ------------\n", .{});
+    }
 }
