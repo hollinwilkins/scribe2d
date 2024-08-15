@@ -1058,8 +1058,8 @@ pub const Subpath = struct {
 };
 
 pub const SegmentOffset = struct {
-    fill_offset: u32,
-    stroke_offset: u32,
+    fill_offset: u32 = 0,
+    stroke_offset: u32 = 0,
 
     pub usingnamespace MonoidFunctions(SegmentOffset, @This());
 
