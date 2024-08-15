@@ -1057,6 +1057,13 @@ pub const Subpath = struct {
     segment_index: u32 = 0,
 };
 
+pub const LineOffset = struct {
+    start_fill_offset: u32 = 0,
+    end_fill_offset: u32 = 0,
+    start_stroke_offset: u32 = 0,
+    end_stroke_offset: u32 = 0,
+};
+
 pub const SegmentOffset = struct {
     fill_offset: u32 = 0,
     stroke_offset: u32 = 0,

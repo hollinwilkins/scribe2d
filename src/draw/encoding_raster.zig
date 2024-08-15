@@ -32,14 +32,14 @@ const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 pub const CpuRasterizer = struct {
     pub const Config = struct {
         pub const RUN_FLAG_EXPAND_MONOIDS: u8 = 0b00000001;
-        pub const RUN_FLAG_ESTIMATE_SEGMENTS: u8 = 0b00000010;
+        pub const RUN_FLAG_ALLOCATE_LINES: u8 = 0b00000010;
         pub const RUN_FLAG_FLATTEN: u8 = 0b00000100;
         pub const RUN_FLAG_INTERSECT: u8 = 0b00001000;
         pub const RUN_FLAG_BOUNDARY: u8 = 0b00010000;
         pub const RUN_FLAG_MERGE: u8 = 0b00100000;
         pub const RUN_FLAG_MASK: u8 = 0b01000000;
         pub const RUN_FLAG_FLUSH_TEXTURE: u8 = 0b10000000;
-        pub const RUN_FLAG_ALL = RUN_FLAG_EXPAND_MONOIDS | RUN_FLAG_ESTIMATE_SEGMENTS |
+        pub const RUN_FLAG_ALL = RUN_FLAG_EXPAND_MONOIDS | RUN_FLAG_ALLOCATE_LINES |
             RUN_FLAG_FLATTEN | RUN_FLAG_INTERSECT | RUN_FLAG_BOUNDARY |
             RUN_FLAG_MERGE | RUN_FLAG_MASK | RUN_FLAG_FLUSH_TEXTURE;
 
@@ -58,12 +58,12 @@ pub const CpuRasterizer = struct {
             return self.runExpandMonoids() and self.debug_flags & RUN_FLAG_EXPAND_MONOIDS > 0;
         }
 
-        pub fn runEstimateSegments(self: @This()) bool {
-            return self.run_flags >= RUN_FLAG_ESTIMATE_SEGMENTS;
+        pub fn runAllocateLines(self: @This()) bool {
+            return self.run_flags >= RUN_FLAG_ALLOCATE_LINES;
         }
 
         pub fn debugEstimateSegments(self: @This()) bool {
-            return self.runEstimateSegments() and self.debug_flags & RUN_FLAG_ESTIMATE_SEGMENTS > 0;
+            return self.runAllocateLines() and self.debug_flags & RUN_FLAG_ALLOCATE_LINES > 0;
         }
 
         pub fn runFlatten(self: @This()) bool {
@@ -197,20 +197,18 @@ pub const CpuRasterizer = struct {
         // expand path monoids
         try self.expandMonoids();
 
-        if (!self.config.runEstimateSegments()) {
+        if (!self.config.runAllocateLines()) {
             return;
         }
 
         // estimate FlatEncoder memory requirements
         try self.allocateLines(&pool);
 
-        // if (!self.config.runFlatten()) {
-        //     return;
-        // }
+        if (!self.config.runFlatten()) {
+            return;
+        }
 
-        // // allocate the FlatEncoder
-        // // use the FlatEncoder to flatten the encoding
-        // try self.flatten(&pool);
+        try self.flatten(&pool);
 
         // // calculate scanline encoding
         // try self.kernelRasterize(&pool);
@@ -282,60 +280,63 @@ pub const CpuRasterizer = struct {
     }
 
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
-        var wg = std.Thread.WaitGroup{};
-        const last_segment_offset = self.segment_offsets.getLast();
-        var flat_segments: []FlatSegment = &.{};
-        var line_data: []u8 = &.{};
-        var intersections: []GridIntersection = &.{};
-        if (self.config.debug_single_pass) {
-            flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.sum.flat_segment);
-            line_data = try self.line_data.addManyAsSlice(self.allocator, last_segment_offset.sum.line_offset);
-            intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
-        }
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(
-            self.allocator,
-            last_segment_offset.sum.intersections,
-        );
+        _ = self;
+        _ = pool;
 
-        const flattener = kernel_module.Flatten{
-            .half_planes = self.half_planes,
-            .boundary_fragments = boundary_fragments,
-            .path_monoids = self.path_monoids.items,
-            .paths = self.paths.items,
-            .segment_offsets = self.segment_offsets.items,
-            .flat_segments = flat_segments,
-            .line_data = line_data,
-            .intersections = intersections,
-            .debug = self.config.debug_single_pass,
-        };
+        // var wg = std.Thread.WaitGroup{};
+        // const last_segment_offset = self.segment_offsets.getLast();
+        // var flat_segments: []FlatSegment = &.{};
+        // var line_data: []u8 = &.{};
+        // var intersections: []GridIntersection = &.{};
+        // if (self.config.debug_single_pass) {
+        //     flat_segments = try self.flat_segments.addManyAsSlice(self.allocator, last_segment_offset.sum.flat_segment);
+        //     line_data = try self.line_data.addManyAsSlice(self.allocator, last_segment_offset.sum.line_offset);
+        //     intersections = try self.grid_intersections.addManyAsSlice(self.allocator, last_segment_offset.sum.intersections);
+        // }
+        // const boundary_fragments = try self.boundary_fragments.addManyAsSlice(
+        //     self.allocator,
+        //     last_segment_offset.sum.intersections,
+        // );
 
-        const range = RangeU32{
-            .start = 0,
-            .end = @intCast(self.path_monoids.items.len),
-        };
-        var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
+        // const flattener = kernel_module.Flatten{
+        //     .half_planes = self.half_planes,
+        //     .boundary_fragments = boundary_fragments,
+        //     .path_monoids = self.path_monoids.items,
+        //     .paths = self.paths.items,
+        //     .segment_offsets = self.segment_offsets.items,
+        //     .flat_segments = flat_segments,
+        //     .line_data = line_data,
+        //     .intersections = intersections,
+        //     .debug = self.config.debug_single_pass,
+        // };
 
-        while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                kernel_module.Flatten.flatten,
-                .{
-                    flattener,
-                    self.config.kernel_config,
-                    self.encoding.path_tags,
-                    self.path_monoids.items,
-                    self.encoding.styles,
-                    self.encoding.transforms,
-                    self.subpaths.items,
-                    self.encoding.segment_data,
-                    chunk,
-                    self.paths.items,
-                    self.segment_offsets.items,
-                },
-            );
-        }
+        // const range = RangeU32{
+        //     .start = 0,
+        //     .end = @intCast(self.path_monoids.items.len),
+        // };
+        // var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
-        wg.wait();
+        // while (chunk_iter.next()) |chunk| {
+        //     pool.spawnWg(
+        //         &wg,
+        //         kernel_module.Flatten.flatten,
+        //         .{
+        //             flattener,
+        //             self.config.kernel_config,
+        //             self.encoding.path_tags,
+        //             self.path_monoids.items,
+        //             self.encoding.styles,
+        //             self.encoding.transforms,
+        //             self.subpaths.items,
+        //             self.encoding.segment_data,
+        //             chunk,
+        //             self.paths.items,
+        //             self.segment_offsets.items,
+        //         },
+        //     );
+        // }
+
+        // wg.wait();
     }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
