@@ -122,280 +122,13 @@ pub const KernelConfig = struct {
     }
 };
 
-pub const Estimate = struct {
-    const VIRTUAL_INTERSECTIONS: u32 = 2;
-    const INTERSECTION_FUDGE: u32 = 2;
-    const RSQRT_OF_TOL: f64 = 2.2360679775; // tol = 0.2
-    const CUBIC_FUDGE: f32 = 4.0;
-
-    pub const RoundArcEstimate = struct {
-        lines: u32 = 0,
-        length: f32 = 0.0,
-    };
-
-    pub fn estimateSegments(
-        config: KernelConfig,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
-        styles: []const Style,
-        transforms: []const TransformF32.Affine,
-        segment_data: []const u8,
-        range: RangeU32,
-        // outputs
-        segment_offsets: []SegmentOffset,
-    ) void {
-        for (range.start..range.end) |index| {
-            const path_tag = path_tags[index];
-            const path_monoid = path_monoids[index];
-            const style = getStyle(styles, path_monoid.style_index);
-            const transform = getTransform(transforms, path_monoid.transform_index);
-            const sd = SegmentData{
-                .segment_data = segment_data,
-            };
-
-            segment_offsets[index] = estimateSegment(
-                config,
-                path_tag,
-                path_monoid,
-                style,
-                transform,
-                sd,
-            );
-        }
-    }
-
-    fn estimateSegment(
-        config: KernelConfig,
-        path_tag: PathTag,
-        path_monoid: PathMonoid,
-        style: Style,
-        transform: TransformF32.Affine,
-        segment_data: SegmentData,
-    ) SegmentOffset {
-        var base = Offsets{};
-        var fill = Offsets{};
-        var front_stroke = Offsets{};
-        var back_stroke = Offsets{};
-
-        switch (path_tag.segment.kind) {
-            .line_f32 => {
-                const line = segment_data.getSegment(LineF32, path_monoid).affineTransform(transform);
-                base = estimateLine(line);
-            },
-            .line_i16 => {
-                const line = segment_data.getSegment(LineI16, path_monoid).cast(f32).affineTransform(transform);
-                base = estimateLine(line);
-            },
-            .arc_f32 => {
-                const arc = segment_data.getSegment(ArcF32, path_monoid).affineTransform(transform);
-                base = estimateArc(config, arc).mulScalar(CUBIC_FUDGE);
-            },
-            .arc_i16 => {
-                const arc = segment_data.getSegment(ArcI16, path_monoid).cast(f32).affineTransform(transform);
-                base = estimateArc(config, arc).mulScalar(CUBIC_FUDGE);
-            },
-            .quadratic_bezier_f32 => {
-                const qb = segment_data.getSegment(QuadraticBezierF32, path_monoid).affineTransform(transform);
-                base = estimateQuadraticBezier(qb).mulScalar(CUBIC_FUDGE);
-            },
-            .quadratic_bezier_i16 => {
-                const qb = segment_data.getSegment(QuadraticBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                base = estimateQuadraticBezier(qb).mulScalar(CUBIC_FUDGE);
-            },
-            .cubic_bezier_f32 => {
-                const cb = segment_data.getSegment(CubicBezierF32, path_monoid).affineTransform(transform);
-                base = estimateCubicBezier(cb).mulScalar(CUBIC_FUDGE);
-            },
-            .cubic_bezier_i16 => {
-                const cb = segment_data.getSegment(CubicBezierI16, path_monoid).cast(f32).affineTransform(transform);
-                base = estimateCubicBezier(cb).mulScalar(CUBIC_FUDGE);
-            },
-        }
-
-        if (style.isFill()) {
-            fill = base;
-            fill.flat_segment = 1;
-        }
-
-        if (style.isStroke()) {
-            // TODO: this still seems wrong
-            const scale = transform.getScale() * 0.5;
-            const stroke = style.stroke;
-            const scaled_width = @max(1.0, stroke.width) * scale;
-            const stroke_fudge = @max(1.0, std.math.sqrt(scaled_width));
-            const cap = estimateCap(config, path_tag, stroke, scaled_width);
-            const join = estimateJoin(config, stroke, scaled_width);
-            const base_stroke = base.mulScalar(stroke_fudge).combine(join);
-            front_stroke = base_stroke.combine(cap);
-            back_stroke = base_stroke;
-            front_stroke.flat_segment = 1;
-            back_stroke.flat_segment = 1;
-        }
-
-        return SegmentOffset.create(fill, front_stroke, back_stroke);
-    }
-
-    pub fn estimateJoin(config: KernelConfig, stroke: Style.Stroke, scaled_width: f32) Offsets {
-        switch (stroke.join) {
-            .bevel => {
-                return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
-            },
-            .miter => {
-                const MITER_FUDGE: u32 = 2;
-                return Offsets.create(2, estimateLineWidthIntersections(scaled_width) * 2 * MITER_FUDGE);
-            },
-            .round => {
-                const arc_estimate = estimateRoundArc(config, scaled_width);
-                return Offsets.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
-            },
-        }
-    }
-
-    pub fn estimateCap(config: KernelConfig, path_tag: PathTag, stroke: Style.Stroke, scaled_width: f32) Offsets {
-        if (path_tag.segment.cap) {
-            const is_start_cap = path_tag.index.subpath == 1;
-            const cap = if (is_start_cap) stroke.start_cap else stroke.end_cap;
-
-            switch (cap) {
-                .butt => {
-                    return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
-                },
-                .square => {
-                    return Offsets.create(3, estimateLineWidthIntersections(scaled_width) * 2);
-                },
-                .round => {
-                    const arc_estimate = estimateRoundArc(config, scaled_width);
-                    return Offsets.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
-                },
-            }
-        }
-
-        return Offsets{};
-    }
-
-    pub fn estimateLineWidth(scaled_width: f32) Offsets {
-        return Offsets.create(1, estimateLineWidthIntersections(scaled_width));
-    }
-
-    pub fn estimateLineWidthIntersections(scaled_width: f32) u32 {
-        const dxdy = PointF32{
-            .x = scaled_width,
-            .y = scaled_width,
-        };
-
-        const intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
-        return @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
-    }
-
-    pub fn estimateLine(line: LineF32) Offsets {
-        const dxdy = line.p1.sub(line.p0);
-        var intersections: u32 = @intFromFloat(@ceil(@abs(dxdy.x)) + @ceil(@abs(dxdy.y)));
-        intersections = @max(1, intersections) + VIRTUAL_INTERSECTIONS + INTERSECTION_FUDGE;
-
-        return Offsets.create(1, intersections);
-    }
-
-    pub fn estimateArc(config: KernelConfig, arc: ArcF32) Offsets {
-        const width = arc.p0.sub(arc.p1).length() + arc.p2.sub(arc.p1).length();
-        const arc_estimate = estimateRoundArc(config, width);
-
-        return Offsets.create(arc_estimate.lines, estimateLineWidthIntersections(arc_estimate.length));
-    }
-
-    pub fn estimateQuadraticBezier(quadratic_bezier: QuadraticBezierF32) Offsets {
-        const lines = @as(u32, @intFromFloat(Wang.quadratic(
-            @floatCast(RSQRT_OF_TOL),
-            quadratic_bezier.p0,
-            quadratic_bezier.p1,
-            quadratic_bezier.p2,
-        )));
-        const intersections = estimateStepCurveIntersections(
-            QuadraticBezierF32,
-            quadratic_bezier,
-            quadratic_bezier.p0,
-            quadratic_bezier.p2,
-            lines,
-        );
-
-        return Offsets.create(lines, intersections);
-    }
-
-    pub fn estimateCubicBezier(cubic_bezier: CubicBezierF32) Offsets {
-        const lines = @as(u16, @intFromFloat(Wang.cubic(
-            @floatCast(RSQRT_OF_TOL),
-            cubic_bezier.p0,
-            cubic_bezier.p1,
-            cubic_bezier.p2,
-            cubic_bezier.p3,
-        )));
-        const intersections = estimateStepCurveIntersections(
-            CubicBezierF32,
-            cubic_bezier,
-            cubic_bezier.p0,
-            cubic_bezier.p2,
-            lines,
-        );
-
-        return Offsets.create(lines, intersections);
-    }
-
-    pub fn estimateStepCurveIntersections(comptime T: type, curve: T, start: PointF32, end: PointF32, samples: u32) u32 {
-        var intersections: u32 = 0;
-        const step = 1.0 / @as(f32, @floatFromInt(samples));
-
-        var p0 = start;
-        for (0..samples - 1) |i| {
-            const p1 = curve.apply(@as(f32, @floatFromInt(i)) * step);
-            intersections += estimateLineWidthIntersections(p1.sub(p0).length());
-            p0 = p1;
-        }
-
-        const p1 = end;
-        intersections += estimateLineWidthIntersections(p1.sub(p0).length());
-
-        return intersections;
-    }
-
-    fn estimateRoundArc(config: KernelConfig, scaled_width: f32) RoundArcEstimate {
-        const radius = @max(config.error_tolerance, scaled_width * 0.5);
-        const theta = @max(config.min_theta2, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
-        const arc_lines = @max(2, @as(u16, @intFromFloat(@ceil((std.math.pi / 2.0) / theta))));
-
-        return RoundArcEstimate{
-            .lines = arc_lines,
-            .length = 2.0 * std.math.pi * radius,
-        };
-    }
-
-    pub const Wang = struct {
-        // The curve degree term sqrt(n * (n - 1) / 8) specialized for cubics:
-        //
-        //    sqrt(3 * (3 - 1) / 8)
-        //
-        const SQRT_OF_DEGREE_TERM_CUBIC: f32 = 0.86602540378;
-
-        // The curve degree term sqrt(n * (n - 1) / 8) specialized for quadratics:
-        //
-        //    sqrt(2 * (2 - 1) / 8)
-        //
-        const SQRT_OF_DEGREE_TERM_QUAD: f32 = 0.5;
-
-        pub fn quadratic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32) f32 {
-            const v = p1.add(p0).add(p2).mulScalar(-2.0);
-            const m = v.length();
-            return @ceil(SQRT_OF_DEGREE_TERM_QUAD * std.math.sqrt(m) * rsqrt_of_tol);
-        }
-
-        pub fn cubic(rsqrt_of_tol: f32, p0: PointF32, p1: PointF32, p2: PointF32, p3: PointF32) f32 {
-            const v1 = p1.add(p0).add(p2).mulScalar(-2.0);
-            const v2 = p2.add(p1).add(p3).mulScalar(-2.0);
-            const m = @max(v1.length(), v2.length());
-            return @ceil(SQRT_OF_DEGREE_TERM_CUBIC * std.math.sqrt(m) * rsqrt_of_tol);
-        }
-    };
+pub const FlattenMode = enum {
+    Calculate,
+    Flatten,
 };
 
 pub const Flatten = struct {
+    // pub const Flatten = struct {
     half_planes: *const HalfPlanesU16,
     path_monoids: []const PathMonoid,
     segment_offsets: []const SegmentOffset,
@@ -493,6 +226,73 @@ pub const Flatten = struct {
         };
     }
 
+    // pub fn flattenCount(
+    //     self: @This(),
+    //     config: KernelConfig,
+    //     path_tags: []const PathTag,
+    //     path_monoids: []const PathMonoid,
+    //     styles: []const Style,
+    //     transforms: []const TransformF32.Affine,
+    //     paths: []const Path,
+    //     subpaths: []const Subpath,
+    //     segment_data: []const u8,
+    //     range: RangeU32,
+    //     // outputs
+    // ) void {
+    //     for (range.start..range.end) |segment_index| {
+    //         const path_monoid = path_monoids[segment_index];
+    //         const style = getStyle(styles, path_monoid.style_index);
+    //         const path = &paths[path_monoid.path_index];
+    //     }
+    //     //     if (style.isFill()) {
+    //     //         var line_writer: LineWriter = self.createLineWriter(
+    //     //             .fill,
+    //     //             @intCast(segment_index),
+    //     //             flatten_offset,
+    //     //         );
+
+    //     //         flattenFill(
+    //     //             config,
+    //     //             @intCast(segment_index),
+    //     //             path_tags,
+    //     //             path_monoids,
+    //     //             transforms,
+    //     //             segment_data,
+    //     //             &line_writer,
+    //     //         );
+
+    //     //         var atomic_fill_bounds = AtomicBounds.createRect(&path.fill_bounds);
+    //     //         atomic_fill_bounds.extendBy(line_writer.bounds);
+    //     //     }
+
+    //     //     if (style.isStroke()) {
+    //     //         var front_line_writer: LineWriter = self.createLineWriter(
+    //     //             .stroke_front,
+    //     //             @intCast(segment_index),
+    //     //             flatten_offset,
+    //     //         );
+    //     //         var back_line_writer: LineWriter = self.createLineWriter(
+    //     //             .stroke_back,
+    //     //             @intCast(segment_index),
+    //     //             flatten_offset,
+    //     //         );
+
+    //     //         flattenStroke(
+    //     //             config,
+    //     //             style.stroke,
+    //     //             @intCast(segment_index),
+    //     //             path_tags,
+    //     //             path_monoids,
+    //     //             transforms,
+    //     //             subpaths,
+    //     //             segment_data,
+    //     //             &front_line_writer,
+    //     //             &back_line_writer,
+    //     //         );
+    //     //     }
+    //     // }
+    // }
+
     pub fn flatten(
         self: @This(),
         config: KernelConfig,
@@ -504,7 +304,6 @@ pub const Flatten = struct {
         segment_data: []const u8,
         range: RangeU32,
         // outputs
-        // true if path is used, false to ignore
         paths: []Path,
         segment_offsets: []SegmentOffset,
     ) void {
@@ -1644,32 +1443,25 @@ pub const Flatten = struct {
     }
 };
 
-pub const LineWriter = struct {
-    const GRID_POINT_TOLERANCE: f32 = 1e-6;
+pub const LineSum = struct {
+    count: u32,
 
-    half_planes: *const HalfPlanesU16,
-    bump: BumpAllocator,
-    bounds: RectF32 = RectF32.NONE,
-    lines: u32 = 0,
-    line_offset: u32 = 0,
-    intersection_offset: u32 = 0,
-    debug: bool = true,
-    previous_point: ?PointF32 = null,
-    previous_grid_intersection: ?GridIntersection = null,
-    reverse: bool = false,
-    flat_segment_index: u32 = 0,
-    flat_segment: FlatSegment,
-    flat_segments: []FlatSegment,
+    pub fn add(self: *@This()) void {
+        self.count += 1;
+    }
+};
+
+pub const LineWriter = struct {
     line_data: []u8,
-    intersections: []GridIntersection,
-    boundary_fragments: []BoundaryFragment,
+    bounds: RectF32 = RectF32.NONE,
+    line_offset: u32 = 0,
 
     pub fn write(self: *@This(), line: LineF32) void {
         if (std.meta.eql(line.p0, line.p1)) {
             return;
         }
 
-        if (self.previous_point) |previous_point| {
+        if (self.previousPoint()) |previous_point| {
             std.debug.assert(std.meta.eql(previous_point, line.p0));
             self.bounds.extendByInPlace(line.p1);
 
@@ -1685,264 +1477,321 @@ pub const LineWriter = struct {
                 self.addPoint(line.p1);
             }
         }
+    }
 
-        self.intersect(line);
+    fn previousPoint(self: @This()) ?PointF32 {
+        if (self.line_offset == 0) {
+            return null;
+        }
 
-        self.lines += 1;
+        std.mem.bytesAsValue(PointF32, self.line_data[self.line_offset - @sizeOf(PointF32) .. self.line_offset]);
     }
 
     fn addPoint(self: *@This(), point: PointF32) void {
         std.mem.bytesAsValue(PointF32, self.line_data[self.line_offset .. self.line_offset + @sizeOf(PointF32)]).* = point;
         self.line_offset += @sizeOf(PointF32);
     }
-
-    fn addIntersection(self: *@This(), grid_intersection: GridIntersection) void {
-        self.intersections[self.intersection_offset] = grid_intersection;
-        self.intersection_offset += 1;
-    }
-
-    fn intersect(self: *@This(), line: LineF32) void {
-        const start_point: PointF32 = line.apply(0.0);
-        const end_point: PointF32 = line.apply(1.0);
-        const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
-        const bounds: RectI32 = RectI32.create(PointI32{
-            .x = @intFromFloat(@ceil(bounds_f32.min.x)),
-            .y = @intFromFloat(@ceil(bounds_f32.min.y)),
-        }, PointI32{
-            .x = @intFromFloat(@floor(bounds_f32.max.x)),
-            .y = @intFromFloat(@floor(bounds_f32.max.y)),
-        });
-        const scan_bounds = RectF32.create(PointF32{
-            .x = @floatFromInt(bounds.min.x - 1),
-            .y = @floatFromInt(bounds.min.y - 1),
-        }, PointF32{
-            .x = @floatFromInt(bounds.max.x + 1),
-            .y = @floatFromInt(bounds.max.y + 1),
-        });
-
-        const start_intersection = GridIntersection.create(IntersectionF32{
-            .t = 0.0,
-            .point = start_point,
-        });
-        const end_intersection = GridIntersection.create(IntersectionF32{
-            .t = 1.0,
-            .point = end_point,
-        });
-
-        const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
-        const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
-        const start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
-        const end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
-        const start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
-        const end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
-        const inc_x: f32 = if (min_x) 1.0 else -1.0;
-        const inc_y: f32 = if (min_y) 1.0 else -1.0;
-
-        var start_x2 = start_x;
-        if (start_x == start_intersection.intersection.point.x) {
-            start_x2 += inc_x;
-        }
-
-        var end_x2 = end_x;
-        if (end_x == end_intersection.intersection.point.x) {
-            end_x2 -= inc_x;
-        }
-
-        var start_y2 = start_y;
-        if (start_y == start_intersection.intersection.point.y) {
-            start_y2 += inc_y;
-        }
-
-        var end_y2 = end_y;
-        if (end_y == end_intersection.intersection.point.y) {
-            end_y2 -= inc_y;
-        }
-
-        var scanner = Scanner{
-            .x_range = RangeF32{
-                .start = start_x2,
-                .end = end_x2,
-            },
-            .y_range = RangeF32{
-                .start = start_y2,
-                .end = end_y2,
-            },
-            .inc_x = inc_x,
-            .inc_y = inc_y,
-        };
-
-        // std.debug.print("S: ", .{});
-        self.writeIntersection(start_intersection);
-
-        var previous_x_intersection = start_intersection;
-        var previous_y_intersection = start_intersection;
-        while (scanner.nextX()) |x| {
-            if (scanX(x, line, scan_bounds)) |x_intersection| {
-                var diff_y: bool = undefined;
-
-                if (scanner.inc_y < 0.0 and x_intersection.intersection.point.y > scanner.y_range.start) {
-                    diff_y = false;
-                } else if (scanner.inc_y > 0.0 and x_intersection.intersection.point.y < scanner.y_range.start) {
-                    diff_y = false;
-                } else {
-                    diff_y = @abs(previous_x_intersection.pixel.y - x_intersection.pixel.y) >= 1;
-                }
-
-                var x_flushed: bool = false;
-                scan_y: {
-                    if (diff_y) {
-                        while (scanner.nextY()) |y| {
-                            if (scanY(y, line, scan_bounds)) |y_intersection| {
-                                if (!x_flushed and y_intersection.intersection.t > x_intersection.intersection.t) {
-                                    // TODO: there is probably a better way to handle this...
-                                    // this mallarky is possible because of floating point errors
-                                    // std.debug.print("X: ", .{});
-                                    self.writeIntersection(x_intersection);
-                                    previous_x_intersection = x_intersection;
-                                    x_flushed = true;
-                                }
-
-                                // std.debug.print("Y: ", .{});
-                                self.writeIntersection(y_intersection);
-                                previous_y_intersection = y_intersection;
-                            }
-
-                            const next_y = scanner.peekNextY();
-                            if (min_y and next_y > x_intersection.intersection.point.y) {
-                                break :scan_y;
-                            } else if (!min_y and next_y < x_intersection.intersection.point.y) {
-                                break :scan_y;
-                            }
-                        }
-                    }
-                }
-
-                if (!x_flushed) {
-                    // std.debug.print("X: ", .{});
-                    self.writeIntersection(x_intersection);
-                    previous_x_intersection = x_intersection;
-                }
-            }
-        }
-
-        while (scanner.nextY()) |y| {
-            if (scanY(y, line, scan_bounds)) |y_intersection| {
-                // std.debug.print("Y: ", .{});
-                self.writeIntersection(y_intersection);
-                previous_y_intersection = y_intersection;
-            }
-        }
-
-        // std.debug.print("E: ", .{});
-        self.writeIntersection(end_intersection);
-    }
-
-    fn writeIntersection(self: *@This(), grid_intersection: GridIntersection) void {
-        // std.debug.print("{}\n", .{grid_intersection.intersection});
-
-        if (self.debug) {
-            self.addIntersection(grid_intersection);
-        }
-
-        var grid_intersection2 = grid_intersection;
-        if (self.reverse) {
-            grid_intersection2 = grid_intersection.reverse();
-        }
-
-        if (self.previous_grid_intersection) |*previous| {
-            if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
-                // skip if exactly the same point
-                self.previous_grid_intersection = grid_intersection2;
-                return;
-            }
-
-            {
-                if (self.reverse) {
-                    self.writeBoundaryFragment(BoundaryFragment.create(
-                        self.half_planes,
-                        [_]*const GridIntersection{
-                            &grid_intersection2,
-                            previous,
-                        },
-                    ));
-                } else {
-                    self.writeBoundaryFragment(BoundaryFragment.create(
-                        self.half_planes,
-                        [_]*const GridIntersection{
-                            previous,
-                            &grid_intersection2,
-                        },
-                    ));
-                }
-            }
-
-            self.previous_grid_intersection = grid_intersection2;
-        } else {
-            self.previous_grid_intersection = grid_intersection2;
-            return;
-        }
-    }
-
-    fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
-        const boundary_fragment_index = self.bump.bump(1);
-        self.boundary_fragments[boundary_fragment_index] = boundary_fragment;
-    }
-
-    fn scanX(
-        grid_x: f32,
-        line: LineF32,
-        scan_bounds: RectF32,
-    ) ?GridIntersection {
-        const scan_line = LineF32.create(
-            PointF32{
-                .x = grid_x,
-                .y = scan_bounds.min.y,
-            },
-            PointF32{
-                .x = grid_x,
-                .y = scan_bounds.max.y,
-            },
-        );
-
-        if (line.intersectVerticalLine(scan_line)) |intersection| {
-            return GridIntersection.create(intersection);
-        }
-
-        return null;
-    }
-
-    fn scanY(
-        grid_y: f32,
-        line: LineF32,
-        scan_bounds: RectF32,
-    ) ?GridIntersection {
-        const scan_line = LineF32.create(
-            PointF32{
-                .x = scan_bounds.min.x,
-                .y = grid_y,
-            },
-            PointF32{
-                .x = scan_bounds.max.x,
-                .y = grid_y,
-            },
-        );
-
-        if (line.intersectHorizontalLine(scan_line)) |intersection| {
-            return GridIntersection.create(intersection);
-        }
-
-        return null;
-    }
-
-    pub fn close(self: *@This()) void {
-        if (self.debug) {
-            const flat_segment = &self.flat_segments[self.flat_segment_index];
-            flat_segment.* = self.flat_segment;
-            flat_segment.end_line_data_offset = flat_segment.start_line_data_offset + self.line_offset;
-            flat_segment.end_intersection_offset = flat_segment.start_intersection_offset + self.intersection_offset;
-        }
-    }
 };
+
+// pub const LineWriter = struct {
+//     const GRID_POINT_TOLERANCE: f32 = 1e-6;
+
+//     half_planes: *const HalfPlanesU16,
+//     bump: BumpAllocator,
+//     bounds: RectF32 = RectF32.NONE,
+//     lines: u32 = 0,
+//     line_offset: u32 = 0,
+//     intersection_offset: u32 = 0,
+//     debug: bool = true,
+//     previous_point: ?PointF32 = null,
+//     previous_grid_intersection: ?GridIntersection = null,
+//     reverse: bool = false,
+//     flat_segment_index: u32 = 0,
+//     flat_segment: FlatSegment,
+//     flat_segments: []FlatSegment,
+//     line_data: []u8,
+//     intersections: []GridIntersection,
+//     boundary_fragments: []BoundaryFragment,
+
+//     pub fn write(self: *@This(), line: LineF32) void {
+//         if (std.meta.eql(line.p0, line.p1)) {
+//             return;
+//         }
+
+//         if (self.previous_point) |previous_point| {
+//             std.debug.assert(std.meta.eql(previous_point, line.p0));
+//             self.bounds.extendByInPlace(line.p1);
+
+//             if (self.debug) {
+//                 self.addPoint(line.p1);
+//             }
+//         } else {
+//             self.bounds.extendByInPlace(line.p0);
+//             self.bounds.extendByInPlace(line.p1);
+
+//             if (self.debug) {
+//                 self.addPoint(line.p0);
+//                 self.addPoint(line.p1);
+//             }
+//         }
+
+//         self.intersect(line);
+
+//         self.lines += 1;
+//     }
+
+//     fn addPoint(self: *@This(), point: PointF32) void {
+//         std.mem.bytesAsValue(PointF32, self.line_data[self.line_offset .. self.line_offset + @sizeOf(PointF32)]).* = point;
+//         self.line_offset += @sizeOf(PointF32);
+//     }
+
+//     fn addIntersection(self: *@This(), grid_intersection: GridIntersection) void {
+//         self.intersections[self.intersection_offset] = grid_intersection;
+//         self.intersection_offset += 1;
+//     }
+
+//     fn intersect(self: *@This(), line: LineF32) void {
+//         const start_point: PointF32 = line.apply(0.0);
+//         const end_point: PointF32 = line.apply(1.0);
+//         const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+//         const bounds: RectI32 = RectI32.create(PointI32{
+//             .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+//             .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+//         }, PointI32{
+//             .x = @intFromFloat(@floor(bounds_f32.max.x)),
+//             .y = @intFromFloat(@floor(bounds_f32.max.y)),
+//         });
+//         const scan_bounds = RectF32.create(PointF32{
+//             .x = @floatFromInt(bounds.min.x - 1),
+//             .y = @floatFromInt(bounds.min.y - 1),
+//         }, PointF32{
+//             .x = @floatFromInt(bounds.max.x + 1),
+//             .y = @floatFromInt(bounds.max.y + 1),
+//         });
+
+//         const start_intersection = GridIntersection.create(IntersectionF32{
+//             .t = 0.0,
+//             .point = start_point,
+//         });
+//         const end_intersection = GridIntersection.create(IntersectionF32{
+//             .t = 1.0,
+//             .point = end_point,
+//         });
+
+//         const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
+//         const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
+//         const start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
+//         const end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
+//         const start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
+//         const end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
+//         const inc_x: f32 = if (min_x) 1.0 else -1.0;
+//         const inc_y: f32 = if (min_y) 1.0 else -1.0;
+
+//         var start_x2 = start_x;
+//         if (start_x == start_intersection.intersection.point.x) {
+//             start_x2 += inc_x;
+//         }
+
+//         var end_x2 = end_x;
+//         if (end_x == end_intersection.intersection.point.x) {
+//             end_x2 -= inc_x;
+//         }
+
+//         var start_y2 = start_y;
+//         if (start_y == start_intersection.intersection.point.y) {
+//             start_y2 += inc_y;
+//         }
+
+//         var end_y2 = end_y;
+//         if (end_y == end_intersection.intersection.point.y) {
+//             end_y2 -= inc_y;
+//         }
+
+//         var scanner = Scanner{
+//             .x_range = RangeF32{
+//                 .start = start_x2,
+//                 .end = end_x2,
+//             },
+//             .y_range = RangeF32{
+//                 .start = start_y2,
+//                 .end = end_y2,
+//             },
+//             .inc_x = inc_x,
+//             .inc_y = inc_y,
+//         };
+
+//         // std.debug.print("S: ", .{});
+//         self.writeIntersection(start_intersection);
+
+//         var previous_x_intersection = start_intersection;
+//         var previous_y_intersection = start_intersection;
+//         while (scanner.nextX()) |x| {
+//             if (scanX(x, line, scan_bounds)) |x_intersection| {
+//                 var diff_y: bool = undefined;
+
+//                 if (scanner.inc_y < 0.0 and x_intersection.intersection.point.y > scanner.y_range.start) {
+//                     diff_y = false;
+//                 } else if (scanner.inc_y > 0.0 and x_intersection.intersection.point.y < scanner.y_range.start) {
+//                     diff_y = false;
+//                 } else {
+//                     diff_y = @abs(previous_x_intersection.pixel.y - x_intersection.pixel.y) >= 1;
+//                 }
+
+//                 var x_flushed: bool = false;
+//                 scan_y: {
+//                     if (diff_y) {
+//                         while (scanner.nextY()) |y| {
+//                             if (scanY(y, line, scan_bounds)) |y_intersection| {
+//                                 if (!x_flushed and y_intersection.intersection.t > x_intersection.intersection.t) {
+//                                     // TODO: there is probably a better way to handle this...
+//                                     // this mallarky is possible because of floating point errors
+//                                     // std.debug.print("X: ", .{});
+//                                     self.writeIntersection(x_intersection);
+//                                     previous_x_intersection = x_intersection;
+//                                     x_flushed = true;
+//                                 }
+
+//                                 // std.debug.print("Y: ", .{});
+//                                 self.writeIntersection(y_intersection);
+//                                 previous_y_intersection = y_intersection;
+//                             }
+
+//                             const next_y = scanner.peekNextY();
+//                             if (min_y and next_y > x_intersection.intersection.point.y) {
+//                                 break :scan_y;
+//                             } else if (!min_y and next_y < x_intersection.intersection.point.y) {
+//                                 break :scan_y;
+//                             }
+//                         }
+//                     }
+//                 }
+
+//                 if (!x_flushed) {
+//                     // std.debug.print("X: ", .{});
+//                     self.writeIntersection(x_intersection);
+//                     previous_x_intersection = x_intersection;
+//                 }
+//             }
+//         }
+
+//         while (scanner.nextY()) |y| {
+//             if (scanY(y, line, scan_bounds)) |y_intersection| {
+//                 // std.debug.print("Y: ", .{});
+//                 self.writeIntersection(y_intersection);
+//                 previous_y_intersection = y_intersection;
+//             }
+//         }
+
+//         // std.debug.print("E: ", .{});
+//         self.writeIntersection(end_intersection);
+//     }
+
+//     fn writeIntersection(self: *@This(), grid_intersection: GridIntersection) void {
+//         // std.debug.print("{}\n", .{grid_intersection.intersection});
+
+//         if (self.debug) {
+//             self.addIntersection(grid_intersection);
+//         }
+
+//         var grid_intersection2 = grid_intersection;
+//         if (self.reverse) {
+//             grid_intersection2 = grid_intersection.reverse();
+//         }
+
+//         if (self.previous_grid_intersection) |*previous| {
+//             if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
+//                 // skip if exactly the same point
+//                 self.previous_grid_intersection = grid_intersection2;
+//                 return;
+//             }
+
+//             {
+//                 if (self.reverse) {
+//                     self.writeBoundaryFragment(BoundaryFragment.create(
+//                         self.half_planes,
+//                         [_]*const GridIntersection{
+//                             &grid_intersection2,
+//                             previous,
+//                         },
+//                     ));
+//                 } else {
+//                     self.writeBoundaryFragment(BoundaryFragment.create(
+//                         self.half_planes,
+//                         [_]*const GridIntersection{
+//                             previous,
+//                             &grid_intersection2,
+//                         },
+//                     ));
+//                 }
+//             }
+
+//             self.previous_grid_intersection = grid_intersection2;
+//         } else {
+//             self.previous_grid_intersection = grid_intersection2;
+//             return;
+//         }
+//     }
+
+//     fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
+//         const boundary_fragment_index = self.bump.bump(1);
+//         self.boundary_fragments[boundary_fragment_index] = boundary_fragment;
+//     }
+
+//     fn scanX(
+//         grid_x: f32,
+//         line: LineF32,
+//         scan_bounds: RectF32,
+//     ) ?GridIntersection {
+//         const scan_line = LineF32.create(
+//             PointF32{
+//                 .x = grid_x,
+//                 .y = scan_bounds.min.y,
+//             },
+//             PointF32{
+//                 .x = grid_x,
+//                 .y = scan_bounds.max.y,
+//             },
+//         );
+
+//         if (line.intersectVerticalLine(scan_line)) |intersection| {
+//             return GridIntersection.create(intersection);
+//         }
+
+//         return null;
+//     }
+
+//     fn scanY(
+//         grid_y: f32,
+//         line: LineF32,
+//         scan_bounds: RectF32,
+//     ) ?GridIntersection {
+//         const scan_line = LineF32.create(
+//             PointF32{
+//                 .x = scan_bounds.min.x,
+//                 .y = grid_y,
+//             },
+//             PointF32{
+//                 .x = scan_bounds.max.x,
+//                 .y = grid_y,
+//             },
+//         );
+
+//         if (line.intersectHorizontalLine(scan_line)) |intersection| {
+//             return GridIntersection.create(intersection);
+//         }
+
+//         return null;
+//     }
+
+//     pub fn close(self: *@This()) void {
+//         if (self.debug) {
+//             const flat_segment = &self.flat_segments[self.flat_segment_index];
+//             flat_segment.* = self.flat_segment;
+//             flat_segment.end_line_data_offset = flat_segment.start_line_data_offset + self.line_offset;
+//             flat_segment.end_intersection_offset = flat_segment.start_intersection_offset + self.intersection_offset;
+//         }
+//     }
+// };
 
 pub const Rasterize = struct {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
