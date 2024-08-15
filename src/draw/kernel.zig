@@ -86,6 +86,7 @@ pub const KernelConfig = struct {
     tangent_threshold_pow2: f32 = 0.0,
     min_theta: f32 = 0.0001,
     min_theta2: f32 = 1e-6,
+    min_stroke_width: f32 = 0.75,
 
     pub fn init(config: @This()) @This() {
         return @This(){
@@ -116,6 +117,7 @@ pub const KernelConfig = struct {
             .tangent_threshold_pow2 = std.math.pow(f32, config.tangent_threshold, 2.0),
             .min_theta = config.min_theta,
             .min_theta2 = config.min_theta2,
+            .min_stroke_width = config.min_stroke_width,
         };
     }
 };
@@ -877,7 +879,9 @@ pub const Flatten = struct {
             segment_data,
         ).affineTransform(transform);
 
-        const offset = 0.5 * stroke.width;
+        const stroke_width = if (stroke.width < config.min_stroke_width) config.min_stroke_width else stroke.width;
+
+        const offset = 0.5 * stroke_width;
         const offset_point = PointF32{
             .x = offset,
             .y = offset,
