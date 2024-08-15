@@ -14,7 +14,6 @@ pub fn main() !void {
     _ = args.next();
     const svg_file = args.next() orelse @panic("need to provide svg file");
     const output_file = args.next() orelse @panic("need to provide output file");
-    const debug_point = args.next();
 
     var svg = try scribe.svg.Svg.parseFileAlloc(allocator, svg_file);
     defer svg.deinit();
@@ -24,12 +23,6 @@ pub fn main() !void {
 
     try svg.encode(&encoder);
 
-    const bigger = (core.TransformF32{
-        .scale = core.PointF32.create(2.0, 2.0),
-    }).toAffine();
-    for (encoder.transforms.items) |*tf| {
-        tf.* = bigger.mul(tf.*);
-    }
     const bounds = encoder.calculateBounds();
 
     const center = (core.TransformF32{
@@ -52,11 +45,11 @@ pub fn main() !void {
 
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        // .debug_flags = 0,
-        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
-        .debug_single_pass = true,
+        .debug_flags = 0,
+        // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
+        // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
-        .flush_texture_span = false,
+        // .flush_texture_span = false,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,
@@ -89,55 +82,4 @@ pub fn main() !void {
     rasterizer.debugPrint(texture);
 
     try image.writeToFile(output_file, .png);
-
-
-    if (debug_point) |dbg_point_str| {
-        var dbg_point = core.PointI32{};
-        var it = std.mem.split(u8, dbg_point_str, ",");
-
-        if (it.next()) |x_str| {
-            dbg_point.x = std.fmt.parseInt(i32, x_str, 10) catch @panic("Invalid x for debug point");
-        }
-
-        if (it.next()) |y_str| {
-            dbg_point.y = std.fmt.parseInt(i32, y_str, 10) catch @panic("Invalid y for debug point");
-        }
-
-        std.debug.print("===================== Debug Point: {} =====================\n", .{dbg_point});
-        std.debug.print("------------- Grid Intersections ------------\n", .{});
-        for (rasterizer.grid_intersections.items) |grid_intersection| {
-            if (std.meta.eql(grid_intersection.pixel, dbg_point)) {
-                std.debug.print("GridIntersection({},{}): T({})\n", .{
-                    grid_intersection.intersection.point.x,
-                    grid_intersection.intersection.point.y,
-                    grid_intersection.intersection.t,
-                });
-            }
-        }
-        std.debug.print("------------- End Grid Intersections ------------\n", .{});
-
-        std.debug.print("------------- Boundary Fragments ------------\n", .{});
-        for (rasterizer.boundary_fragments.items) |boundary_fragment| {
-            if (std.meta.eql(boundary_fragment.pixel, dbg_point)) {
-                std.debug.print("BoundaryFragment({},{})-({},{}): T1({}), T2({}), MainRayWinding({})\n", .{
-                    boundary_fragment.intersections[0].point.x,
-                    boundary_fragment.intersections[0].point.y,
-                    boundary_fragment.intersections[1].point.x,
-                    boundary_fragment.intersections[1].point.y,
-                    boundary_fragment.intersections[0].t,
-                    boundary_fragment.intersections[1].t,
-                    boundary_fragment.main_ray_winding,
-                });
-                std.debug.print("-----\n", .{});
-                boundary_fragment.masks.debugPrint();
-                std.debug.print("-----\n", .{});
-                std.debug.print("StencilMask({b:0>16}), Intensity({})\n", .{
-                    boundary_fragment.stencil_mask,
-                    boundary_fragment.getIntensity(),
-                });
-                std.debug.print("-----------------------------\n", .{});
-            }
-        }
-        std.debug.print("------------- End Boundary Fragments ------------\n", .{});
-    }
 }
