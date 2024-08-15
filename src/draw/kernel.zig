@@ -22,7 +22,7 @@ const AtomicBounds = encoding_module.AtomicBounds;
 const Offsets = encoding_module.Offset;
 const PathOffset = encoding_module.PathOffset;
 const SubpathOffset = encoding_module.SubpathOffset;
-const FlatSegmentOffset = encoding_module.FlatSegmentOffset;
+const LineOffset = encoding_module.LineOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
 const GridIntersection = encoding_module.GridIntersection;
 const BoundaryFragment = encoding_module.BoundaryFragment;
@@ -627,100 +627,10 @@ pub const LineAllocator = struct {
 pub const Flatten = struct {
     half_planes: *const HalfPlanesU16,
     path_monoids: []const PathMonoid,
-    segment_offsets: []const SegmentOffset,
-    flat_segments: []FlatSegment,
+    line_segment_offsets: []const SegmentOffset,
     line_data: []u8,
-    intersections: []GridIntersection,
-    boundary_fragments: []BoundaryFragment,
     paths: []Path,
     debug: bool = false,
-
-    // TODO: flatten_offset calculation requires a lot of math, avoid it
-    //         using comptime. Only needed for debug mode.
-    pub fn createLineWriter(
-        self: @This(),
-        kind: FlatSegment.Kind,
-        segment_index: u32,
-        flatten_offset: FlatSegmentOffset,
-    ) LineWriter {
-        const path_monoid = self.path_monoids[segment_index];
-        const path = &self.paths[path_monoid.path_index];
-        const path_offset = PathOffset.create(
-            path_monoid.path_index,
-            self.segment_offsets,
-            self.paths,
-        );
-        const reverse = kind == .stroke_back;
-        var bump: BumpAllocator = undefined;
-        var flat_segment_index: u32 = undefined;
-        var flat_segment: FlatSegment = undefined;
-
-        switch (kind) {
-            .fill => {
-                bump = BumpAllocator{
-                    .start = path_offset.start_fill_boundary_offset,
-                    .end = path_offset.end_fill_boundary_offset,
-                    .offset = &path.fill_bump,
-                };
-                flat_segment_index = flatten_offset.fill_flat_segment_index;
-                flat_segment = FlatSegment{
-                    .kind = .fill,
-                    .segment_index = segment_index,
-                    .start_line_data_offset = flatten_offset.start_fill_line_offset,
-                    .end_line_data_offset = flatten_offset.end_fill_line_offset,
-                    .start_intersection_offset = flatten_offset.start_fill_intersection_offset,
-                    .end_intersection_offset = flatten_offset.end_fill_intersection_offset,
-                };
-            },
-            .stroke_front => {
-                bump = BumpAllocator{
-                    .start = path_offset.start_stroke_boundary_offset,
-                    .end = path_offset.end_stroke_boundary_offset,
-                    .offset = &path.stroke_bump,
-                };
-                flat_segment_index = flatten_offset.front_stroke_flat_segment_index;
-                flat_segment = FlatSegment{
-                    .kind = .fill,
-                    .segment_index = segment_index,
-                    .start_line_data_offset = flatten_offset.start_front_stroke_line_offset,
-                    .end_line_data_offset = flatten_offset.end_front_stroke_line_offset,
-                    .start_intersection_offset = flatten_offset.start_front_stroke_intersection_offset,
-                    .end_intersection_offset = flatten_offset.end_front_stroke_intersection_offset,
-                };
-            },
-            .stroke_back => {
-                bump = BumpAllocator{
-                    .start = path_offset.start_stroke_boundary_offset,
-                    .end = path_offset.end_stroke_boundary_offset,
-                    .offset = &path.stroke_bump,
-                };
-                flat_segment_index = flatten_offset.back_stroke_flat_segment_index;
-                flat_segment = FlatSegment{
-                    .kind = .fill,
-                    .segment_index = segment_index,
-                    .start_line_data_offset = flatten_offset.start_back_stroke_line_offset,
-                    .end_line_data_offset = flatten_offset.end_back_stroke_line_offset,
-                    .start_intersection_offset = flatten_offset.start_back_stroke_intersection_offset,
-                    .end_intersection_offset = flatten_offset.end_back_stroke_intersection_offset,
-                };
-            },
-        }
-
-        const line_data: []u8 = if (self.debug) self.line_data[flat_segment.start_line_data_offset..flat_segment.end_line_data_offset] else &.{};
-        const intersections: []GridIntersection = if (self.debug) self.intersections[flat_segment.start_intersection_offset..flat_segment.end_intersection_offset] else &.{};
-        return LineWriter{
-            .half_planes = self.half_planes,
-            .bump = bump,
-            .boundary_fragments = self.boundary_fragments,
-            .reverse = reverse,
-            .flat_segment_index = flat_segment_index,
-            .flat_segment = flat_segment,
-            .flat_segments = self.flat_segments,
-            .line_data = line_data,
-            .intersections = intersections,
-            .debug = self.debug,
-        };
-    }
 
     pub fn flatten(
         self: @This(),
@@ -740,20 +650,16 @@ pub const Flatten = struct {
             const path_monoid = path_monoids[segment_index];
             const style = getStyle(styles, path_monoid.style_index);
             const path = &paths[path_monoid.path_index];
-            const flatten_offset = FlatSegmentOffset.create(
-                @intCast(segment_index),
-                path_monoid,
+            const line_offset = LineOffset.create(
+                path_monoid.path_index,
                 segment_offsets,
                 paths,
-                subpaths,
             );
 
             if (style.isFill()) {
-                var line_writer: LineWriter = self.createLineWriter(
-                    .fill,
-                    @intCast(segment_index),
-                    flatten_offset,
-                );
+                var line_writer = LineWriter{
+                    .line_data = segment_data[line_offset.start_fill_offset..line_offset.end_fill_offset],
+                };
 
                 flattenFill(
                     config,
@@ -770,16 +676,9 @@ pub const Flatten = struct {
             }
 
             if (style.isStroke()) {
-                var front_line_writer: LineWriter = self.createLineWriter(
-                    .stroke_front,
-                    @intCast(segment_index),
-                    flatten_offset,
-                );
-                var back_line_writer: LineWriter = self.createLineWriter(
-                    .stroke_back,
-                    @intCast(segment_index),
-                    flatten_offset,
-                );
+                var line_writer = LineWriter{
+                    .line_data = segment_data[line_offset.start_stroke_offset..line_offset.end_stroke_offset],
+                };
 
                 flattenStroke(
                     config,
@@ -790,13 +689,11 @@ pub const Flatten = struct {
                     transforms,
                     subpaths,
                     segment_data,
-                    &front_line_writer,
-                    &back_line_writer,
+                    &line_writer,
                 );
 
                 var atomic_stroke_bounds = AtomicBounds.createRect(&path.stroke_bounds);
-                atomic_stroke_bounds.extendBy(front_line_writer.bounds);
-                atomic_stroke_bounds.extendBy(back_line_writer.bounds);
+                atomic_stroke_bounds.extendBy(line_writer.bounds);
             }
         }
     }
@@ -861,8 +758,7 @@ pub const Flatten = struct {
         transforms: []const TransformF32.Affine,
         subpaths: []const Subpath,
         segment_data: []const u8,
-        front_line_writer: *LineWriter,
-        back_line_writer: *LineWriter,
+        line_writer: *LineWriter,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];

@@ -1062,6 +1062,34 @@ pub const LineOffset = struct {
     end_fill_offset: u32 = 0,
     start_stroke_offset: u32 = 0,
     end_stroke_offset: u32 = 0,
+
+    pub fn create(
+        path_index: u32,
+        segment_offsets: []const SegmentOffset,
+        paths: []const Path,
+    ) @This() {
+        const path = paths[path_index];
+        const start_path_segment_offset = if (path.segment_index > 0) segment_offsets[path.segment_index - 1] else SegmentOffset{};
+        var end_path_segment_offset: SegmentOffset = undefined;
+        if (path_index + 1 < paths.len) {
+            end_path_segment_offset = segment_offsets[paths[path_index + 1].segment_index - 1];
+        } else {
+            end_path_segment_offset = segment_offsets[segment_offsets.len - 1];
+        }
+
+        const start_fill_offset = start_path_segment_offset.fill_offset;
+        const end_fill_offset = end_path_segment_offset.fill_offset + start_path_segment_offset.stroke_offset;
+
+        const start_stroke_offset = end_fill_offset;
+        const end_stroke_offset = end_path_segment_offset.fill_offset + end_path_segment_offset.stroke_offset;
+
+        return @This(){
+            .start_fill_offset = start_fill_offset,
+            .end_fill_offset = end_fill_offset,
+            .start_stroke_offset = start_stroke_offset,
+            .end_stroke_offset = end_stroke_offset,
+        };
+    }
 };
 
 pub const SegmentOffset = struct {
