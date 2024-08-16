@@ -291,8 +291,6 @@ pub const CpuRasterizer = struct {
             last_segment_offset.fill_offset + last_segment_offset.stroke_offset,
         );
 
-        const flattener = kernel_module.Flatten;
-
         const range = RangeU32{
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
@@ -304,7 +302,6 @@ pub const CpuRasterizer = struct {
                 &wg,
                 kernel_module.Flatten.flatten,
                 .{
-                    flattener,
                     self.config.kernel_config,
                     self.encoding.path_tags,
                     self.path_monoids.items,
@@ -312,6 +309,7 @@ pub const CpuRasterizer = struct {
                     self.encoding.transforms,
                     self.subpaths.items,
                     self.encoding.segment_data,
+                    self.line_segment_offsets.items,
                     chunk,
                     self.paths.items,
                     lines,

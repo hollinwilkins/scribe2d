@@ -670,14 +670,14 @@ pub const Flatten = struct {
                     &line_writer,
                 );
 
-                var atomic_fill_bounds = AtomicBounds.createRect(&path.fill_bounds);
+                var atomic_fill_bounds = AtomicBounds.createRect(&path.bounds);
                 atomic_fill_bounds.extendBy(line_writer.bounds);
             }
 
             if (style.isStroke()) {
                 var stroke_bump = BumpAllocator{
-                    .start = line_offset.start_fill_offset,
-                    .end = line_offset.end_fill_offset,
+                    .start = line_offset.start_stroke_offset,
+                    .end = line_offset.end_stroke_offset,
                     .offset = &path.stroke_bump,
                 };
                 var line_writer = LineWriter{
@@ -697,7 +697,7 @@ pub const Flatten = struct {
                     &line_writer,
                 );
 
-                var atomic_stroke_bounds = AtomicBounds.createRect(&path.stroke_bounds);
+                var atomic_stroke_bounds = AtomicBounds.createRect(&path.bounds);
                 atomic_stroke_bounds.extendBy(line_writer.bounds);
             }
         }
@@ -749,9 +749,6 @@ pub const Flatten = struct {
                 line_writer,
             );
         }
-
-        // adjust lines to represent actual filled lines
-        line_writer.close();
     }
 
     pub fn flattenStroke(
