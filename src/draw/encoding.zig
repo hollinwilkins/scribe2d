@@ -1105,6 +1105,22 @@ pub const SegmentOffset = struct {
     }
 };
 
+pub const IntersectionOffset = struct {
+    offset: u32 = 0,
+
+    pub usingnamespace MonoidFunctions(IntersectionOffset, @This());
+
+    pub fn createTag(tag: IntersectionOffset) @This() {
+        return tag;
+    }
+
+    pub fn combine(self: @This(), other: @This()) @This() {
+        return @This(){
+            .offset = self.offset + other.offset,
+        };
+    }
+};
+
 pub const FlatSegment = struct {
     pub const Kind = enum(u2) {
         fill = 0,

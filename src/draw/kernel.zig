@@ -24,6 +24,7 @@ const PathOffset = encoding_module.PathOffset;
 const SubpathOffset = encoding_module.SubpathOffset;
 const LineOffset = encoding_module.LineOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
+const IntersectionOffset = encoding_module.IntersectionOffset;
 const GridIntersection = encoding_module.GridIntersection;
 const BoundaryFragment = encoding_module.BoundaryFragment;
 const MergeFragment = encoding_module.MergeFragment;
@@ -620,6 +621,52 @@ pub const LineAllocator = struct {
         const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
 
         line_count.* += n_lines;
+    }
+};
+
+pub const BoundaryAllocator = struct {
+    pub fn intersect(
+        lines: []const LineF32,
+        range: RangeU32,
+        // outputs
+        intersection_offsets: []IntersectionOffset,
+    ) void {
+        for (range.start..range.end) |line_index| {
+            const line = &lines[line_index];
+            const intersection_offset = &intersection_offsets[line_index];
+            intersection_offset.* = IntersectionOffset{};
+
+            @This().allocateBoundaryFragments(line, intersection_offset);
+        }
+    }
+
+    pub fn allocatorBoundaryFragments(
+        line: *const LineF32,
+        intersection_offset: *IntersectionOffset,
+    ) void {
+        var intersections: u32 = 0;
+        const start_point: PointF32 = line.p0;
+        const end_point: PointF32 = line.p1;
+
+        const min_x = start_point.x < end_point.x;
+        const min_y = start_point.y < end_point.y;
+        const start_x: f32 = if (min_x) @floor(start_point.x) else @ceil(start_point.x);
+        const end_x: f32 = if (min_x) @ceil(end_point.x) else @floor(end_point.x);
+        const start_y: f32 = if (min_y) @floor(start_point.y) else @ceil(start_point.y);
+        const end_y: f32 = if (min_y) @ceil(end_point.y) else @floor(end_point.y);
+
+        if (start_x != start_point.x or start_y != start_point.y) {
+            intersections += 1;
+        }
+
+        if (end_x != end_point.x or end_y != end_point.y) {
+            intersections += 1;
+        }
+
+        intersections += @abs(start_x - end_x);
+        intersections += @abs(start_y - end_y);
+
+        intersection_offset += intersections;
     }
 };
 

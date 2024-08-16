@@ -22,6 +22,7 @@ const FlatSubpath = encoding_module.FlatSubpath;
 const FlatSegment = encoding_module.FlatSegment;
 const LineOffset = encoding_module.LineOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
+const IntersectionOffset = encoding_module.IntersectionOffset;
 const GridIntersection = encoding_module.GridIntersection;
 const BoundaryFragment = encoding_module.BoundaryFragment;
 const MergeFragment = encoding_module.MergeFragment;
@@ -122,6 +123,7 @@ pub const CpuRasterizer = struct {
     const SubpathList = std.ArrayListUnmanaged(Subpath);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
+    const IntersectionOffsetList = std.ArrayListUnmanaged(IntersectionOffset);
     const LinesList = std.ArrayListUnmanaged(LineF32);
     const Buffer = std.ArrayListUnmanaged(u8);
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
@@ -135,8 +137,8 @@ pub const CpuRasterizer = struct {
     style_offsets: StyleOffsetList = StyleOffsetList{},
     paths: PathList = PathList{},
     subpaths: SubpathList = SubpathList{},
-    line_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
-    boundary_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
+    segment_offsets: SegmentOffsetList = SegmentOffsetList{},
+    intersection_offsets: IntersectionOffsetList = IntersectionOffsetList{},
     flat_segments: FlatSegmentList = FlatSegmentList{},
     lines: LinesList = LinesList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
@@ -161,8 +163,8 @@ pub const CpuRasterizer = struct {
         self.style_offsets.deinit(self.allocator);
         self.paths.deinit(self.allocator);
         self.subpaths.deinit(self.allocator);
-        self.line_segment_offsets.deinit(self.allocator);
-        self.boundary_segment_offsets.deinit(self.allocator);
+        self.segment_offsets.deinit(self.allocator);
+        self.intersection_offsets.deinit(self.allocator);
         self.flat_segments.deinit(self.allocator);
         self.lines.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
@@ -174,7 +176,7 @@ pub const CpuRasterizer = struct {
         self.style_offsets.items.len = 0;
         self.paths.items.len = 0;
         self.subpaths.items.len = 0;
-        self.line_segment_offsets.items.len = 0;
+        self.segment_offsets.items.len = 0;
         self.flat_segments.items.len = 0;
         self.lines.items.len = 0;
         self.grid_intersections.items.len = 0;
@@ -253,7 +255,7 @@ pub const CpuRasterizer = struct {
     fn allocateLines(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
         const allocator = kernel_module.LineAllocator;
-        const segment_offsets = try self.line_segment_offsets.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
+        const segment_offsets = try self.segment_offsets.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
         const range = RangeU32{
             .start = 0,
             .end = @intCast(self.path_monoids.items.len),
@@ -285,7 +287,7 @@ pub const CpuRasterizer = struct {
 
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
-        const last_segment_offset = self.line_segment_offsets.getLast();
+        const last_segment_offset = self.segment_offsets.getLast();
         const lines = try self.lines.addManyAsSlice(
             self.allocator,
             last_segment_offset.fill_offset + last_segment_offset.stroke_offset,
@@ -309,7 +311,7 @@ pub const CpuRasterizer = struct {
                     self.encoding.transforms,
                     self.subpaths.items,
                     self.encoding.segment_data,
-                    self.line_segment_offsets.items,
+                    self.segment_offsets.items,
                     chunk,
                     self.paths.items,
                     lines,
@@ -320,10 +322,10 @@ pub const CpuRasterizer = struct {
         wg.wait();
     }
 
-    fn allocateBoundaryFragments(self: *@This(), pool: *std.Thread.Pool) !void {
+    fn allocateIntersections(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
         const allocator = kernel_module.BoundaryAllocator;
-        const segment_offsets = try self.boundary_segment_offsets.addManyAsSlice(self.allocator, self.lines.items.len);
+        const intersection_offsets = try self.intersection_offsets.addManyAsSlice(self.allocator, self.lines.items.len);
         const range = RangeU32{
             .start = 0,
             .end = @intCast(self.lines.items.len),
@@ -338,14 +340,14 @@ pub const CpuRasterizer = struct {
                     self.config.kernel_config,
                     self.lines.items,
                     chunk,
-                    segment_offsets,
+                    intersection_offsets,
                 },
             );
         }
 
         wg.wait();
 
-        SegmentOffset.expand(segment_offsets, segment_offsets);
+        IntersectionOffset.expand(intersection_offsets, intersection_offsets);
     }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
@@ -367,7 +369,7 @@ pub const CpuRasterizer = struct {
                 rasterizer.boundaryFinish,
                 .{
                     self.path_monoids.items,
-                    self.line_segment_offsets.items,
+                    self.segment_offsets.items,
                     chunk,
                     self.paths.items,
                     self.boundary_fragments.items,
