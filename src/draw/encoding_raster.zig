@@ -215,6 +215,7 @@ pub const CpuRasterizer = struct {
         }
 
         try self.flatten(&pool);
+        try self.allocateIntersections(&pool);
 
         // // calculate scanline encoding
         // try self.kernelRasterize(&pool);
@@ -337,7 +338,6 @@ pub const CpuRasterizer = struct {
                 &wg,
                 allocator.intersect,
                 .{
-                    self.config.kernel_config,
                     self.lines.items,
                     chunk,
                     intersection_offsets,

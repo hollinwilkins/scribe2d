@@ -636,7 +636,7 @@ pub const BoundaryAllocator = struct {
             const intersection_offset = &intersection_offsets[line_index];
             intersection_offset.* = IntersectionOffset{};
 
-            @This().allocateBoundaryFragments(line, intersection_offset);
+            allocatorBoundaryFragments(line, intersection_offset);
         }
     }
 
@@ -663,10 +663,10 @@ pub const BoundaryAllocator = struct {
             intersections += 1;
         }
 
-        intersections += @abs(start_x - end_x);
-        intersections += @abs(start_y - end_y);
+        intersections += @abs(@as(i32, @intFromFloat(start_x - end_x)));
+        intersections += @abs(@as(i32, @intFromFloat(start_y - end_y)));
 
-        intersection_offset += intersections;
+        intersection_offset.offset += intersections;
     }
 };
 
