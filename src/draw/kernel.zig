@@ -1850,6 +1850,239 @@ pub const TileGenerator = struct {
         bump: *BumpAllocator,
         boundary_fragments: []BoundaryFragment,
     ) void {
+        var intersection_writer = IntersectionWriter{
+            .bump = bump,
+            .reverse = false,
+            .boundary_fragments = boundary_fragments,
+        };
+
+        const line = lines[line_index];
+        const start_point: PointF32 = line.p0;
+        const end_point: PointF32 = line.p1;
+        const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
+        const bounds: RectI32 = RectI32.create(PointI32{
+            .x = @intFromFloat(@ceil(bounds_f32.min.x)),
+            .y = @intFromFloat(@ceil(bounds_f32.min.y)),
+        }, PointI32{
+            .x = @intFromFloat(@floor(bounds_f32.max.x)),
+            .y = @intFromFloat(@floor(bounds_f32.max.y)),
+        });
+        const scan_bounds = RectF32.create(PointF32{
+            .x = @floatFromInt(bounds.min.x - 1),
+            .y = @floatFromInt(bounds.min.y - 1),
+        }, PointF32{
+            .x = @floatFromInt(bounds.max.x + 1),
+            .y = @floatFromInt(bounds.max.y + 1),
+        });
+
+        const start_intersection = GridIntersection.create(IntersectionF32{
+            .t = 0.0,
+            .point = start_point,
+        });
+        const end_intersection = GridIntersection.create(IntersectionF32{
+            .t = 1.0,
+            .point = end_point,
+        });
+
+        const min_x = start_intersection.intersection.point.x < end_intersection.intersection.point.x;
+        const min_y = start_intersection.intersection.point.y < end_intersection.intersection.point.y;
+        const start_x: f32 = if (min_x) @floor(start_intersection.intersection.point.x) else @ceil(start_intersection.intersection.point.x);
+        const end_x: f32 = if (min_x) @ceil(end_intersection.intersection.point.x) else @floor(end_intersection.intersection.point.x);
+        const start_y: f32 = if (min_y) @floor(start_intersection.intersection.point.y) else @ceil(start_intersection.intersection.point.y);
+        const end_y: f32 = if (min_y) @ceil(end_intersection.intersection.point.y) else @floor(end_intersection.intersection.point.y);
+        const inc_x: f32 = if (min_x) 1.0 else -1.0;
+        const inc_y: f32 = if (min_y) 1.0 else -1.0;
+
+        var start_x2 = start_x;
+        if (start_x == start_intersection.intersection.point.x) {
+            start_x2 += inc_x;
+        }
+
+        var end_x2 = end_x;
+        if (end_x == end_intersection.intersection.point.x) {
+            end_x2 -= inc_x;
+        }
+
+        var start_y2 = start_y;
+        if (start_y == start_intersection.intersection.point.y) {
+            start_y2 += inc_y;
+        }
+
+        var end_y2 = end_y;
+        if (end_y == end_intersection.intersection.point.y) {
+            end_y2 -= inc_y;
+        }
+
+        var scanner = Scanner{
+            .x_range = RangeF32{
+                .start = start_x2,
+                .end = end_x2,
+            },
+            .y_range = RangeF32{
+                .start = start_y2,
+                .end = end_y2,
+            },
+            .inc_x = inc_x,
+            .inc_y = inc_y,
+        };
+
+        // std.debug.print("S: ", .{});
+        intersection_writer.write(start_intersection);
+
+        var previous_x_intersection = start_intersection;
+        var previous_y_intersection = start_intersection;
+        while (scanner.nextX()) |x| {
+            if (scanX(x, line, scan_bounds)) |x_intersection| {
+                var diff_y: bool = undefined;
+
+                if (scanner.inc_y < 0.0 and x_intersection.intersection.point.y > scanner.y_range.start) {
+                    diff_y = false;
+                } else if (scanner.inc_y > 0.0 and x_intersection.intersection.point.y < scanner.y_range.start) {
+                    diff_y = false;
+                } else {
+                    diff_y = @abs(previous_x_intersection.pixel.y - x_intersection.pixel.y) >= 1;
+                }
+
+                var x_flushed: bool = false;
+                scan_y: {
+                    if (diff_y) {
+                        while (scanner.nextY()) |y| {
+                            if (scanY(y, line, scan_bounds)) |y_intersection| {
+                                if (!x_flushed and y_intersection.intersection.t > x_intersection.intersection.t) {
+                                    // TODO: there is probably a better way to handle this...
+                                    // this mallarky is possible because of floating point errors
+                                    // std.debug.print("X: ", .{});
+                                    intersection_writer.write(x_intersection);
+                                    previous_x_intersection = x_intersection;
+                                    x_flushed = true;
+                                }
+
+                                // std.debug.print("Y: ", .{});
+                                intersection_writer.write(y_intersection);
+                                previous_y_intersection = y_intersection;
+                            }
+
+                            const next_y = scanner.peekNextY();
+                            if (min_y and next_y > x_intersection.intersection.point.y) {
+                                break :scan_y;
+                            } else if (!min_y and next_y < x_intersection.intersection.point.y) {
+                                break :scan_y;
+                            }
+                        }
+                    }
+                }
+
+                if (!x_flushed) {
+                    // std.debug.print("X: ", .{});
+                    intersection_writer.write(x_intersection);
+                    previous_x_intersection = x_intersection;
+                }
+            }
+        }
+
+        while (scanner.nextY()) |y| {
+            if (scanY(y, line, scan_bounds)) |y_intersection| {
+                // std.debug.print("Y: ", .{});
+                intersection_writer.write(y_intersection);
+                previous_y_intersection = y_intersection;
+            }
+        }
+
+        // std.debug.print("E: ", .{});
+        intersection_writer.write(end_intersection);
+    }
+
+    fn scanX(
+        grid_x: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+    ) ?GridIntersection {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.min.y,
+            },
+            PointF32{
+                .x = grid_x,
+                .y = scan_bounds.max.y,
+            },
+        );
+
+        if (line.intersectVerticalLine(scan_line)) |intersection| {
+            return GridIntersection.create(intersection);
+        }
+
+        return null;
+    }
+
+    fn scanY(
+        grid_y: f32,
+        line: LineF32,
+        scan_bounds: RectF32,
+    ) ?GridIntersection {
+        const scan_line = LineF32.create(
+            PointF32{
+                .x = scan_bounds.min.x,
+                .y = grid_y,
+            },
+            PointF32{
+                .x = scan_bounds.max.x,
+                .y = grid_y,
+            },
+        );
+
+        if (line.intersectHorizontalLine(scan_line)) |intersection| {
+            return GridIntersection.create(intersection);
+        }
+
+        return null;
+    }
+};
+
+pub const IntersectionWriter = struct {
+    bump: *BumpAllocator,
+    reverse: bool,
+    boundary_fragments: []BoundaryFragment,
+    previous_intersection: ?GridIntersection = null,
+
+    pub fn write(self: *@This(), grid_intersection: GridIntersection) void {
+        // std.debug.print("{}\n", .{grid_intersection.intersection});
+
+        var grid_intersection2 = grid_intersection;
+        if (self.reverse) {
+            grid_intersection2 = grid_intersection.reverse();
+        }
+
+        if (self.previous_grid_intersection) |*previous| {
+            {
+                if (self.reverse) {
+                    self.writeBoundaryFragment(BoundaryFragment.create(
+                        self.half_planes,
+                        [_]*const GridIntersection{
+                            &grid_intersection2,
+                            previous,
+                        },
+                    ));
+                } else {
+                    self.writeBoundaryFragment(BoundaryFragment.create(
+                        self.half_planes,
+                        [_]*const GridIntersection{
+                            previous,
+                            &grid_intersection2,
+                        },
+                    ));
+                }
+            }
+
+            self.previous_grid_intersection = grid_intersection2;
+        } else {
+            self.previous_grid_intersection = grid_intersection2;
+            return;
+        }
+    }
+
+    pub fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
+        self.boundary_fragments[self.bump.bump(1)] = boundary_fragment;
     }
 };
 
