@@ -320,6 +320,34 @@ pub const CpuRasterizer = struct {
         wg.wait();
     }
 
+    fn allocateBoundaryFragments(self: *@This(), pool: *std.Thread.Pool) !void {
+        var wg = std.Thread.WaitGroup{};
+        const allocator = kernel_module.BoundaryAllocator;
+        const segment_offsets = try self.boundary_segment_offsets.addManyAsSlice(self.allocator, self.lines.items.len);
+        const range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.lines.items.len),
+        };
+        var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
+
+        while (chunk_iter.next()) |chunk| {
+            pool.spawnWg(
+                &wg,
+                allocator.intersect,
+                .{
+                    self.config.kernel_config,
+                    self.lines.items,
+                    chunk,
+                    segment_offsets,
+                },
+            );
+        }
+
+        wg.wait();
+
+        SegmentOffset.expand(segment_offsets, segment_offsets);
+    }
+
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
         if (!self.config.runIntersect()) {
             return;

@@ -291,7 +291,6 @@ pub const LineAllocator = struct {
             return;
         }
 
-        line_count.* += 1;
         var t0_u: u32 = 0;
         var dt: f32 = 1.0;
         var last_p = p0;

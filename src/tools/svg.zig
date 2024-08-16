@@ -13,13 +13,31 @@ pub fn main() !void {
     var args = std.process.args();
     _ = args.next();
     const svg_file = args.next() orelse @panic("need to provide svg file");
-    const output_file = args.next() orelse @panic("need to provide output file");
+    // const output_file = args.next() orelse @panic("need to provide output file");
 
     var svg = try scribe.svg.Svg.parseFileAlloc(allocator, svg_file);
     defer svg.deinit();
 
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
+
+    // var style = draw.Style{};
+    // style.setFill(draw.Style.Fill{
+    //     .brush = .color,
+    // });
+    // try encoder.encodeColor(draw.ColorU8{
+    //     .a = 255,
+    // });
+    // try encoder.encodeStyle(style);
+
+    // {
+    //     var path_encoder = encoder.pathEncoder(f32);
+    //     defer path_encoder.close();
+    //     try path_encoder.moveTo(0.0, 0.0);
+    //     try path_encoder.lineTo(10.0, 10.0);
+    //     try path_encoder.lineTo(5.0, 5.0);
+    //     try path_encoder.lineTo(0.0, 0.0);
+    // }
 
     try svg.encode(&encoder);
 
@@ -79,7 +97,7 @@ pub fn main() !void {
 
     try rasterizer.rasterize(&texture);
 
-    rasterizer.debugPrint(texture);
+    // rasterizer.debugPrint(texture);
 
-    try image.writeToFile(output_file, .png);
+    // try image.writeToFile(output_file, .png);
 }
