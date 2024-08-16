@@ -1052,13 +1052,13 @@ pub const Subpath = struct {
     segment_index: u32 = 0,
 };
 
-pub const LineOffset = struct {
+pub const PathOffset = struct {
     start_fill_offset: u32 = 0,
     end_fill_offset: u32 = 0,
     start_stroke_offset: u32 = 0,
     end_stroke_offset: u32 = 0,
 
-    pub fn create(
+    pub fn lineOffset(
         path_index: u32,
         segment_offsets: []const SegmentOffset,
         paths: []const Path,
@@ -1079,6 +1079,28 @@ pub const LineOffset = struct {
         const end_stroke_offset = end_path_segment_offset.fill_offset + end_path_segment_offset.stroke_offset;
 
         return @This(){
+            .start_fill_offset = start_fill_offset,
+            .end_fill_offset = end_fill_offset,
+            .start_stroke_offset = start_stroke_offset,
+            .end_stroke_offset = end_stroke_offset,
+        };
+    }
+
+    pub fn intersectionOffset(
+        path_index: u32,
+        segment_offsets: []const SegmentOffset,
+        intersection_offsets: []const IntersectionOffset,
+        paths: []const Path,
+    ) @This() {
+        const line_offset = lineOffset(path_index, segment_offsets, paths);
+        
+        const start_fill_offset = intersection_offsets[line_offset.start_fill_offset].offset;
+        const end_fill_offset = if (line_offset.end_fill_offset > start_fill_offset) intersection_offsets[line_offset.end_fill_offset - 1].offset else start_fill_offset;
+
+        const start_stroke_offset = end_fill_offset;
+        const end_stroke_offset = if (line_offset.end_stroke_offset > start_stroke_offset) intersection_offsets[line_offset.end_stroke_offset - 1].offset else start_stroke_offset;
+
+        return @This() {
             .start_fill_offset = start_fill_offset,
             .end_fill_offset = end_fill_offset,
             .start_stroke_offset = start_stroke_offset,

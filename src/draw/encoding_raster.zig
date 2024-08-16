@@ -20,7 +20,7 @@ const PathOffset = encoding_module.PathOffset;
 const FlatPath = encoding_module.FlatPath;
 const FlatSubpath = encoding_module.FlatSubpath;
 const FlatSegment = encoding_module.FlatSegment;
-const LineOffset = encoding_module.LineOffset;
+const LineOffset = encoding_module.PathOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
 const IntersectionOffset = encoding_module.IntersectionOffset;
 const GridIntersection = encoding_module.GridIntersection;
@@ -348,6 +348,32 @@ pub const CpuRasterizer = struct {
         wg.wait();
 
         IntersectionOffset.expand(intersection_offsets, intersection_offsets);
+    }
+
+    fn tile(self: *@This(), pool: *std.Thread.Pool) !void {
+        var wg = std.Thread.WaitGroup{};
+        const last_intersection_offset = self.intersection_offsets.getLast();
+        const tile_generator = kernel_module.TileGenerator;
+        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_intersection_offset.offset);
+        const range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.lines.items.len),
+        };
+        var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
+
+        // while (chunk_iter.next()) |chunk| {
+        //     pool.spawnWg(
+        //         &wg,
+        //         allocator.intersect,
+        //         .{
+        //             self.lines.items,
+        //             chunk,
+        //             intersection_offsets,
+        //         },
+        //     );
+        // }
+
+        wg.wait();
     }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {

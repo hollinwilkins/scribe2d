@@ -21,8 +21,6 @@ const MonoidFunctions = encoding_module.MonoidFunctions;
 const AtomicBounds = encoding_module.AtomicBounds;
 const Offsets = encoding_module.Offset;
 const PathOffset = encoding_module.PathOffset;
-const SubpathOffset = encoding_module.SubpathOffset;
-const LineOffset = encoding_module.LineOffset;
 const SegmentOffset = encoding_module.SegmentOffset;
 const IntersectionOffset = encoding_module.IntersectionOffset;
 const GridIntersection = encoding_module.GridIntersection;
@@ -689,7 +687,7 @@ pub const Flatten = struct {
             const path_monoid = path_monoids[segment_index];
             const style = getStyle(styles, path_monoid.style_index);
             const path = &paths[path_monoid.path_index];
-            const line_offset = LineOffset.create(
+            const line_offset = PathOffset.lineOffset(
                 path_monoid.path_index,
                 segment_offsets,
                 paths,
@@ -1827,6 +1825,42 @@ pub const LineWriter = struct {
     }
 };
 
+pub const TileGenerator = struct {
+    pub fn tile(
+        path_index: u32,
+        segment_offsets: []const SegmentOffset,
+        intersection_offsets: []const IntersectionOffset,
+        lines: []const LineF32,
+        range: RangeU32,
+        // output
+        paths: []Path,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+        const intersection_offset = PathOffset.intersectionOffset(
+            path_index,
+            segment_offsets,
+            intersection_offsets,
+            paths,
+        );
+
+        for (range.start..range.end) |line_index| {
+            tileLine(
+                @intCast(line_index),
+                paths,
+                boundary_fragments[intersection_offset.start_fill_offset..intersection_offset.end_fill_offset],
+            );
+        }
+    }
+
+    pub fn tileLine(
+        line_index: u32,
+        // output
+        paths: []Path,
+        boundary_fragments: []BoundaryFragment,
+    ) void {
+    }
+};
+
 // pub const LineWriter = struct {
 //     const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
@@ -2140,7 +2174,7 @@ pub const Rasterize = struct {
         for (range.start..range.end) |path_index| {
             const path = &paths[path_index];
             const path_monoid = path_monoids[path.segment_index];
-            const path_offset = PathOffset.create(
+            const path_offset = PathOffset.lineOffset(
                 path_monoid.path_index,
                 segment_offsets,
                 paths,
