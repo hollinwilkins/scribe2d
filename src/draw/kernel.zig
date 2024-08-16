@@ -1827,35 +1827,27 @@ pub const LineWriter = struct {
 
 pub const TileGenerator = struct {
     pub fn tile(
-        path_index: u32,
-        segment_offsets: []const SegmentOffset,
-        intersection_offsets: []const IntersectionOffset,
         lines: []const LineF32,
         range: RangeU32,
         // output
-        paths: []Path,
+        bump: *BumpAllocator,
         boundary_fragments: []BoundaryFragment,
     ) void {
-        const intersection_offset = PathOffset.intersectionOffset(
-            path_index,
-            segment_offsets,
-            intersection_offsets,
-            paths,
-        );
-
         for (range.start..range.end) |line_index| {
             tileLine(
                 @intCast(line_index),
-                paths,
-                boundary_fragments[intersection_offset.start_fill_offset..intersection_offset.end_fill_offset],
+                bump,
+                lines,
+                boundary_fragments,
             );
         }
     }
 
     pub fn tileLine(
         line_index: u32,
+        lines: []const LineF32,
         // output
-        paths: []Path,
+        bump: *BumpAllocator,
         boundary_fragments: []BoundaryFragment,
     ) void {
     }

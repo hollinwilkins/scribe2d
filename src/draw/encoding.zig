@@ -1086,21 +1086,35 @@ pub const PathOffset = struct {
         };
     }
 
-    pub fn intersectionOffset(
+    pub fn boundaryOffset(
         path_index: u32,
         segment_offsets: []const SegmentOffset,
         intersection_offsets: []const IntersectionOffset,
         paths: []const Path,
     ) @This() {
         const line_offset = lineOffset(path_index, segment_offsets, paths);
-        
+        const intersection_offset = lineToIntersectionOffset(line_offset, intersection_offsets);
+
+        // subtract one for each line from the intersection offset to get the boundary offset
+        return @This(){
+            .start_fill_offset = intersection_offset.start_fill_offset - line_offset.start_fill_offset,
+            .end_fill_offset = intersection_offset.end_fill_offset - line_offset.end_fill_offset,
+            .start_stroke_offset = intersection_offset.start_stroke_offset - line_offset.start_stroke_offset,
+            .end_stroke_offset = intersection_offset.end_stroke_offset - line_offset.end_stroke_offset,
+        };
+    }
+
+    pub fn lineToIntersectionOffset(
+        line_offset: @This(),
+        intersection_offsets: []const IntersectionOffset,
+    ) @This() {
         const start_fill_offset = intersection_offsets[line_offset.start_fill_offset].offset;
         const end_fill_offset = if (line_offset.end_fill_offset > start_fill_offset) intersection_offsets[line_offset.end_fill_offset - 1].offset else start_fill_offset;
 
         const start_stroke_offset = end_fill_offset;
         const end_stroke_offset = if (line_offset.end_stroke_offset > start_stroke_offset) intersection_offsets[line_offset.end_stroke_offset - 1].offset else start_stroke_offset;
 
-        return @This() {
+        return @This(){
             .start_fill_offset = start_fill_offset,
             .end_fill_offset = end_fill_offset,
             .start_stroke_offset = start_stroke_offset,
