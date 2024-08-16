@@ -267,7 +267,7 @@ pub const LineAllocator = struct {
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
-        line_offset: *u32,
+        line_count: *u32,
     ) void {
         const p0 = cubic_points.p0;
         const p1 = cubic_points.p1;
@@ -291,7 +291,7 @@ pub const LineAllocator = struct {
             return;
         }
 
-        line_offset.* += @sizeOf(PointF32);
+        line_count.* += 1;
         var t0_u: u32 = 0;
         var dt: f32 = 1.0;
         var last_p = p0;
@@ -377,7 +377,7 @@ pub const LineAllocator = struct {
                 }
 
                 const n = std.math.clamp(@ceil(n_frac * scale_multiplier), 1.0, 100.0);
-                line_offset.* += @as(u32, @intFromFloat(n)) * @sizeOf(PointF32);
+                line_count.* += @as(u32, @intFromFloat(n));
 
                 last_p = this_p1;
                 last_q = this_q1;
@@ -550,7 +550,7 @@ pub const LineAllocator = struct {
         cap_style: Style.Cap,
         point: PointF32,
         cap0: PointF32,
-        line_offset: *u32,
+        line_count: *u32,
     ) void {
         switch (cap_style) {
             .round => flattenArc(
@@ -558,10 +558,10 @@ pub const LineAllocator = struct {
                 cap0,
                 point,
                 std.math.pi,
-                line_offset,
+                line_count,
             ),
-            .square => line_offset.* += 3 * @sizeOf(PointF32),
-            .butt => line_offset.* += @sizeOf(PointF32),
+            .square => line_count.* += 3,
+            .butt => line_count.* += 1,
         }
     }
 
@@ -572,7 +572,7 @@ pub const LineAllocator = struct {
         tan_prev: PointF32,
         tan_next: PointF32,
         n_prev: PointF32,
-        line_offset: *u32,
+        line_count: *u32,
     ) void {
         const front0 = p0.add(n_prev);
         const back1 = p0.sub(n_prev);
@@ -581,8 +581,8 @@ pub const LineAllocator = struct {
         const d = tan_prev.dot(tan_next);
 
         switch (stroke.join) {
-            .bevel => line_offset.* += 2 * @sizeOf(PointF32),
-            .miter => line_offset.* += 4 * @sizeOf(PointF32),
+            .bevel => line_count.* += 2,
+            .miter => line_count.* += 4,
             .round => {
                 if (cr > 0.0) {
                     flattenArc(
@@ -590,7 +590,7 @@ pub const LineAllocator = struct {
                         back1,
                         p0,
                         @abs(std.math.atan2(cr, d)),
-                        line_offset,
+                        line_count,
                     );
                 } else {
                     flattenArc(
@@ -598,11 +598,11 @@ pub const LineAllocator = struct {
                         front0,
                         p0,
                         @abs(std.math.atan2(cr, d)),
-                        line_offset,
+                        line_count,
                     );
                 }
 
-                line_offset.* += @sizeOf(PointF32);
+                line_count.* += 1;
             },
         }
     }
@@ -612,7 +612,7 @@ pub const LineAllocator = struct {
         start: PointF32,
         center: PointF32,
         angle: f32,
-        line_offset: *u32,
+        line_count: *u32,
     ) void {
         const radius = @max(config.error_tolerance, (start.sub(center)).length());
         const theta = @max(config.min_theta, (2.0 * std.math.acos(1.0 - config.error_tolerance / radius)));
@@ -620,20 +620,12 @@ pub const LineAllocator = struct {
         // Always output at least one line so that we always draw the chord.
         const n_lines: u32 = @max(1, @as(u32, @intFromFloat(@ceil(angle / theta))));
 
-        line_offset.* += n_lines * @sizeOf(PointF32);
+        line_count.* += n_lines;
     }
 };
 
 pub const Flatten = struct {
-    half_planes: *const HalfPlanesU16,
-    path_monoids: []const PathMonoid,
-    line_segment_offsets: []const SegmentOffset,
-    line_data: []u8,
-    paths: []Path,
-    debug: bool = false,
-
     pub fn flatten(
-        self: @This(),
         config: KernelConfig,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
@@ -641,10 +633,11 @@ pub const Flatten = struct {
         transforms: []const TransformF32.Affine,
         subpaths: []const Subpath,
         segment_data: []const u8,
+        segment_offsets: []const SegmentOffset,
         range: RangeU32,
         // outputs
         paths: []Path,
-        segment_offsets: []SegmentOffset,
+        lines: []LineF32,
     ) void {
         for (range.start..range.end) |segment_index| {
             const path_monoid = path_monoids[segment_index];
@@ -657,8 +650,14 @@ pub const Flatten = struct {
             );
 
             if (style.isFill()) {
+                var fill_bump = BumpAllocator{
+                    .start = line_offset.start_fill_offset,
+                    .end = line_offset.end_fill_offset,
+                    .offset = &path.fill_bump,
+                };
                 var line_writer = LineWriter{
-                    .line_data = segment_data[line_offset.start_fill_offset..line_offset.end_fill_offset],
+                    .lines = lines,
+                    .bump = &fill_bump,
                 };
 
                 flattenFill(
@@ -676,8 +675,14 @@ pub const Flatten = struct {
             }
 
             if (style.isStroke()) {
+                var stroke_bump = BumpAllocator{
+                    .start = line_offset.start_fill_offset,
+                    .end = line_offset.end_fill_offset,
+                    .offset = &path.stroke_bump,
+                };
                 var line_writer = LineWriter{
-                    .line_data = segment_data[line_offset.start_stroke_offset..line_offset.end_stroke_offset],
+                    .lines = lines,
+                    .bump = &stroke_bump,
                 };
 
                 flattenStroke(
@@ -770,11 +775,6 @@ pub const Flatten = struct {
             last_subpath_segment_index = @intCast(path_tags.len - 1);
         }
 
-        if (path_tag.segment.cap and path_monoid.segment_index == last_subpath_segment_index) {
-            front_line_writer.close();
-            back_line_writer.close();
-        }
-
         if (path_tag.isArc()) {
             flattenStrokeArc(
                 config,
@@ -785,8 +785,7 @@ pub const Flatten = struct {
                 transforms,
                 subpaths,
                 segment_data,
-                front_line_writer,
-                back_line_writer,
+                line_writer,
             );
         } else {
             flattenStrokeEuler(
@@ -798,13 +797,9 @@ pub const Flatten = struct {
                 transforms,
                 subpaths,
                 segment_data,
-                front_line_writer,
-                back_line_writer,
+                line_writer,
             );
         }
-
-        front_line_writer.close();
-        back_line_writer.close();
     }
 
     fn flattenStrokeArc(
@@ -816,8 +811,7 @@ pub const Flatten = struct {
         transforms: []const TransformF32.Affine,
         subpaths: []const Subpath,
         segment_data: []const u8,
-        front_line_writer: *LineWriter,
-        back_line_writer: *LineWriter,
+        line_writer: *LineWriter,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
@@ -914,7 +908,7 @@ pub const Flatten = struct {
                 arc_points.p0.sub(n_start),
                 arc_points.p0.add(n_start),
                 offset_tangent.negate(),
-                front_line_writer,
+                line_writer,
             );
         }
 
@@ -925,7 +919,7 @@ pub const Flatten = struct {
             offset,
             arc_points.p0.add(n_start),
             arc_points.p2.add(n_prev),
-            front_line_writer,
+            line_writer,
         );
 
         flattenArcSegment(
@@ -935,7 +929,7 @@ pub const Flatten = struct {
             -offset,
             arc_points.p0.sub(n_start),
             arc_points.p2.sub(n_prev),
-            back_line_writer,
+            line_writer,
         );
 
         if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
@@ -947,7 +941,7 @@ pub const Flatten = struct {
                 arc_points.p2.add(n_prev),
                 arc_points.p2.sub(n_prev),
                 offset_tangent,
-                front_line_writer,
+                line_writer,
             );
         } else {
             drawJoin(
@@ -958,8 +952,7 @@ pub const Flatten = struct {
                 tan_next,
                 n_prev,
                 n_next,
-                front_line_writer,
-                back_line_writer,
+                line_writer,
             );
         }
     }
@@ -973,8 +966,7 @@ pub const Flatten = struct {
         transforms: []const TransformF32.Affine,
         subpaths: []const Subpath,
         segment_data: []const u8,
-        front_line_writer: *LineWriter,
-        back_line_writer: *LineWriter,
+        line_writer: *LineWriter,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
@@ -1072,7 +1064,7 @@ pub const Flatten = struct {
                 cubic_points.p0.sub(n_start),
                 cubic_points.p0.add(n_start),
                 offset_tangent.negate(),
-                front_line_writer,
+                line_writer,
             );
         }
 
@@ -1083,7 +1075,7 @@ pub const Flatten = struct {
             offset,
             cubic_points.p0.add(n_start),
             cubic_points.p3.add(n_prev),
-            front_line_writer,
+            line_writer,
         );
 
         flattenEuler(
@@ -1093,7 +1085,7 @@ pub const Flatten = struct {
             -offset,
             cubic_points.p0.sub(n_start),
             cubic_points.p3.sub(n_prev),
-            back_line_writer,
+            line_writer,
         );
 
         if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
@@ -1105,7 +1097,7 @@ pub const Flatten = struct {
                 cubic_points.p3.add(n_prev),
                 cubic_points.p3.sub(n_prev),
                 offset_tangent,
-                front_line_writer,
+                line_writer,
             );
         } else {
             drawJoin(
@@ -1116,8 +1108,7 @@ pub const Flatten = struct {
                 tan_next,
                 n_prev,
                 n_next,
-                front_line_writer,
-                back_line_writer,
+                line_writer,
             );
         }
     }
@@ -1129,7 +1120,7 @@ pub const Flatten = struct {
         offset: f32,
         start_point: PointF32,
         end_point: PointF32,
-        writer: *LineWriter,
+        line_writer: *LineWriter,
     ) void {
         _ = scale;
         _ = offset;
@@ -1144,7 +1135,7 @@ pub const Flatten = struct {
             arc_points.p1,
             1,
             angle,
-            writer,
+            line_writer,
         );
     }
 
@@ -1333,7 +1324,7 @@ pub const Flatten = struct {
         cap0: PointF32,
         cap1: PointF32,
         offset_tangent: PointF32,
-        writer: *LineWriter,
+        line_writer: *LineWriter,
     ) void {
         if (cap_style == .round) {
             flattenArc(
@@ -1343,7 +1334,7 @@ pub const Flatten = struct {
                 point,
                 -1,
                 std.math.pi,
-                writer,
+                line_writer,
             );
             return;
         }
@@ -1354,14 +1345,14 @@ pub const Flatten = struct {
             const v = offset_tangent;
             const p0 = start.add(v);
             const p1 = end.add(v);
-            writer.write(LineF32.create(start, p0));
-            writer.write(LineF32.create(p0, p1));
+            line_writer.write(LineF32.create(start, p0));
+            line_writer.write(LineF32.create(p0, p1));
 
             start = p1;
             end = end;
         }
 
-        writer.write(LineF32.create(start, end));
+        line_writer.write(LineF32.create(start, end));
     }
 
     fn drawJoin(
@@ -1372,8 +1363,7 @@ pub const Flatten = struct {
         tan_next: PointF32,
         n_prev: PointF32,
         n_next: PointF32,
-        left_writer: *LineWriter,
-        right_writer: *LineWriter,
+        line_writer: *LineWriter,
     ) void {
         var front0 = p0.add(n_prev);
         const front1 = p0.add(n_next);
@@ -1385,8 +1375,8 @@ pub const Flatten = struct {
 
         switch (stroke.join) {
             .bevel => {
-                left_writer.write(LineF32.create(front0, front1));
-                right_writer.write(LineF32.create(back1, back0));
+                line_writer.write(LineF32.create(front0, front1));
+                line_writer.write(LineF32.create(back1, back0));
             },
             .miter => {
                 const hypot = std.math.hypot(cr, d);
@@ -1406,16 +1396,16 @@ pub const Flatten = struct {
                     }));
 
                     if (is_backside) {
-                        right_writer.write(LineF32.create(p, miter_pt));
+                        line_writer.write(LineF32.create(p, miter_pt));
                         back1 = miter_pt;
                     } else {
-                        left_writer.write(LineF32.create(p, miter_pt));
+                        line_writer.write(LineF32.create(p, miter_pt));
                         front0 = miter_pt;
                     }
                 }
 
-                right_writer.write(LineF32.create(back1, back0));
-                left_writer.write(LineF32.create(front0, front1));
+                line_writer.write(LineF32.create(back1, back0));
+                line_writer.write(LineF32.create(front0, front1));
             },
             .round => {
                 if (cr > 0.0) {
@@ -1426,10 +1416,10 @@ pub const Flatten = struct {
                         p0,
                         1,
                         @abs(std.math.atan2(cr, d)),
-                        right_writer,
+                        line_writer,
                     );
 
-                    left_writer.write(LineF32.create(front0, front1));
+                    line_writer.write(LineF32.create(front0, front1));
                 } else {
                     flattenArc(
                         config,
@@ -1438,10 +1428,10 @@ pub const Flatten = struct {
                         p0,
                         -1,
                         @abs(std.math.atan2(cr, d)),
-                        left_writer,
+                        line_writer,
                     );
 
-                    right_writer.write(LineF32.create(back1, back0));
+                    line_writer.write(LineF32.create(back1, back0));
                 }
             },
         }
@@ -1454,7 +1444,7 @@ pub const Flatten = struct {
         center: PointF32,
         theta_sign: i2,
         angle: f32,
-        writer: *LineWriter,
+        line_writer: *LineWriter,
     ) void {
         var p0 = start;
         var r = start.sub(center);
@@ -1478,12 +1468,12 @@ pub const Flatten = struct {
         for (0..n_lines - 1) |_| {
             r = rot.apply(r);
             const p1 = center.add(r);
-            writer.write(LineF32.create(p0, p1));
+            line_writer.write(LineF32.create(p0, p1));
             p0 = p1;
         }
 
         const p1 = end;
-        writer.write(LineF32.create(p0, p1));
+        line_writer.write(LineF32.create(p0, p1));
     }
 };
 
@@ -1778,44 +1768,19 @@ pub const LineSum = struct {
 };
 
 pub const LineWriter = struct {
-    line_data: []u8,
+    lines: []LineF32,
+    bump: *BumpAllocator,
     bounds: RectF32 = RectF32.NONE,
-    line_offset: u32 = 0,
 
     pub fn write(self: *@This(), line: LineF32) void {
         if (std.meta.eql(line.p0, line.p1)) {
             return;
         }
 
-        if (self.previousPoint()) |previous_point| {
-            std.debug.assert(std.meta.eql(previous_point, line.p0));
-            self.bounds.extendByInPlace(line.p1);
+        self.lines[self.bump.bump(1)] = line;
 
-            if (self.debug) {
-                self.addPoint(line.p1);
-            }
-        } else {
-            self.bounds.extendByInPlace(line.p0);
-            self.bounds.extendByInPlace(line.p1);
-
-            if (self.debug) {
-                self.addPoint(line.p0);
-                self.addPoint(line.p1);
-            }
-        }
-    }
-
-    fn previousPoint(self: @This()) ?PointF32 {
-        if (self.line_offset == 0) {
-            return null;
-        }
-
-        std.mem.bytesAsValue(PointF32, self.line_data[self.line_offset - @sizeOf(PointF32) .. self.line_offset]);
-    }
-
-    fn addPoint(self: *@This(), point: PointF32) void {
-        std.mem.bytesAsValue(PointF32, self.line_data[self.line_offset .. self.line_offset + @sizeOf(PointF32)]).* = point;
-        self.line_offset += @sizeOf(PointF32);
+        self.bounds.extendByInPlace(line.p0);
+        self.bounds.extendByInPlace(line.p1);
     }
 };
 

@@ -122,6 +122,7 @@ pub const CpuRasterizer = struct {
     const SubpathList = std.ArrayListUnmanaged(Subpath);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
+    const LinesList = std.ArrayListUnmanaged(LineF32);
     const Buffer = std.ArrayListUnmanaged(u8);
     const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
@@ -137,7 +138,7 @@ pub const CpuRasterizer = struct {
     line_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     boundary_segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     flat_segments: FlatSegmentList = FlatSegmentList{},
-    line_data: Buffer = Buffer{},
+    lines: LinesList = LinesList{},
     grid_intersections: GridIntersectionList = GridIntersectionList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
 
@@ -163,7 +164,7 @@ pub const CpuRasterizer = struct {
         self.line_segment_offsets.deinit(self.allocator);
         self.boundary_segment_offsets.deinit(self.allocator);
         self.flat_segments.deinit(self.allocator);
-        self.line_data.deinit(self.allocator);
+        self.lines.deinit(self.allocator);
         self.grid_intersections.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
     }
@@ -175,7 +176,7 @@ pub const CpuRasterizer = struct {
         self.subpaths.items.len = 0;
         self.line_segment_offsets.items.len = 0;
         self.flat_segments.items.len = 0;
-        self.line_data.items.len = 0;
+        self.lines.items.len = 0;
         self.grid_intersections.items.len = 0;
         self.boundary_fragments.items.len = 0;
     }
@@ -283,60 +284,40 @@ pub const CpuRasterizer = struct {
     }
 
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
-        _ = pool;
-
         var wg = std.Thread.WaitGroup{};
         const last_segment_offset = self.line_segment_offsets.getLast();
-        const line_data = try self.line_data.addManyAsSlice(
+        const lines = try self.lines.addManyAsSlice(
             self.allocator,
             last_segment_offset.fill_offset + last_segment_offset.stroke_offset,
         );
 
-        const flattener = kernel_module.Flatten{
-            .half_planes = self.half_planes,
-            .path_monoids = self.path_monoids.items,
-            .paths = self.paths.items,
-            .line_segment_offsets = self.line_segment_offsets.items,
-            .line_data = line_data,
+        const flattener = kernel_module.Flatten;
+
+        const range = RangeU32{
+            .start = 0,
+            .end = @intCast(self.path_monoids.items.len),
         };
+        var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
-        // const flattener = kernel_module.Flatten{
-        //     .half_planes = self.half_planes,
-        //     .boundary_fragments = boundary_fragments,
-        //     .path_monoids = self.path_monoids.items,
-        //     .paths = self.paths.items,
-        //     .segment_offsets = self.segment_offsets.items,
-        //     .flat_segments = flat_segments,
-        //     .line_data = line_data,
-        //     .intersections = intersections,
-        //     .debug = self.config.debug_single_pass,
-        // };
-
-        // const range = RangeU32{
-        //     .start = 0,
-        //     .end = @intCast(self.path_monoids.items.len),
-        // };
-        // var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
-
-        // while (chunk_iter.next()) |chunk| {
-        //     pool.spawnWg(
-        //         &wg,
-        //         kernel_module.Flatten.flatten,
-        //         .{
-        //             flattener,
-        //             self.config.kernel_config,
-        //             self.encoding.path_tags,
-        //             self.path_monoids.items,
-        //             self.encoding.styles,
-        //             self.encoding.transforms,
-        //             self.subpaths.items,
-        //             self.encoding.segment_data,
-        //             chunk,
-        //             self.paths.items,
-        //             self.segment_offsets.items,
-        //         },
-        //     );
-        // }
+        while (chunk_iter.next()) |chunk| {
+            pool.spawnWg(
+                &wg,
+                kernel_module.Flatten.flatten,
+                .{
+                    flattener,
+                    self.config.kernel_config,
+                    self.encoding.path_tags,
+                    self.path_monoids.items,
+                    self.encoding.styles,
+                    self.encoding.transforms,
+                    self.subpaths.items,
+                    self.encoding.segment_data,
+                    chunk,
+                    self.paths.items,
+                    lines,
+                },
+            );
+        }
 
         wg.wait();
     }
