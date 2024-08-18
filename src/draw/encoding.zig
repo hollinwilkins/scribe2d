@@ -1044,6 +1044,8 @@ pub const Path = struct {
 
     segment_index: u32 = 0,
     bounds: RectF32 = RectF32{},
+    line_offset: PathOffset = PathOffset{},
+    boundary_offset: PathOffset = PathOffset{},
     fill_bump: Bump = Bump{ .raw = 0 },
     stroke_bump: Bump = Bump{ .raw = 0 },
 };
@@ -1086,13 +1088,10 @@ pub const PathOffset = struct {
         };
     }
 
-    pub fn boundaryOffset(
-        path_index: u32,
-        segment_offsets: []const SegmentOffset,
+    pub fn lineToBoundaryOffset(
+        line_offset: @This(),
         intersection_offsets: []const IntersectionOffset,
-        paths: []const Path,
     ) @This() {
-        const line_offset = lineOffset(path_index, segment_offsets, paths);
         const intersection_offset = lineToIntersectionOffset(line_offset, intersection_offsets);
 
         // subtract one for each line from the intersection offset to get the boundary offset

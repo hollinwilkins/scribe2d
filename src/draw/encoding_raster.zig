@@ -215,7 +215,7 @@ pub const CpuRasterizer = struct {
         }
 
         try self.flatten(&pool);
-        try self.allocateIntersections(&pool);
+        // try self.allocateIntersections(&pool);
 
         // // calculate scanline encoding
         // try self.kernelRasterize(&pool);
@@ -284,15 +284,20 @@ pub const CpuRasterizer = struct {
         wg.wait();
 
         SegmentOffset.expand(segment_offsets, segment_offsets);
+        const last_segment_offset = self.segment_offsets.getLast();
+        _ = try self.lines.addManyAsSlice(
+            self.allocator,
+            last_segment_offset.fill_offset + last_segment_offset.stroke_offset,
+        );
+
+        for (self.paths.items, 0..) |*path, path_index| {
+            path.line_offset = PathOffset.lineOffset(@intCast(path_index), segment_offsets, self.paths.items);
+        }
     }
 
     fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
-        const last_segment_offset = self.segment_offsets.getLast();
-        const lines = try self.lines.addManyAsSlice(
-            self.allocator,
-            last_segment_offset.fill_offset + last_segment_offset.stroke_offset,
-        );
+        const lines = self.lines.items;
 
         const range = RangeU32{
             .start = 0,
@@ -348,33 +353,44 @@ pub const CpuRasterizer = struct {
         wg.wait();
 
         IntersectionOffset.expand(intersection_offsets, intersection_offsets);
+        // const last_intersection_offset = self.intersection_offsets.getLast();
     }
 
-    fn tile(self: *@This(), pool: *std.Thread.Pool) !void {
-        var wg = std.Thread.WaitGroup{};
-        const last_intersection_offset = self.intersection_offsets.getLast();
-        const tile_generator = kernel_module.TileGenerator;
-        const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_intersection_offset.offset);
-        const range = RangeU32{
-            .start = 0,
-            .end = @intCast(self.lines.items.len),
-        };
-        var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
+    // fn tile(self: *@This(), pool: *std.Thread.Pool) !void {
+    //     var wg = std.Thread.WaitGroup{};
+    //     const last_boundary_offset = PathOffset.boundaryOffset(
+    //         self.paths.items.len,
+    //         self.segment_offsets.items,
+    //         self.intersection_offsets.items,
+    //         self.paths.items,
+    //     );
+    //     const tile_generator = kernel_module.TileGenerator;
+    //     const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_boundary_offset.end_stroke_offset);
 
-        // while (chunk_iter.next()) |chunk| {
-        //     pool.spawnWg(
-        //         &wg,
-        //         allocator.intersect,
-        //         .{
-        //             self.lines.items,
-        //             chunk,
-        //             intersection_offsets,
-        //         },
-        //     );
-        // }
+    //     for (0..self.paths.items.len) |path_index| {
+    //         const line_offset = PathOffset.lineOffset(path_index, self.segment_offsets.items, self.paths.items);
+    //         const boundary_offset = PathOffset.lineToIntersectionOffset(
+    //             path_index,
+    //             self.segment_offsets.items,
+    //             self.intersection_offsets.items,
+    //             self.paths.items,
+    //         );
+    //         const range = RangeU32{
+    //             .start = 0,
+    //             .end = @intCast(self.lines.items.len),
+    //         };
+    //         var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
-        wg.wait();
-    }
+    //         pool.spawnWg(
+    //             &wg,
+    //             tile_generator.tile,
+    //             .{
+    //             },
+    //         );
+    //     }
+
+    //     wg.wait();
+    // }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
         if (!self.config.runIntersect()) {
