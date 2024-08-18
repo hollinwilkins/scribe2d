@@ -379,6 +379,7 @@ pub const CpuRasterizer = struct {
 
         for (0..self.paths.items.len) |path_index| {
             var path = self.paths.items[path_index];
+            
             const fill_range = RangeU32.create(path.line_offset.start_fill_offset, path.line_offset.end_fill_offset);
             const stroke_range = RangeU32.create(path.line_offset.start_stroke_offset, path.line_offset.end_stroke_offset);
 

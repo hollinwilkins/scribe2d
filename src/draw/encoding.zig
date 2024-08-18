@@ -1108,7 +1108,7 @@ pub const PathOffset = struct {
         intersection_offsets: []const IntersectionOffset,
     ) @This() {
         const start_fill_offset = intersection_offsets[line_offset.start_fill_offset].offset;
-        const end_fill_offset = if (line_offset.end_fill_offset > start_fill_offset) intersection_offsets[line_offset.end_fill_offset - 1].offset else start_fill_offset;
+        const end_fill_offset = if (line_offset.end_fill_offset > line_offset.start_fill_offset) intersection_offsets[line_offset.end_fill_offset - 1].offset else start_fill_offset;
 
         const start_stroke_offset = end_fill_offset;
         const end_stroke_offset = if (line_offset.end_stroke_offset > start_stroke_offset) intersection_offsets[line_offset.end_stroke_offset - 1].offset else start_stroke_offset;
