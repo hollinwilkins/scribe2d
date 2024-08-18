@@ -215,7 +215,7 @@ pub const CpuRasterizer = struct {
         }
 
         try self.flatten(&pool);
-        // try self.allocateIntersections(&pool);
+        try self.allocateBoundaryFragments(&pool);
 
         // // calculate scanline encoding
         // try self.kernelRasterize(&pool);
@@ -328,7 +328,7 @@ pub const CpuRasterizer = struct {
         wg.wait();
     }
 
-    fn allocateIntersections(self: *@This(), pool: *std.Thread.Pool) !void {
+    fn allocateBoundaryFragments(self: *@This(), pool: *std.Thread.Pool) !void {
         var wg = std.Thread.WaitGroup{};
         const allocator = kernel_module.BoundaryAllocator;
         const intersection_offsets = try self.intersection_offsets.addManyAsSlice(self.allocator, self.lines.items.len);
@@ -353,7 +353,10 @@ pub const CpuRasterizer = struct {
         wg.wait();
 
         IntersectionOffset.expand(intersection_offsets, intersection_offsets);
-        // const last_intersection_offset = self.intersection_offsets.getLast();
+
+        for (self.paths.items) |*path| {
+            path.boundary_offset = PathOffset.lineToBoundaryOffset(path.line_offset, intersection_offsets);
+        }
     }
 
     // fn tile(self: *@This(), pool: *std.Thread.Pool) !void {

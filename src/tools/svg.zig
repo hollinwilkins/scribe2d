@@ -40,7 +40,6 @@ pub fn main() !void {
     }
 
     // try svg.encode(&encoder);
-
     const bounds = encoder.calculateBounds();
 
     const center = (core.TransformF32{
@@ -97,7 +96,7 @@ pub fn main() !void {
 
     try rasterizer.rasterize(&texture);
 
-    // rasterizer.debugPrint(texture);
+    rasterizer.debugPrint(texture);
 
     // try image.writeToFile(output_file, .png);
 }
