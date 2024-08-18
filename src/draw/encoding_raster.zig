@@ -14,6 +14,7 @@ const Style = encoding_module.Style;
 const StyleOffset = encoding_module.StyleOffset;
 const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
+const BumpAllocator = encoding_module.BumpAllocator;
 const Path = encoding_module.Path;
 const Subpath = encoding_module.Subpath;
 const PathOffset = encoding_module.PathOffset;
@@ -216,6 +217,7 @@ pub const CpuRasterizer = struct {
 
         try self.flatten(&pool);
         try self.allocateBoundaryFragments(&pool);
+        try self.tile(&pool);
 
         // // calculate scanline encoding
         // try self.kernelRasterize(&pool);
@@ -326,6 +328,11 @@ pub const CpuRasterizer = struct {
         }
 
         wg.wait();
+
+        for (self.paths.items) |*path| {
+            path.fill_bump.raw = 0;
+            path.stroke_bump.raw = 0;
+        }
     }
 
     fn allocateBoundaryFragments(self: *@This(), pool: *std.Thread.Pool) !void {
@@ -357,43 +364,62 @@ pub const CpuRasterizer = struct {
         for (self.paths.items) |*path| {
             path.boundary_offset = PathOffset.lineToBoundaryOffset(path.line_offset, intersection_offsets);
         }
+
+        const last_boundary_offset = self.paths.getLast().boundary_offset;
+        _ = try self.boundary_fragments.addManyAsSlice(
+            self.allocator,
+            last_boundary_offset.end_stroke_offset,
+        );
     }
 
-    // fn tile(self: *@This(), pool: *std.Thread.Pool) !void {
-    //     var wg = std.Thread.WaitGroup{};
-    //     const last_boundary_offset = PathOffset.boundaryOffset(
-    //         self.paths.items.len,
-    //         self.segment_offsets.items,
-    //         self.intersection_offsets.items,
-    //         self.paths.items,
-    //     );
-    //     const tile_generator = kernel_module.TileGenerator;
-    //     const boundary_fragments = try self.boundary_fragments.addManyAsSlice(self.allocator, last_boundary_offset.end_stroke_offset);
+    fn tile(self: *@This(), pool: *std.Thread.Pool) !void {
+        var wg = std.Thread.WaitGroup{};
+        const tile_generator = kernel_module.TileGenerator;
+        const boundary_fragments = self.boundary_fragments.items;
 
-    //     for (0..self.paths.items.len) |path_index| {
-    //         const line_offset = PathOffset.lineOffset(path_index, self.segment_offsets.items, self.paths.items);
-    //         const boundary_offset = PathOffset.lineToIntersectionOffset(
-    //             path_index,
-    //             self.segment_offsets.items,
-    //             self.intersection_offsets.items,
-    //             self.paths.items,
-    //         );
-    //         const range = RangeU32{
-    //             .start = 0,
-    //             .end = @intCast(self.lines.items.len),
-    //         };
-    //         var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
+        for (0..self.paths.items.len) |path_index| {
+            var path = self.paths.items[path_index];
+            const fill_range = RangeU32.create(path.line_offset.start_fill_offset, path.line_offset.end_fill_offset);
+            const stroke_range = RangeU32.create(path.line_offset.start_stroke_offset, path.line_offset.end_stroke_offset);
 
-    //         pool.spawnWg(
-    //             &wg,
-    //             tile_generator.tile,
-    //             .{
-    //             },
-    //         );
-    //     }
+            var fill_bump = BumpAllocator{
+                .start = path.boundary_offset.start_fill_offset,
+                .end = path.boundary_offset.end_fill_offset,
+                .offset = &path.fill_bump,
+            };
+            var stroke_bump = BumpAllocator{
+                .start = path.boundary_offset.start_stroke_offset,
+                .end = path.boundary_offset.end_stroke_offset,
+                .offset = &path.stroke_bump,
+            };
 
-    //     wg.wait();
-    // }
+            pool.spawnWg(
+                &wg,
+                tile_generator.tile,
+                .{
+                    self.half_planes,
+                    self.lines.items,
+                    fill_range,
+                    &fill_bump,
+                    boundary_fragments,
+                },
+            );
+
+            pool.spawnWg(
+                &wg,
+                tile_generator.tile,
+                .{
+                    self.half_planes,
+                    self.lines.items,
+                    stroke_range,
+                    &stroke_bump,
+                    boundary_fragments,
+                },
+            );
+        }
+
+        wg.wait();
+    }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
         if (!self.config.runIntersect()) {

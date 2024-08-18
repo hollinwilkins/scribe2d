@@ -1827,6 +1827,7 @@ pub const LineWriter = struct {
 
 pub const TileGenerator = struct {
     pub fn tile(
+        half_planes: *const HalfPlanesU16,
         lines: []const LineF32,
         range: RangeU32,
         // output
@@ -1835,15 +1836,17 @@ pub const TileGenerator = struct {
     ) void {
         for (range.start..range.end) |line_index| {
             tileLine(
+                half_planes,
                 @intCast(line_index),
-                bump,
                 lines,
+                bump,
                 boundary_fragments,
             );
         }
     }
 
     pub fn tileLine(
+        half_planes: *const HalfPlanesU16,
         line_index: u32,
         lines: []const LineF32,
         // output
@@ -1851,6 +1854,7 @@ pub const TileGenerator = struct {
         boundary_fragments: []BoundaryFragment,
     ) void {
         var intersection_writer = IntersectionWriter{
+            .half_planes = half_planes,
             .bump = bump,
             .reverse = false,
             .boundary_fragments = boundary_fragments,
@@ -2040,10 +2044,11 @@ pub const TileGenerator = struct {
 };
 
 pub const IntersectionWriter = struct {
+    half_planes: *const HalfPlanesU16,
     bump: *BumpAllocator,
     reverse: bool,
     boundary_fragments: []BoundaryFragment,
-    previous_intersection: ?GridIntersection = null,
+    previous_grid_intersection: ?GridIntersection = null,
 
     pub fn write(self: *@This(), grid_intersection: GridIntersection) void {
         // std.debug.print("{}\n", .{grid_intersection.intersection});
