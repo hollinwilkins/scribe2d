@@ -185,8 +185,6 @@ pub const CpuRasterizer = struct {
     }
 
     pub fn rasterize(self: *@This(), texture: *TextureUnmanaged) !void {
-        _ = texture;
-
         var pool: std.Thread.Pool = undefined;
         try pool.init(.{
             .allocator = self.allocator,
@@ -226,8 +224,8 @@ pub const CpuRasterizer = struct {
         //     return;
         // }
 
-        // // write scanline encoding to texture
-        // self.flushTexture(&pool, texture);
+        // write scanline encoding to texture
+        self.flushTexture(&pool, texture);
     }
 
     fn expandMonoids(self: *@This()) !void {
@@ -530,8 +528,8 @@ pub const CpuRasterizer = struct {
 
             if (style.isFill()) {
                 const fill_range = RangeU32{
-                    .start = path.start_fill_boundary_offset,
-                    .end = path.end_fill_boundary_offset,
+                    .start = path.boundary_offset.start_fill_offset,
+                    .end = path.boundary_offset.end_fill_offset,
                 };
 
                 if (self.config.flush_texture_boundary) {
@@ -580,8 +578,8 @@ pub const CpuRasterizer = struct {
 
             if (style.isStroke()) {
                 const stroke_range = RangeU32{
-                    .start = path.start_stroke_boundary_offset,
-                    .end = path.end_stroke_boundary_offset,
+                    .start = path.boundary_offset.start_stroke_offset,
+                    .end = path.boundary_offset.end_stroke_offset,
                 };
 
                 if (self.config.flush_texture_boundary) {

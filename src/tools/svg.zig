@@ -10,11 +10,12 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // var args = std.process.args();
-    // _ = args.next();
-    // const svg_file = args.next() orelse @panic("need to provide svg file");
-    // const output_file = args.next() orelse @panic("need to provide output file");
+    var args = std.process.args();
+    _ = args.next();
+    const svg_file = args.next() orelse @panic("need to provide svg file");
+    const output_file = args.next() orelse @panic("need to provide output file");
 
+    _ = svg_file;
     // var svg = try scribe.svg.Svg.parseFileAlloc(allocator, svg_file);
     // defer svg.deinit();
 
@@ -98,5 +99,5 @@ pub fn main() !void {
 
     rasterizer.debugPrint(texture);
 
-    // try image.writeToFile(output_file, .png);
+    try image.writeToFile(output_file, .png);
 }
