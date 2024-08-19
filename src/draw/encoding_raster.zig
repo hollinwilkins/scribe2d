@@ -330,6 +330,7 @@ pub const CpuRasterizer = struct {
         wg.wait();
 
         for (self.paths.items) |*path| {
+            std.debug.assert(path.assertLineAllocations());
             path.fill_bump.raw = 0;
             path.stroke_bump.raw = 0;
         }
@@ -378,8 +379,8 @@ pub const CpuRasterizer = struct {
         const boundary_fragments = self.boundary_fragments.items;
 
         for (0..self.paths.items.len) |path_index| {
-            var path = self.paths.items[path_index];
-            
+            const path = &self.paths.items[path_index];
+
             const fill_range = RangeU32.create(path.line_offset.start_fill_offset, path.line_offset.end_fill_offset);
             const stroke_range = RangeU32.create(path.line_offset.start_stroke_offset, path.line_offset.end_stroke_offset);
 
@@ -420,6 +421,12 @@ pub const CpuRasterizer = struct {
         }
 
         wg.wait();
+
+        for (self.paths.items) |*path| {
+            std.debug.assert(path.assertBoundaryFragmentAllocations());
+            path.fill_bump.raw = 0;
+            path.stroke_bump.raw = 0;
+        }
     }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {

@@ -1048,6 +1048,20 @@ pub const Path = struct {
     boundary_offset: PathOffset = PathOffset{},
     fill_bump: Bump = Bump{ .raw = 0 },
     stroke_bump: Bump = Bump{ .raw = 0 },
+
+    pub fn assertLineAllocations(self: @This()) bool {
+        std.debug.assert(self.line_offset.end_fill_offset - self.line_offset.start_fill_offset == self.fill_bump.raw);
+        std.debug.assert(self.line_offset.end_stroke_offset - self.line_offset.start_stroke_offset == self.stroke_bump.raw);
+
+        return true;
+    }
+
+    pub fn assertBoundaryFragmentAllocations(self: @This()) bool {
+        std.debug.assert(self.boundary_offset.end_fill_offset - self.boundary_offset.start_fill_offset == self.fill_bump.raw);
+        std.debug.assert(self.boundary_offset.end_stroke_offset - self.boundary_offset.start_stroke_offset == self.stroke_bump.raw);
+
+        return true;
+    }
 };
 
 pub const Subpath = struct {
