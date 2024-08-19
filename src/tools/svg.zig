@@ -64,7 +64,8 @@ pub fn main() !void {
 
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
-        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .debug_flags = 0,
+        // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
@@ -115,18 +116,6 @@ pub fn main() !void {
         }
 
         std.debug.print("===================== Debug Point: {} =====================\n", .{dbg_point});
-        // std.debug.print("------------- Grid Intersections ------------\n", .{});
-        // for (rasterizer.grid_intersections.items) |grid_intersection| {
-        //     if (std.meta.eql(grid_intersection.pixel, dbg_point)) {
-        //         std.debug.print("GridIntersection({},{}): T({})\n", .{
-        //             grid_intersection.intersection.point.x,
-        //             grid_intersection.intersection.point.y,
-        //             grid_intersection.intersection.t,
-        //         });
-        //     }
-        // }
-        // std.debug.print("------------- End Grid Intersections ------------\n", .{});
-
         std.debug.print("------------- Boundary Fragments ------------\n", .{});
         for (rasterizer.boundary_fragments.items) |boundary_fragment| {
             if (std.meta.eql(boundary_fragment.pixel, dbg_point)) {
