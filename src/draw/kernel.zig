@@ -2276,14 +2276,14 @@ pub const Rasterize = struct {
 
             const fill_merge_range = RangeU32{
                 .start = 0,
-                .end = path.end_fill_boundary_offset - path.start_fill_boundary_offset,
+                .end = path.boundary_offset.end_fill_offset - path.boundary_offset.start_fill_offset,
             };
             const stroke_merge_range = RangeU32{
                 .start = 0,
-                .end = path.end_stroke_boundary_offset - path.start_stroke_boundary_offset,
+                .end = path.boundary_offset.end_stroke_offset - path.boundary_offset.start_stroke_offset,
             };
-            const fill_boundary_fragments = boundary_fragments[path.start_fill_boundary_offset..path.end_fill_boundary_offset];
-            const stroke_boundary_fragments = boundary_fragments[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset];
+            const fill_boundary_fragments = boundary_fragments[path.boundary_offset.start_fill_offset..path.boundary_offset.end_fill_offset];
+            const stroke_boundary_fragments = boundary_fragments[path.boundary_offset.start_stroke_offset..path.boundary_offset.end_stroke_offset];
 
             var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
             while (chunk_iter.next()) |chunk| {
