@@ -219,8 +219,8 @@ pub const CpuRasterizer = struct {
         try self.allocateBoundaryFragments(&pool);
         try self.tile(&pool);
 
-        // // calculate scanline encoding
-        // try self.kernelRasterize(&pool);
+        // calculate scanline encoding
+        try self.kernelRasterize(&pool);
 
         // if (!self.config.runFlushTexture()) {
         //     return;
@@ -430,9 +430,9 @@ pub const CpuRasterizer = struct {
     }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
-        if (!self.config.runIntersect()) {
-            return;
-        }
+        // if (!self.config.runIntersect()) {
+        //     return;
+        // }
 
         var wg = std.Thread.WaitGroup{};
         const rasterizer = kernel_module.Rasterize;
@@ -447,8 +447,6 @@ pub const CpuRasterizer = struct {
                 &wg,
                 rasterizer.boundaryFinish,
                 .{
-                    self.path_monoids.items,
-                    self.segment_offsets.items,
                     chunk,
                     self.paths.items,
                     self.boundary_fragments.items,
@@ -459,9 +457,9 @@ pub const CpuRasterizer = struct {
         wg.wait();
         wg.reset();
 
-        if (!self.config.runMerge()) {
-            return;
-        }
+        // if (!self.config.runMerge()) {
+        //     return;
+        // }
 
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
@@ -480,42 +478,42 @@ pub const CpuRasterizer = struct {
         wg.wait();
         wg.reset();
 
-        if (!self.config.runMask()) {
-            return;
-        }
+        // if (!self.config.runMask()) {
+        //     return;
+        // }
 
-        chunk_iter.reset();
-        while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.windMainRay,
-                .{
-                    self.config.kernel_config,
-                    self.paths.items,
-                    chunk,
-                    self.boundary_fragments.items,
-                },
-            );
-        }
+        // chunk_iter.reset();
+        // while (chunk_iter.next()) |chunk| {
+        //     pool.spawnWg(
+        //         &wg,
+        //         rasterizer.windMainRay,
+        //         .{
+        //             self.config.kernel_config,
+        //             self.paths.items,
+        //             chunk,
+        //             self.boundary_fragments.items,
+        //         },
+        //     );
+        // }
 
-        wg.wait();
-        wg.reset();
+        // wg.wait();
+        // wg.reset();
 
-        chunk_iter.reset();
-        while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.mask,
-                .{
-                    self.config.kernel_config,
-                    self.path_monoids.items,
-                    self.paths.items,
-                    self.encoding.styles,
-                    chunk,
-                    self.boundary_fragments.items,
-                },
-            );
-        }
+        // chunk_iter.reset();
+        // while (chunk_iter.next()) |chunk| {
+        //     pool.spawnWg(
+        //         &wg,
+        //         rasterizer.mask,
+        //         .{
+        //             self.config.kernel_config,
+        //             self.path_monoids.items,
+        //             self.paths.items,
+        //             self.encoding.styles,
+        //             chunk,
+        //             self.boundary_fragments.items,
+        //         },
+        //     );
+        // }
 
         wg.wait();
     }

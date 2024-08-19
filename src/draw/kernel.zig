@@ -1856,7 +1856,6 @@ pub const TileGenerator = struct {
         var intersection_writer = IntersectionWriter{
             .half_planes = half_planes,
             .bump = bump,
-            .reverse = false,
             .boundary_fragments = boundary_fragments,
         };
 
@@ -2046,42 +2045,26 @@ pub const TileGenerator = struct {
 pub const IntersectionWriter = struct {
     half_planes: *const HalfPlanesU16,
     bump: *BumpAllocator,
-    reverse: bool,
     boundary_fragments: []BoundaryFragment,
     previous_grid_intersection: ?GridIntersection = null,
 
     pub fn write(self: *@This(), grid_intersection: GridIntersection) void {
         // std.debug.print("{}\n", .{grid_intersection.intersection});
 
-        var grid_intersection2 = grid_intersection;
-        if (self.reverse) {
-            grid_intersection2 = grid_intersection.reverse();
-        }
-
         if (self.previous_grid_intersection) |*previous| {
             {
-                if (self.reverse) {
-                    self.writeBoundaryFragment(BoundaryFragment.create(
-                        self.half_planes,
-                        [_]*const GridIntersection{
-                            &grid_intersection2,
-                            previous,
-                        },
-                    ));
-                } else {
-                    self.writeBoundaryFragment(BoundaryFragment.create(
-                        self.half_planes,
-                        [_]*const GridIntersection{
-                            previous,
-                            &grid_intersection2,
-                        },
-                    ));
-                }
+                self.writeBoundaryFragment(BoundaryFragment.create(
+                    self.half_planes,
+                    [_]*const GridIntersection{
+                        previous,
+                        &grid_intersection,
+                    },
+                ));
             }
 
-            self.previous_grid_intersection = grid_intersection2;
+            self.previous_grid_intersection = grid_intersection;
         } else {
-            self.previous_grid_intersection = grid_intersection2;
+            self.previous_grid_intersection = grid_intersection;
             return;
         }
     }
@@ -2395,43 +2378,26 @@ pub const Rasterize = struct {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
     pub fn boundaryFinish(
-        path_monoids: []const PathMonoid,
-        segment_offsets: []const SegmentOffset,
         range: RangeU32,
         paths: []Path,
         boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |path_index| {
-            const path = &paths[path_index];
-            const path_monoid = path_monoids[path.segment_index];
-            const path_offset = PathOffset.lineOffset(
-                path_monoid.path_index,
-                segment_offsets,
-                paths,
-            );
-
-            path.start_fill_boundary_offset = path_offset.start_fill_boundary_offset;
-            path.end_fill_boundary_offset = path_offset.start_fill_boundary_offset + path.fill_bump.raw;
-
-            path.start_stroke_boundary_offset = path_offset.start_stroke_boundary_offset;
-            path.end_stroke_boundary_offset = path_offset.start_stroke_boundary_offset + path.stroke_bump.raw;
+            const path = paths[path_index];
 
             std.mem.sort(
                 BoundaryFragment,
-                boundary_fragments[path.start_fill_boundary_offset..path.end_fill_boundary_offset],
+                boundary_fragments[path.boundary_offset.start_fill_offset..path.boundary_offset.end_fill_offset],
                 @as(u32, 0),
                 boundaryFragmentLessThan,
             );
 
             std.mem.sort(
                 BoundaryFragment,
-                boundary_fragments[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset],
+                boundary_fragments[path.boundary_offset.start_stroke_offset..path.boundary_offset.end_stroke_offset],
                 @as(u32, 0),
                 boundaryFragmentLessThan,
             );
-
-            path.fill_bump.raw = 0;
-            path.stroke_bump.raw = 0;
         }
     }
 
@@ -2460,14 +2426,14 @@ pub const Rasterize = struct {
 
             const fill_merge_range = RangeU32{
                 .start = 0,
-                .end = path.end_fill_boundary_offset - path.start_fill_boundary_offset,
+                .end = path.boundary_offset.end_fill_offset - path.boundary_offset.start_fill_offset,
             };
             const stroke_merge_range = RangeU32{
                 .start = 0,
-                .end = path.end_stroke_boundary_offset - path.start_stroke_boundary_offset,
+                .end = path.boundary_offset.end_stroke_offset - path.boundary_offset.start_stroke_offset,
             };
-            const fill_boundary_fragments = boundary_fragments[path.start_fill_boundary_offset..path.end_fill_boundary_offset];
-            const stroke_boundary_fragments = boundary_fragments[path.start_stroke_boundary_offset..path.end_stroke_boundary_offset];
+            const fill_boundary_fragments = boundary_fragments[path.boundary_offset.start_fill_offset..path.boundary_offset.end_fill_offset];
+            const stroke_boundary_fragments = boundary_fragments[path.boundary_offset.start_stroke_offset..path.boundary_offset.end_stroke_offset];
 
             var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
             while (chunk_iter.next()) |chunk| {
