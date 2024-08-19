@@ -421,7 +421,8 @@ pub const CpuRasterizer = struct {
         wg.wait();
 
         for (self.paths.items) |*path| {
-            std.debug.assert(path.assertBoundaryFragmentAllocations());
+            path.boundary_offset.end_fill_offset = path.boundary_offset.start_fill_offset + path.fill_bump.raw;
+            path.boundary_offset.end_stroke_offset = path.boundary_offset.start_stroke_offset + path.stroke_bump.raw;
             path.fill_bump.raw = 0;
             path.stroke_bump.raw = 0;
         }

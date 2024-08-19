@@ -653,18 +653,10 @@ pub const BoundaryAllocator = struct {
         const start_y: f32 = if (min_y) @floor(start_point.y) else @ceil(start_point.y);
         const end_y: f32 = if (min_y) @ceil(end_point.y) else @floor(end_point.y);
 
-        if (start_x != start_point.x or start_y != start_point.y) {
-            intersections += 1;
-        }
-
-        if (end_x != end_point.x or end_y != end_point.y) {
-            intersections += 1;
-        }
-
         intersections += @abs(@as(i32, @intFromFloat(start_x - end_x)));
         intersections += @abs(@as(i32, @intFromFloat(start_y - end_y)));
 
-        intersection_offset.offset += intersections;
+        intersection_offset.offset += intersections + 2;
     }
 };
 
