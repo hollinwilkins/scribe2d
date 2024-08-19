@@ -15,9 +15,9 @@ pub fn main() !void {
     const svg_file = args.next() orelse @panic("need to provide svg file");
     const output_file = args.next() orelse @panic("need to provide output file");
 
-    _ = svg_file;
-    // var svg = try scribe.svg.Svg.parseFileAlloc(allocator, svg_file);
-    // defer svg.deinit();
+    // _ = svg_file;
+    var svg = try scribe.svg.Svg.parseFileAlloc(allocator, svg_file);
+    defer svg.deinit();
 
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
@@ -35,8 +35,8 @@ pub fn main() !void {
         var path_encoder = encoder.pathEncoder(f32);
         defer path_encoder.close();
         try path_encoder.moveTo(0.0, 0.0);
-        try path_encoder.lineTo(10.0, 10.0);
-        try path_encoder.lineTo(0.0, 5.0);
+        try path_encoder.lineTo(100.0, 100.0);
+        try path_encoder.lineTo(0.0, 50.0);
         try path_encoder.lineTo(0.0, 0.0);
     }
 
@@ -67,7 +67,7 @@ pub fn main() !void {
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
-        // .flush_texture_span = false,
+        .flush_texture_span = false,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,
