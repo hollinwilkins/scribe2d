@@ -2042,7 +2042,6 @@ pub const IntersectionWriter = struct {
     half_planes: *const HalfPlanesU16,
     bump: *BumpAllocator,
     boundary_fragments: []BoundaryFragment,
-    count: u32 = 0,
     previous_grid_intersection: ?GridIntersection = null,
 
     pub fn write(self: *@This(), grid_intersection2: GridIntersection) void {
@@ -2074,9 +2073,7 @@ pub const IntersectionWriter = struct {
     }
 
     pub fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
-        self.count += 1;
-        const index = self.bump.bump(1);
-        self.boundary_fragments[index] = boundary_fragment;
+        self.boundary_fragments[self.bump.bump(1)] = boundary_fragment;
     }
 };
 
