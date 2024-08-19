@@ -12,7 +12,7 @@ pub fn Intersection(comptime T: type) type {
         point: P,
 
         pub fn fitToGrid(self: @This()) @This() {
-            const GRID_FIT_THRESHOLD: f32 = 1e-6;
+            const GRID_FIT_THRESHOLD: f32 = 1e-4;
 
             var point = self.point;
             const rounded_x = @round(self.point.x);

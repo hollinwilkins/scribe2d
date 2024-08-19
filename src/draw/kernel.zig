@@ -1943,7 +1943,7 @@ pub const TileGenerator = struct {
                     if (diff_y) {
                         while (scanner.nextY()) |y| {
                             if (scanY(y, line, scan_bounds)) |y_intersection| {
-                                if (!x_flushed and y_intersection.intersection.t > x_intersection.intersection.t) {
+                                if (!x_flushed and y_intersection.intersection.t >= x_intersection.intersection.t) {
                                     // TODO: there is probably a better way to handle this...
                                     // this mallarky is possible because of floating point errors
                                     // std.debug.print("X: ", .{});
@@ -2037,16 +2037,25 @@ pub const TileGenerator = struct {
 };
 
 pub const IntersectionWriter = struct {
+    const GRID_POINT_TOLERANCE: f32 = 1e-6;
+
     half_planes: *const HalfPlanesU16,
     bump: *BumpAllocator,
     boundary_fragments: []BoundaryFragment,
     count: u32 = 0,
     previous_grid_intersection: ?GridIntersection = null,
 
-    pub fn write(self: *@This(), grid_intersection: GridIntersection) void {
+    pub fn write(self: *@This(), grid_intersection2: GridIntersection) void {
         // std.debug.print("{}\n", .{grid_intersection.intersection});
+        const grid_intersection = grid_intersection2.fitToGrid();
 
         if (self.previous_grid_intersection) |*previous| {
+            if (grid_intersection.intersection.point.approxEqAbs(previous.intersection.point, GRID_POINT_TOLERANCE)) {
+                // skip if exactly the same point
+                self.previous_grid_intersection = grid_intersection;
+                return;
+            }
+
             {
                 self.writeBoundaryFragment(BoundaryFragment.create(
                     self.half_planes,

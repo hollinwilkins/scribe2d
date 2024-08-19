@@ -22,25 +22,25 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    var style = draw.Style{};
-    style.setFill(draw.Style.Fill{
-        .brush = .color,
-    });
-    try encoder.encodeColor(draw.ColorU8{
-        .a = 255,
-    });
-    try encoder.encodeStyle(style);
+    // {
+    //     var style = draw.Style{};
+    //     style.setFill(draw.Style.Fill{
+    //         .brush = .color,
+    //     });
+    //     try encoder.encodeColor(draw.ColorU8{
+    //         .a = 255,
+    //     });
+    //     try encoder.encodeStyle(style);
 
-    {
-        var path_encoder = encoder.pathEncoder(f32);
-        defer path_encoder.close();
-        try path_encoder.moveTo(0.0, 0.0);
-        try path_encoder.lineTo(100.0, 100.0);
-        try path_encoder.lineTo(0.0, 50.0);
-        try path_encoder.lineTo(0.0, 0.0);
-    }
+    //     var path_encoder = encoder.pathEncoder(f32);
+    //     defer path_encoder.close();
+    //     try path_encoder.moveTo(0.0, 0.0);
+    //     try path_encoder.lineTo(100.0, 100.0);
+    //     try path_encoder.lineTo(0.0, 50.0);
+    //     try path_encoder.lineTo(0.0, 0.0);
+    // }
 
-    // try svg.encode(&encoder);
+    try svg.encode(&encoder);
     const bounds = encoder.calculateBounds();
 
     const center = (core.TransformF32{
