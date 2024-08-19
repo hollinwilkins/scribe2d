@@ -2325,16 +2325,11 @@ pub const Rasterize = struct {
         boundary_fragments: []BoundaryFragment,
     ) void {
         const merge_fragment = &boundary_fragments[boundary_fragment_index];
-        const previous_boundary_fragment = if (boundary_fragment_index > 0) boundary_fragments[boundary_fragment_index - 1] else null;
 
-        if (previous_boundary_fragment) |previous| {
-            if (std.meta.eql(previous.pixel, merge_fragment.pixel)) {
-                // not the start of the merge section
-                return;
-            }
+        if (!merge_fragment.is_merge) {
+            return;
         }
 
-        merge_fragment.is_merge = true;
         var end_boundary_offset = boundary_fragment_index + 1;
         for (boundary_fragments[end_boundary_offset..]) |next_boundary_fragment| {
             if (!std.meta.eql(merge_fragment.pixel, next_boundary_fragment.pixel)) {

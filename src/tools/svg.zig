@@ -36,7 +36,7 @@ pub fn main() !void {
         defer path_encoder.close();
         try path_encoder.moveTo(0.0, 0.0);
         try path_encoder.lineTo(10.0, 10.0);
-        try path_encoder.lineTo(5.0, 5.0);
+        try path_encoder.lineTo(0.0, 5.0);
         try path_encoder.lineTo(0.0, 0.0);
     }
 
