@@ -482,22 +482,22 @@ pub const CpuRasterizer = struct {
         //     return;
         // }
 
-        // chunk_iter.reset();
-        // while (chunk_iter.next()) |chunk| {
-        //     pool.spawnWg(
-        //         &wg,
-        //         rasterizer.windMainRay,
-        //         .{
-        //             self.config.kernel_config,
-        //             self.paths.items,
-        //             chunk,
-        //             self.boundary_fragments.items,
-        //         },
-        //     );
-        // }
+        chunk_iter.reset();
+        while (chunk_iter.next()) |chunk| {
+            pool.spawnWg(
+                &wg,
+                rasterizer.windMainRay,
+                .{
+                    self.config.kernel_config,
+                    self.paths.items,
+                    chunk,
+                    self.boundary_fragments.items,
+                },
+            );
+        }
 
-        // wg.wait();
-        // wg.reset();
+        wg.wait();
+        wg.reset();
 
         // chunk_iter.reset();
         // while (chunk_iter.next()) |chunk| {
