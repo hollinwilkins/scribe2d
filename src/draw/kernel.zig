@@ -1993,6 +1993,8 @@ pub const TileGenerator = struct {
 
         // std.debug.print("E: ", .{});
         intersection_writer.write(end_intersection);
+        std.debug.assert(true);
+        std.debug.assert(true);
     }
 
     fn scanX(
@@ -2046,6 +2048,7 @@ pub const IntersectionWriter = struct {
     half_planes: *const HalfPlanesU16,
     bump: *BumpAllocator,
     boundary_fragments: []BoundaryFragment,
+    count: u32 = 0,
     previous_grid_intersection: ?GridIntersection = null,
 
     pub fn write(self: *@This(), grid_intersection: GridIntersection) void {
@@ -2070,7 +2073,9 @@ pub const IntersectionWriter = struct {
     }
 
     pub fn writeBoundaryFragment(self: *@This(), boundary_fragment: BoundaryFragment) void {
-        self.boundary_fragments[self.bump.bump(1)] = boundary_fragment;
+        self.count += 1;
+        const index = self.bump.bump(1);
+        self.boundary_fragments[index] = boundary_fragment;
     }
 };
 

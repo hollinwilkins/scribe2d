@@ -196,7 +196,7 @@ pub const BumpAllocator = struct {
 
     pub fn bump(self: *@This(), n: u32) u32 {
         const next_offset = self.start + self.offset.fetchAdd(n, .acq_rel);
-        if (next_offset >= self.end) {
+        if (next_offset > self.end) {
             @panic("Bump allocator exceeded bounds.");
         }
 
