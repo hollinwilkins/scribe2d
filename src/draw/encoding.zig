@@ -1379,6 +1379,18 @@ pub const BoundaryFragment = struct {
     }
 
     pub fn debugPrint(self: @This()) void {
+        std.debug.print("Pixel({},{}), MainRayWinding({}), Stencil({b:0>16})\n", .{
+            self.pixel.x,
+            self.pixel.y,
+            self.main_ray_winding,
+            self.stencil_mask,
+        });
+        std.debug.print("PixelLine(({},{}),({},{}))", .{
+            self.intersections[0].point.x,
+            self.intersections[0].point.y,
+            self.intersections[1].point.x,
+            self.intersections[1].point.y,
+        });
         self.masks.debugPrint();
     }
 };
