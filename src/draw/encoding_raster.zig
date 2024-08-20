@@ -570,9 +570,9 @@ pub const CpuRasterizer = struct {
                             &wg,
                             blender.fillSpan,
                             .{
+                                style.fill.rule,
                                 null,
                                 self.config.kernel_config,
-                                style.fill.rule,
                                 style.fill.brush,
                                 style_offset.start_fill_offset,
                                 self.boundary_fragments.items,
@@ -624,9 +624,9 @@ pub const CpuRasterizer = struct {
                             &wg,
                             blender.fillSpan,
                             .{
+                                .non_zero,
                                 style.stroke,
                                 self.config.kernel_config,
-                                .non_zero,
                                 style.stroke.brush,
                                 style_offset.start_stroke_offset,
                                 self.boundary_fragments.items,

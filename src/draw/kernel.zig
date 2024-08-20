@@ -2413,23 +2413,14 @@ pub const Blend = struct {
             };
             const texture_color = texture.getPixelUnsafe(texture_pixel);
             const blend_color = color_blend.blend(fragment_color, texture_color);
-            if (merge_fragment.pixel.x == 99 and merge_fragment.pixel.y == 85) {
-                const is_stroke = stroke != null;
-                std.debug.print("IsStroke({}), BrushOffset({}), Color({}), Blend({})\n", .{
-                    is_stroke,
-                    brush_offset,
-                    brush_color,
-                    blend_color,
-                });
-            }
             texture.setPixelUnsafe(texture_pixel, blend_color);
         }
     }
 
     pub fn fillSpan(
+        fill_rule: Style.FillRule,
         stroke: ?Style.Stroke,
         config: KernelConfig,
-        fill_rule: Style.FillRule,
         brush: Style.Brush,
         brush_offset: u32,
         boundary_fragments: []const BoundaryFragment,
@@ -2437,13 +2428,12 @@ pub const Blend = struct {
         range: RangeU32,
         texture: *TextureUnmanaged,
     ) void {
-        _ = stroke;
-        _ = config;
-
         switch (fill_rule) {
             .non_zero => {
                 fillSpan2(
                     .non_zero,
+                    stroke,
+                    config,
                     brush,
                     brush_offset,
                     boundary_fragments,
@@ -2455,6 +2445,8 @@ pub const Blend = struct {
             .even_odd => {
                 fillSpan2(
                     .even_odd,
+                    stroke,
+                    config,
                     brush,
                     brush_offset,
                     boundary_fragments,
@@ -2468,6 +2460,8 @@ pub const Blend = struct {
 
     pub fn fillSpan2(
         comptime fill_rule: Style.FillRule,
+        stroke: ?Style.Stroke,
+        config: KernelConfig,
         brush: Style.Brush,
         brush_offset: u32,
         boundary_fragments: []const BoundaryFragment,
@@ -2477,7 +2471,13 @@ pub const Blend = struct {
     ) void {
         _ = brush;
         const color_blend = ColorBlend.Alpha;
-        const brush_color = getColor(draw_data, brush_offset);
+        var brush_color = getColor(draw_data, brush_offset);
+
+        if (stroke) |s| {
+            if (s.width < config.min_stroke_width) {
+                brush_color.a = brush_color.a * (s.width / config.min_stroke_width);
+            }
+        }
 
         for (range.start..range.end) |merge_index| {
             const merge_fragment = boundary_fragments[merge_index];
@@ -2485,10 +2485,10 @@ pub const Blend = struct {
             if (merge_fragment.is_scanline and merge_fragment.pixel.y >= 0 and merge_fragment.pixel.y < texture.dimensions.height) {
                 const y: u32 = @intCast(merge_fragment.pixel.y);
 
-                var start_span_fragment: ?BoundaryFragment = null;
+                // var start_span_fragment = merge_fragment;
                 var previous_merge_fragment = merge_fragment;
                 for (boundary_fragments[merge_index + 1 ..]) |current_merge_fragment| {
-                    if (current_merge_fragment.pixel.y != merge_fragment.pixel.y) {
+                    if (current_merge_fragment.is_scanline) {
                         break;
                     }
 
@@ -2496,36 +2496,30 @@ pub const Blend = struct {
                         continue;
                     }
 
-                    var flush_span: bool = undefined;
-                    switch (fill_rule) {
-                        .non_zero => {
-                            if (current_merge_fragment.main_ray_winding != 0) {
-                                if (start_span_fragment == null) {
-                                    start_span_fragment = previous_merge_fragment;
-                                }
-                                flush_span = false;
-                            } else {
-                                flush_span = true;
-                            }
-                        },
-                        .even_odd => {
-                            if (@as(u16, @intFromFloat(@abs(current_merge_fragment.main_ray_winding))) & 1 == 1) {
-                                if (start_span_fragment == null) {
-                                    start_span_fragment = previous_merge_fragment;
-                                }
-                                flush_span = false;
-                            } else {
-                                flush_span = true;
-                            }
-                        },
-                    }
+                    flush: {
+                        if (std.meta.eql(previous_merge_fragment.pixel, current_merge_fragment.pixel)) {
+                            break :flush;
+                        }
 
-                    if (flush_span) {
-                        if (start_span_fragment) |start| {
-                            // flush start_span to previous fragment
+                        const is_span: bool = switch (fill_rule) {
+                            .non_zero => current_merge_fragment.main_ray_winding != 0,
+                            .even_odd => @as(u16, @intFromFloat(@abs(current_merge_fragment.main_ray_winding))) & 1 == 1,
+                        };
 
-                            const start_x = start.pixel.x + 1;
-                            const end_x = previous_merge_fragment.pixel.x;
+                        if (is_span) {
+                            // flush previous to current
+
+                            var start_x = previous_merge_fragment.pixel.x;
+                            switch (fill_rule) {
+                                .even_odd => start_x += 1,
+                                .non_zero => {
+                                    if (@abs(current_merge_fragment.main_ray_winding) == 1) {
+                                        start_x += 1;
+                                    }
+                                },
+                            }
+
+                            const end_x = current_merge_fragment.pixel.x;
                             const x_range: u32 = @intCast(end_x - start_x);
 
                             for (0..x_range) |x_offset| {
@@ -2540,31 +2534,10 @@ pub const Blend = struct {
                                     texture.setPixelUnsafe(texture_pixel, blend_color);
                                 }
                             }
-
-                            start_span_fragment = null;
                         }
                     }
 
                     previous_merge_fragment = current_merge_fragment;
-                }
-
-                if (start_span_fragment) |start| {
-                    const start_x = start.pixel.x + 1;
-                    const end_x = previous_merge_fragment.pixel.x;
-                    const x_range: u32 = @intCast(end_x - start_x);
-
-                    for (0..x_range) |x_offset| {
-                        const x: i32 = @intCast(start_x + @as(i32, @intCast(x_offset)));
-                        if (x >= 0 and x < texture.dimensions.width) {
-                            const texture_pixel = PointU32{
-                                .x = @intCast(x),
-                                .y = y,
-                            };
-                            const texture_color = texture.getPixelUnsafe(texture_pixel);
-                            const blend_color = color_blend.blend(brush_color, texture_color);
-                            texture.setPixelUnsafe(texture_pixel, blend_color);
-                        }
-                    }
                 }
             }
         }

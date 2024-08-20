@@ -16,30 +16,11 @@ pub fn main() !void {
     const output_file = args.next() orelse @panic("need to provide output file");
     const debug_point = args.next();
 
-    // _ = svg_file;
     var svg = try scribe.svg.Svg.parseFileAlloc(allocator, svg_file);
     defer svg.deinit();
 
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
-
-    // {
-    //     var style = draw.Style{};
-    //     style.setFill(draw.Style.Fill{
-    //         .brush = .color,
-    //     });
-    //     try encoder.encodeColor(draw.ColorU8{
-    //         .a = 255,
-    //     });
-    //     try encoder.encodeStyle(style);
-
-    //     var path_encoder = encoder.pathEncoder(f32);
-    //     defer path_encoder.close();
-    //     try path_encoder.moveTo(0.0, 0.0);
-    //     try path_encoder.lineTo(100.0, 100.0);
-    //     try path_encoder.lineTo(0.0, 50.0);
-    //     try path_encoder.lineTo(0.0, 0.0);
-    // }
 
     try svg.encode(&encoder);
     const bounds = encoder.calculateBounds();
@@ -69,7 +50,7 @@ pub fn main() !void {
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
-        .flush_texture_span = false,
+        // .flush_texture_span = false,
     };
     var rasterizer = try draw.CpuRasterizer.init(
         allocator,
