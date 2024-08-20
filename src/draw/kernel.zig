@@ -429,6 +429,10 @@ pub const LineAllocator = struct {
             last_path_monoid = path_monoids[path_monoids.len - 1];
         }
 
+        if (path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+            return;
+        }
+
         const cubic_points = getCubicPoints(
             path_tag,
             path_monoid,
@@ -521,7 +525,7 @@ pub const LineAllocator = struct {
             line_offset,
         );
 
-        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index - 1) {
             // draw end cap on left side
             drawCap(
                 config,
@@ -1031,6 +1035,10 @@ pub const Flatten = struct {
             last_path_monoid = path_monoids[path_monoids.len - 1];
         }
 
+        if (path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+            return;
+        }
+
         const cubic_points = getCubicPoints(
             path_tag,
             path_monoid,
@@ -1130,7 +1138,7 @@ pub const Flatten = struct {
             back_line_writer,
         );
 
-        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+        if (last_path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index - 1) {
             // draw end cap on left side
             drawCap(
                 config,
