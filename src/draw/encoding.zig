@@ -554,6 +554,12 @@ pub const Encoder = struct {
         return @alignCast(@ptrCast(bytes.ptr));
     }
 
+    pub fn dropPath(self: *@This(), comptime T: type) void {
+        if (self.segment_data.items.len >= @sizeOf(T)) {
+            self.segment_data.items.len -= @sizeOf(T);
+        }
+    }
+
     pub fn pathSegment(self: *@This(), comptime T: type, offset: usize) ?*T {
         if (offset + @sizeOf(T) > self.segment_data.items.len) {
             return null;
@@ -663,6 +669,9 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn finish(self: *@This()) void {
+            std.debug.assert(true);
+            std.debug.assert(true);
+
             if (self.isEmpty() or self.state == .start) {
                 return;
             }
@@ -673,32 +682,34 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn close(self: *@This()) void {
-            if (self.state != .draw or self.isEmpty()) {
-                return;
-            }
+            switch (self.state) {
+                .start => return,
+                .move_to => self.encoder.dropPath(PPoint),
+                .draw => {
+                    cap_and_close_fill: {
+                        const start_point_p = self.encoder.pathSegment(PPoint, self.start_subpath_offset) orelse break :cap_and_close_fill;
+                        const end_point_p = self.encoder.pathTailSegment(PPoint) orelse break :cap_and_close_fill;
+                        const start_point = start_point_p.*;
+                        const end_point = end_point_p.*;
 
-            cap_and_close_fill: {
-                const start_point_p = self.encoder.pathSegment(PPoint, self.start_subpath_offset) orelse break :cap_and_close_fill;
-                const end_point_p = self.encoder.pathTailSegment(PPoint) orelse break :cap_and_close_fill;
-                const start_point = start_point_p.*;
-                const end_point = end_point_p.*;
+                        if (!std.meta.eql(start_point, end_point)) {
+                            self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
 
-                if (!std.meta.eql(start_point, end_point)) {
-                    self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
+                            if (self.is_fill) {
+                                self.lineToPoint(start_point) catch @panic("could not close subpath");
+                            }
 
-                    if (self.is_fill) {
-                        self.lineToPoint(start_point) catch @panic("could not close subpath");
+                            if (self.encoder.currentPathTag()) |tag| {
+                                tag.segment.cap = true;
+                            }
+                        }
                     }
 
-                    if (self.encoder.currentPathTag()) |tag| {
-                        tag.segment.cap = true;
-                    }
-                }
+                    self.start_subpath_index = self.encoder.path_tags.items.len;
+                    self.start_subpath_offset = self.encoder.segment_data.items.len;
+                    self.encoder.staged.subpath = true;
+                },
             }
-
-            self.start_subpath_index = self.encoder.path_tags.items.len;
-            self.start_subpath_offset = self.encoder.segment_data.items.len;
-            self.encoder.staged.subpath = true;
         }
 
         pub fn currentPoint(self: @This()) PPoint {
