@@ -167,28 +167,6 @@ pub const Style = packed struct {
     }
 };
 
-pub const StyleOffset = struct {
-    fill_brush_offset: u32 = 0,
-    stroke_brush_offset: u32 = 0,
-
-    pub usingnamespace MonoidFunctions(Style, @This());
-
-    pub fn createTag(tag: Style) @This() {
-        const fill_brush_offset = tag.fill.brush.offset();
-        return @This(){
-            .fill_brush_offset = fill_brush_offset,
-            .stroke_brush_offset = fill_brush_offset + tag.stroke.brush.offset(),
-        };
-    }
-
-    pub fn combine(self: @This(), other: @This()) @This() {
-        return @This(){
-            .fill_brush_offset = self.fill_brush_offset + other.fill_brush_offset,
-            .stroke_brush_offset = self.stroke_brush_offset + other.stroke_brush_offset,
-        };
-    }
-};
-
 pub const BumpAllocator = struct {
     start: u32 = 0,
     end: u32 = 0,
@@ -1067,7 +1045,7 @@ pub const PathOffset = struct {
     start_stroke_offset: u32 = 0,
     end_stroke_offset: u32 = 0,
 
-    pub fn lineOffset(
+    pub fn segmentOffset(
         path_index: u32,
         segment_offsets: []const SegmentOffset,
         paths: []const Path,
@@ -1095,11 +1073,11 @@ pub const PathOffset = struct {
         };
     }
 
-    pub fn lineToBoundaryOffset(
+    pub fn segmentToBoundaryOffset(
         line_offset: @This(),
         intersection_offsets: []const IntersectionOffset,
     ) @This() {
-        const intersection_offset = lineToIntersectionOffset(line_offset, intersection_offsets);
+        const intersection_offset = segmentToIntersectionOffset(line_offset, intersection_offsets);
 
         // subtract one for each line from the intersection offset to get the boundary offset
         return @This(){
@@ -1110,7 +1088,7 @@ pub const PathOffset = struct {
         };
     }
 
-    pub fn lineToIntersectionOffset(
+    pub fn segmentToIntersectionOffset(
         line_offset: @This(),
         intersection_offsets: []const IntersectionOffset,
     ) @This() {

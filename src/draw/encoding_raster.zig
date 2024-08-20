@@ -11,7 +11,6 @@ const LineF32 = core.LineF32;
 const PointU32 = core.PointU32;
 const KernelConfig = kernel_module.KernelConfig;
 const Style = encoding_module.Style;
-const StyleOffset = encoding_module.StyleOffset;
 const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
 const BumpAllocator = encoding_module.BumpAllocator;
@@ -119,7 +118,6 @@ pub const CpuRasterizer = struct {
     };
 
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
-    const StyleOffsetList = std.ArrayListUnmanaged(StyleOffset);
     const PathList = std.ArrayListUnmanaged(Path);
     const SubpathList = std.ArrayListUnmanaged(Subpath);
     const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
@@ -135,7 +133,7 @@ pub const CpuRasterizer = struct {
     config: Config,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
-    style_offsets: StyleOffsetList = StyleOffsetList{},
+    style_offsets: SegmentOffsetList = SegmentOffsetList{},
     paths: PathList = PathList{},
     subpaths: SubpathList = SubpathList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
@@ -250,7 +248,14 @@ pub const CpuRasterizer = struct {
         }
 
         const style_offsets = try self.style_offsets.addManyAsSlice(self.allocator, self.encoding.styles.len);
-        StyleOffset.expand(self.encoding.styles, style_offsets);
+        for (self.encoding.styles, style_offsets) |style, *style_offset| {
+            style_offset.* = SegmentOffset{
+                .fill_offset = style.fill.brush.offset(),
+                .stroke_offset = style.stroke.brush.offset(),
+            };
+        }
+
+        SegmentOffset.expand(style_offsets, style_offsets);
     }
 
     fn allocateLines(self: *@This(), pool: *std.Thread.Pool) !void {
@@ -291,7 +296,7 @@ pub const CpuRasterizer = struct {
         );
 
         for (self.paths.items, 0..) |*path, path_index| {
-            path.line_offset = PathOffset.lineOffset(@intCast(path_index), segment_offsets, self.paths.items);
+            path.line_offset = PathOffset.segmentOffset(@intCast(path_index), segment_offsets, self.paths.items);
         }
     }
 
@@ -360,7 +365,7 @@ pub const CpuRasterizer = struct {
         IntersectionOffset.expand(intersection_offsets, intersection_offsets);
 
         for (self.paths.items) |*path| {
-            path.boundary_offset = PathOffset.lineToBoundaryOffset(path.line_offset, intersection_offsets);
+            path.boundary_offset = PathOffset.segmentToBoundaryOffset(path.line_offset, intersection_offsets);
         }
 
         const last_boundary_offset = self.paths.getLast().boundary_offset;
@@ -524,7 +529,11 @@ pub const CpuRasterizer = struct {
             const path = self.paths.items[path_index];
             const path_monoid = self.path_monoids.items[path.segment_index];
             const style = self.encoding.getStyle(path_monoid.style_index);
-            const style_offset = self.getStyleOffset(path_monoid.style_index);
+            const style_offset = PathOffset.segmentOffset(
+                @intCast(path_index),
+                self.style_offsets.items,
+                self.paths.items,
+            );
 
             if (style.isFill()) {
                 const fill_range = RangeU32{
@@ -542,7 +551,7 @@ pub const CpuRasterizer = struct {
                                 null,
                                 self.config.kernel_config,
                                 style.fill.brush,
-                                style_offset.fill_brush_offset,
+                                style_offset.end_fill_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,
@@ -566,7 +575,7 @@ pub const CpuRasterizer = struct {
                                 self.config.kernel_config,
                                 style.fill.rule,
                                 style.fill.brush,
-                                style_offset.fill_brush_offset,
+                                style_offset.end_fill_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,
@@ -596,7 +605,7 @@ pub const CpuRasterizer = struct {
                                 style.stroke,
                                 self.config.kernel_config,
                                 style.stroke.brush,
-                                style_offset.stroke_brush_offset,
+                                style_offset.end_stroke_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,
@@ -620,7 +629,7 @@ pub const CpuRasterizer = struct {
                                 self.config.kernel_config,
                                 .non_zero,
                                 style.stroke.brush,
-                                style_offset.stroke_brush_offset,
+                                style_offset.end_stroke_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,
@@ -634,14 +643,6 @@ pub const CpuRasterizer = struct {
                 }
             }
         }
-    }
-
-    pub fn getStyleOffset(self: @This(), style_index: i32) StyleOffset {
-        if (self.style_offsets.items.len > 0 and style_index >= 0) {
-            return self.style_offsets.items[@intCast(style_index)];
-        }
-
-        return StyleOffset{};
     }
 
     pub fn debugPrint(self: @This(), texture: TextureUnmanaged) void {

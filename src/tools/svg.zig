@@ -116,31 +116,65 @@ pub fn main() !void {
         }
 
         std.debug.print("===================== Debug Point: {} =====================\n", .{dbg_point});
-        std.debug.print("------------- Boundary Fragments ------------\n", .{});
-        for (rasterizer.boundary_fragments.items) |boundary_fragment| {
-            if (std.meta.eql(boundary_fragment.pixel, dbg_point)) {
-                std.debug.print("BoundaryFragment({},{})({},{})-({},{}): IsMerge({}), T1({}), T2({}), MainRayWinding({})\n", .{
-                    boundary_fragment.pixel.x,
-                    boundary_fragment.pixel.y,
-                    boundary_fragment.intersections[0].point.x,
-                    boundary_fragment.intersections[0].point.y,
-                    boundary_fragment.intersections[1].point.x,
-                    boundary_fragment.intersections[1].point.y,
-                    boundary_fragment.is_merge,
-                    boundary_fragment.intersections[0].t,
-                    boundary_fragment.intersections[1].t,
-                    boundary_fragment.main_ray_winding,
-                });
-                std.debug.print("-----\n", .{});
-                boundary_fragment.masks.debugPrint();
-                std.debug.print("-----\n", .{});
-                std.debug.print("StencilMask({b:0>16}), Intensity({})\n", .{
-                    boundary_fragment.stencil_mask,
-                    boundary_fragment.getIntensity(),
-                });
-                std.debug.print("-----------------------------\n", .{});
+        for (rasterizer.paths.items) |path| {
+            const path_monoid = rasterizer.path_monoids.items[path.segment_index];
+            const fill_boundary_fragments = rasterizer.boundary_fragments.items[path.boundary_offset.start_fill_offset..path.boundary_offset.end_fill_offset];
+            const stroke_boundary_fragments = rasterizer.boundary_fragments.items[path.boundary_offset.start_stroke_offset..path.boundary_offset.end_stroke_offset];
+
+            std.debug.print("Path({})\n", .{path_monoid.path_index});
+            std.debug.print("------------- Fill Boundary Fragments ------------\n", .{});
+            for (fill_boundary_fragments) |boundary_fragment| {
+                if (std.meta.eql(boundary_fragment.pixel, dbg_point)) {
+                    std.debug.print("BoundaryFragment({},{})({},{})-({},{}): IsMerge({}), T1({}), T2({}), MainRayWinding({})\n", .{
+                        boundary_fragment.pixel.x,
+                        boundary_fragment.pixel.y,
+                        boundary_fragment.intersections[0].point.x,
+                        boundary_fragment.intersections[0].point.y,
+                        boundary_fragment.intersections[1].point.x,
+                        boundary_fragment.intersections[1].point.y,
+                        boundary_fragment.is_merge,
+                        boundary_fragment.intersections[0].t,
+                        boundary_fragment.intersections[1].t,
+                        boundary_fragment.main_ray_winding,
+                    });
+                    std.debug.print("-----\n", .{});
+                    boundary_fragment.masks.debugPrint();
+                    std.debug.print("-----\n", .{});
+                    std.debug.print("StencilMask({b:0>16}), Intensity({})\n", .{
+                        boundary_fragment.stencil_mask,
+                        boundary_fragment.getIntensity(),
+                    });
+                    std.debug.print("-----------------------------\n", .{});
+                }
             }
+            std.debug.print("------------- End Fill Boundary Fragments ------------\n", .{});
+
+            std.debug.print("------------- Stroke Boundary Fragments ------------\n", .{});
+            for (stroke_boundary_fragments) |boundary_fragment| {
+                if (std.meta.eql(boundary_fragment.pixel, dbg_point)) {
+                    std.debug.print("BoundaryFragment({},{})({},{})-({},{}): IsMerge({}), T1({}), T2({}), MainRayWinding({})\n", .{
+                        boundary_fragment.pixel.x,
+                        boundary_fragment.pixel.y,
+                        boundary_fragment.intersections[0].point.x,
+                        boundary_fragment.intersections[0].point.y,
+                        boundary_fragment.intersections[1].point.x,
+                        boundary_fragment.intersections[1].point.y,
+                        boundary_fragment.is_merge,
+                        boundary_fragment.intersections[0].t,
+                        boundary_fragment.intersections[1].t,
+                        boundary_fragment.main_ray_winding,
+                    });
+                    std.debug.print("-----\n", .{});
+                    boundary_fragment.masks.debugPrint();
+                    std.debug.print("-----\n", .{});
+                    std.debug.print("StencilMask({b:0>16}), Intensity({})\n", .{
+                        boundary_fragment.stencil_mask,
+                        boundary_fragment.getIntensity(),
+                    });
+                    std.debug.print("-----------------------------\n", .{});
+                }
+            }
+            std.debug.print("------------- End Stroke Boundary Fragments ------------\n", .{});
         }
-        std.debug.print("------------- End Boundary Fragments ------------\n", .{});
     }
 }

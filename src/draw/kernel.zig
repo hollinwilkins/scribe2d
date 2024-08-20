@@ -2414,6 +2414,15 @@ pub const Blend = struct {
             };
             const texture_color = texture.getPixelUnsafe(texture_pixel);
             const blend_color = color_blend.blend(fragment_color, texture_color);
+            if (merge_fragment.pixel.x == 99 and merge_fragment.pixel.y == 85) {
+                const is_stroke = stroke != null;
+                std.debug.print("IsStroke({}), BrushOffset({}), Color({}), Blend({})\n", .{
+                    is_stroke,
+                    brush_offset,
+                    brush_color,
+                    blend_color,
+                });
+            }
             texture.setPixelUnsafe(texture_pixel, blend_color);
         }
     }
