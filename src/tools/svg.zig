@@ -119,11 +119,14 @@ pub fn main() !void {
         std.debug.print("------------- Boundary Fragments ------------\n", .{});
         for (rasterizer.boundary_fragments.items) |boundary_fragment| {
             if (std.meta.eql(boundary_fragment.pixel, dbg_point)) {
-                std.debug.print("BoundaryFragment({},{})-({},{}): T1({}), T2({}), MainRayWinding({})\n", .{
+                std.debug.print("BoundaryFragment({},{})({},{})-({},{}): IsMerge({}), T1({}), T2({}), MainRayWinding({})\n", .{
+                    boundary_fragment.pixel.x,
+                    boundary_fragment.pixel.y,
                     boundary_fragment.intersections[0].point.x,
                     boundary_fragment.intersections[0].point.y,
                     boundary_fragment.intersections[1].point.x,
                     boundary_fragment.intersections[1].point.y,
+                    boundary_fragment.is_merge,
                     boundary_fragment.intersections[0].t,
                     boundary_fragment.intersections[1].t,
                     boundary_fragment.main_ray_winding,

@@ -669,7 +669,6 @@ pub const Flatten = struct {
         transforms: []const TransformF32.Affine,
         subpaths: []const Subpath,
         segment_data: []const u8,
-        segment_offsets: []const SegmentOffset,
         range: RangeU32,
         // outputs
         paths: []Path,
@@ -679,16 +678,11 @@ pub const Flatten = struct {
             const path_monoid = path_monoids[segment_index];
             const style = getStyle(styles, path_monoid.style_index);
             const path = &paths[path_monoid.path_index];
-            const line_offset = PathOffset.lineOffset(
-                path_monoid.path_index,
-                segment_offsets,
-                paths,
-            );
 
             if (style.isFill()) {
                 var fill_bump = BumpAllocator{
-                    .start = line_offset.start_fill_offset,
-                    .end = line_offset.end_fill_offset,
+                    .start = path.line_offset.start_fill_offset,
+                    .end = path.line_offset.end_fill_offset,
                     .offset = &path.fill_bump,
                 };
                 var line_writer = LineWriter{
@@ -713,8 +707,8 @@ pub const Flatten = struct {
 
             if (style.isStroke()) {
                 var stroke_bump = BumpAllocator{
-                    .start = line_offset.start_stroke_offset,
-                    .end = line_offset.end_stroke_offset,
+                    .start = path.line_offset.start_stroke_offset,
+                    .end = path.line_offset.end_stroke_offset,
                     .offset = &path.stroke_bump,
                 };
                 var front_line_writer = LineWriter{

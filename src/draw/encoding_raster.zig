@@ -317,7 +317,6 @@ pub const CpuRasterizer = struct {
                     self.encoding.transforms,
                     self.subpaths.items,
                     self.encoding.segment_data,
-                    self.segment_offsets.items,
                     chunk,
                     self.paths.items,
                     lines,
