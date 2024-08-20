@@ -1081,7 +1081,7 @@ pub const PathOffset = struct {
             end_path_segment_offset = segment_offsets[segment_offsets.len - 1];
         }
 
-        const start_fill_offset = start_path_segment_offset.fill_offset;
+        const start_fill_offset = start_path_segment_offset.fill_offset + start_path_segment_offset.stroke_offset;
         const end_fill_offset = end_path_segment_offset.fill_offset + start_path_segment_offset.stroke_offset;
 
         const start_stroke_offset = end_fill_offset;
