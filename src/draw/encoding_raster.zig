@@ -296,7 +296,7 @@ pub const CpuRasterizer = struct {
         );
 
         for (self.paths.items, 0..) |*path, path_index| {
-            path.line_offset = PathOffset.segmentOffset(@intCast(path_index), segment_offsets, self.paths.items);
+            path.line_offset = PathOffset.lineOffset(@intCast(path_index), segment_offsets, self.paths.items);
         }
     }
 
@@ -365,7 +365,7 @@ pub const CpuRasterizer = struct {
         IntersectionOffset.expand(intersection_offsets, intersection_offsets);
 
         for (self.paths.items) |*path| {
-            path.boundary_offset = PathOffset.segmentToBoundaryOffset(path.line_offset, intersection_offsets);
+            path.boundary_offset = PathOffset.lineToBoundaryOffset(path.line_offset, intersection_offsets);
         }
 
         const last_boundary_offset = self.paths.getLast().boundary_offset;
@@ -529,10 +529,9 @@ pub const CpuRasterizer = struct {
             const path = self.paths.items[path_index];
             const path_monoid = self.path_monoids.items[path.segment_index];
             const style = self.encoding.getStyle(path_monoid.style_index);
-            const style_offset = PathOffset.segmentOffset(
-                @intCast(path_index),
+            const style_offset = PathOffset.styleOffset(
+                @intCast(path_monoid.style_index),
                 self.style_offsets.items,
-                self.paths.items,
             );
 
             if (style.isFill()) {
@@ -551,7 +550,7 @@ pub const CpuRasterizer = struct {
                                 null,
                                 self.config.kernel_config,
                                 style.fill.brush,
-                                style_offset.end_fill_offset,
+                                style_offset.start_fill_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,
@@ -575,7 +574,7 @@ pub const CpuRasterizer = struct {
                                 self.config.kernel_config,
                                 style.fill.rule,
                                 style.fill.brush,
-                                style_offset.end_fill_offset,
+                                style_offset.start_fill_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,
@@ -605,7 +604,7 @@ pub const CpuRasterizer = struct {
                                 style.stroke,
                                 self.config.kernel_config,
                                 style.stroke.brush,
-                                style_offset.end_stroke_offset,
+                                style_offset.start_stroke_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,
@@ -629,7 +628,7 @@ pub const CpuRasterizer = struct {
                                 self.config.kernel_config,
                                 .non_zero,
                                 style.stroke.brush,
-                                style_offset.end_stroke_offset,
+                                style_offset.start_stroke_offset,
                                 self.boundary_fragments.items,
                                 self.encoding.draw_data,
                                 chunk,

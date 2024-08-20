@@ -2381,7 +2381,7 @@ pub const Blend = struct {
     ) void {
         _ = brush; // only color for now
         const color_blend = ColorBlend.Alpha;
-        var brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
+        var brush_color = getColor(draw_data, brush_offset);
 
         if (stroke) |s| {
             if (s.width < config.min_stroke_width) {
@@ -2478,7 +2478,7 @@ pub const Blend = struct {
     ) void {
         _ = brush;
         const color_blend = ColorBlend.Alpha;
-        const brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
+        const brush_color = getColor(draw_data, brush_offset);
 
         for (range.start..range.end) |merge_index| {
             const merge_fragment = boundary_fragments[merge_index];

@@ -1045,7 +1045,7 @@ pub const PathOffset = struct {
     start_stroke_offset: u32 = 0,
     end_stroke_offset: u32 = 0,
 
-    pub fn segmentOffset(
+    pub fn lineOffset(
         path_index: u32,
         segment_offsets: []const SegmentOffset,
         paths: []const Path,
@@ -1073,11 +1073,11 @@ pub const PathOffset = struct {
         };
     }
 
-    pub fn segmentToBoundaryOffset(
+    pub fn lineToBoundaryOffset(
         line_offset: @This(),
         intersection_offsets: []const IntersectionOffset,
     ) @This() {
-        const intersection_offset = segmentToIntersectionOffset(line_offset, intersection_offsets);
+        const intersection_offset = lineToIntersectionOffset(line_offset, intersection_offsets);
 
         // subtract one for each line from the intersection offset to get the boundary offset
         return @This(){
@@ -1088,7 +1088,7 @@ pub const PathOffset = struct {
         };
     }
 
-    pub fn segmentToIntersectionOffset(
+    pub fn lineToIntersectionOffset(
         line_offset: @This(),
         intersection_offsets: []const IntersectionOffset,
     ) @This() {
@@ -1097,6 +1097,27 @@ pub const PathOffset = struct {
 
         const start_stroke_offset = if (line_offset.start_stroke_offset > 0) intersection_offsets[line_offset.start_stroke_offset - 1].offset else 0;
         const end_stroke_offset = if (line_offset.end_stroke_offset > 0) intersection_offsets[line_offset.end_stroke_offset - 1].offset else 0;
+
+        return @This(){
+            .start_fill_offset = start_fill_offset,
+            .end_fill_offset = end_fill_offset,
+            .start_stroke_offset = start_stroke_offset,
+            .end_stroke_offset = end_stroke_offset,
+        };
+    }
+
+    pub fn styleOffset(
+        style_index: u32,
+        style_offsets: []const SegmentOffset,
+    ) @This() {
+        const start_style_offset = if (style_index > 0) style_offsets[style_index - 1] else SegmentOffset{};
+        const end_style_offset = style_offsets[style_index];
+
+        const start_fill_offset = start_style_offset.fill_offset + start_style_offset.stroke_offset;
+        const end_fill_offset = end_style_offset.fill_offset + start_style_offset.stroke_offset;
+
+        const start_stroke_offset = end_fill_offset;
+        const end_stroke_offset = end_style_offset.fill_offset + end_style_offset.stroke_offset;
 
         return @This(){
             .start_fill_offset = start_fill_offset,
