@@ -650,10 +650,10 @@ pub const PathParser = struct {
     ) ?PointF32 {
         const next_float = points.nextFloat() orelse return null;
         const previous_point = self.getPreviousPoint();
-        var point = PointF32.create(previous_point.x, next_float);
+        var point = PointF32.create(next_float, previous_point.y);
 
         if (position == .relative) {
-            point.y += previous_point.y;
+            point.x += previous_point.x;
         }
 
         return point;
@@ -666,10 +666,10 @@ pub const PathParser = struct {
     ) ?PointF32 {
         const next_float = points.nextFloat() orelse return null;
         const previous_point = self.getPreviousPoint();
-        var point = PointF32.create(next_float, previous_point.y);
+        var point = PointF32.create(previous_point.x, next_float);
 
         if (position == .relative) {
-            point.x += previous_point.x;
+            point.y += previous_point.y;
         }
 
         return point;
@@ -754,11 +754,11 @@ pub const PathTokenizer = struct {
             },
             'Z' => {
                 self.advance();
-                return Token.drawMode(.vertical_line_to, .absolute);
+                return Token.drawMode(.close, .absolute);
             },
             'z' => {
                 self.advance();
-                return Token.drawMode(.vertical_line_to, .absolute);
+                return Token.drawMode(.close, .absolute);
             },
             else => {
                 // continue for further processing
