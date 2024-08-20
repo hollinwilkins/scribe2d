@@ -1818,10 +1818,6 @@ pub const LineWriter = struct {
     bounds: RectF32 = RectF32.NONE,
 
     pub fn write(self: *@This(), line: LineF32) void {
-        if (std.meta.eql(line.p0, line.p1)) {
-            return;
-        }
-
         if (self.reverse) {
             self.lines[self.bump.bump(1)] = LineF32.create(line.p1, line.p0);
         } else {
@@ -1868,6 +1864,9 @@ pub const TileGenerator = struct {
         };
 
         const line = lines[line_index];
+        if (std.meta.eql(line.p0, line.p1)) {
+            return;
+        }
         const start_point: PointF32 = line.p0;
         const end_point: PointF32 = line.p1;
         const bounds_f32: RectF32 = RectF32.create(start_point, end_point);
