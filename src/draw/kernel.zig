@@ -148,7 +148,7 @@ pub const LineAllocator = struct {
                     path_monoids,
                     transforms,
                     segment_data,
-                    segment_offset,
+                    &segment_offset.fill_offset,
                 );
             }
 
@@ -175,7 +175,7 @@ pub const LineAllocator = struct {
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
-        segment_offset: *SegmentOffset,
+        line_offset: *u32,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
@@ -212,7 +212,7 @@ pub const LineAllocator = struct {
                 0.0,
                 cubic_points.p0,
                 cubic_points.p3,
-                &segment_offset.fill_offset,
+                line_offset,
             );
         }
     }
@@ -2000,8 +2000,6 @@ pub const TileGenerator = struct {
 
         // std.debug.print("E: ", .{});
         intersection_writer.write(end_intersection);
-        std.debug.assert(true);
-        std.debug.assert(true);
     }
 
     fn scanX(
