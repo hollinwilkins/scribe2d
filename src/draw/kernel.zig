@@ -85,7 +85,7 @@ pub const KernelConfig = struct {
     tangent_threshold_pow2: f32 = 0.0,
     min_theta: f32 = 0.0001,
     min_theta2: f32 = 1e-6,
-    min_stroke_width: f32 = 0.75,
+    min_stroke_width: f32 = 1.0,
 
     pub fn init(config: @This()) @This() {
         return @This(){
@@ -2376,6 +2376,8 @@ pub const Rasterize = struct {
 
 pub const Blend = struct {
     pub fn fill(
+        stroke: ?Style.Stroke,
+        config: KernelConfig,
         brush: Style.Brush,
         brush_offset: u32,
         boundary_fragments: []const BoundaryFragment,
@@ -2385,7 +2387,13 @@ pub const Blend = struct {
     ) void {
         _ = brush; // only color for now
         const color_blend = ColorBlend.Alpha;
-        const brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
+        var brush_color = getColor(draw_data, brush_offset - @sizeOf(ColorU8));
+
+        if (stroke) |s| {
+            if (s.width < config.min_stroke_width) {
+                brush_color.a = brush_color.a * (s.width / config.min_stroke_width);
+            }
+        }
 
         for (range.start..range.end) |merge_index| {
             const merge_fragment = boundary_fragments[merge_index];
@@ -2417,6 +2425,8 @@ pub const Blend = struct {
     }
 
     pub fn fillSpan(
+        stroke: ?Style.Stroke,
+        config: KernelConfig,
         fill_rule: Style.FillRule,
         brush: Style.Brush,
         brush_offset: u32,
@@ -2425,6 +2435,9 @@ pub const Blend = struct {
         range: RangeU32,
         texture: *TextureUnmanaged,
     ) void {
+        _ = stroke;
+        _ = config;
+
         switch (fill_rule) {
             .non_zero => {
                 fillSpan2(
