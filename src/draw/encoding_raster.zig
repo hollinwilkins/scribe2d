@@ -386,12 +386,12 @@ pub const CpuRasterizer = struct {
             const fill_range = RangeU32.create(path.line_offset.start_fill_offset, path.line_offset.end_fill_offset);
             const stroke_range = RangeU32.create(path.line_offset.start_stroke_offset, path.line_offset.end_stroke_offset);
 
-            var fill_bump = BumpAllocator{
+            const fill_bump = BumpAllocator{
                 .start = path.boundary_offset.start_fill_offset,
                 .end = path.boundary_offset.end_fill_offset,
                 .offset = &path.fill_bump,
             };
-            var stroke_bump = BumpAllocator{
+            const stroke_bump = BumpAllocator{
                 .start = path.boundary_offset.start_stroke_offset,
                 .end = path.boundary_offset.end_stroke_offset,
                 .offset = &path.stroke_bump,
@@ -404,7 +404,7 @@ pub const CpuRasterizer = struct {
                     self.half_planes,
                     self.lines.items,
                     fill_range,
-                    &fill_bump,
+                    fill_bump,
                     boundary_fragments,
                 },
             );
@@ -416,7 +416,7 @@ pub const CpuRasterizer = struct {
                     self.half_planes,
                     self.lines.items,
                     stroke_range,
-                    &stroke_bump,
+                    stroke_bump,
                     boundary_fragments,
                 },
             );

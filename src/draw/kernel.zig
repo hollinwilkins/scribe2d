@@ -1856,7 +1856,7 @@ pub const TileGenerator = struct {
         lines: []const LineF32,
         range: RangeU32,
         // output
-        bump: *BumpAllocator,
+        bump: BumpAllocator,
         boundary_fragments: []BoundaryFragment,
     ) void {
         for (range.start..range.end) |line_index| {
@@ -1875,7 +1875,7 @@ pub const TileGenerator = struct {
         line_index: u32,
         lines: []const LineF32,
         // output
-        bump: *BumpAllocator,
+        bump: BumpAllocator,
         boundary_fragments: []BoundaryFragment,
     ) void {
         var intersection_writer = IntersectionWriter{
@@ -2074,7 +2074,7 @@ pub const IntersectionWriter = struct {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
     half_planes: *const HalfPlanesU16,
-    bump: *BumpAllocator,
+    bump: BumpAllocator,
     boundary_fragments: []BoundaryFragment,
     previous_grid_intersection: ?GridIntersection = null,
 

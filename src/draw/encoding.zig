@@ -172,7 +172,7 @@ pub const BumpAllocator = struct {
     end: u32 = 0,
     offset: *std.atomic.Value(u32),
 
-    pub fn bump(self: *@This(), n: u32) u32 {
+    pub fn bump(self: @This(), n: u32) u32 {
         const next_offset = self.start + self.offset.fetchAdd(n, .acq_rel);
         if (next_offset > self.end) {
             @panic("Bump allocator exceeded bounds.");
