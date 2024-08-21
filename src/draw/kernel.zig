@@ -439,7 +439,9 @@ pub const LineAllocator = struct {
             segment_data,
         ).affineTransform(transform);
 
-        const stroke_width = if (stroke.width < config.min_stroke_width) config.min_stroke_width else stroke.width;
+        const scale = transform.getScale() / 2.0;
+        var stroke_width = stroke.width * scale;
+        stroke_width = if (stroke_width < config.min_stroke_width) config.min_stroke_width else stroke_width;
 
         const offset = 0.5 * stroke_width;
         const offset_point = PointF32{
@@ -1045,7 +1047,9 @@ pub const Flatten = struct {
             segment_data,
         ).affineTransform(transform);
 
-        const stroke_width = if (stroke.width < config.min_stroke_width) config.min_stroke_width else stroke.width;
+        const scale = transform.getScale() / 2.0;
+        var stroke_width = stroke.width * scale;
+        stroke_width = if (stroke_width < config.min_stroke_width) config.min_stroke_width else stroke_width;
 
         const offset = 0.5 * stroke_width;
         const offset_point = PointF32{
@@ -2377,6 +2381,7 @@ pub const Blend = struct {
     pub fn fill(
         stroke: ?Style.Stroke,
         config: KernelConfig,
+        transform: TransformF32.Affine,
         brush: Style.Brush,
         brush_offset: u32,
         boundary_fragments: []const BoundaryFragment,
@@ -2389,8 +2394,11 @@ pub const Blend = struct {
         var brush_color = getColor(draw_data, brush_offset);
 
         if (stroke) |s| {
-            if (s.width < config.min_stroke_width) {
-                brush_color.a = brush_color.a * (s.width / config.min_stroke_width);
+            const scale = transform.getScale() / 2.0;
+            const stroke_width = s.width * scale;
+
+            if (stroke_width < config.min_stroke_width) {
+                brush_color.a = brush_color.a * (stroke_width / config.min_stroke_width);
             }
         }
 
@@ -2427,6 +2435,7 @@ pub const Blend = struct {
         fill_rule: Style.FillRule,
         stroke: ?Style.Stroke,
         config: KernelConfig,
+        transform: TransformF32.Affine,
         brush: Style.Brush,
         brush_offset: u32,
         boundary_fragments: []const BoundaryFragment,
@@ -2440,6 +2449,7 @@ pub const Blend = struct {
                     .non_zero,
                     stroke,
                     config,
+                    transform,
                     brush,
                     brush_offset,
                     boundary_fragments,
@@ -2453,6 +2463,7 @@ pub const Blend = struct {
                     .even_odd,
                     stroke,
                     config,
+                    transform,
                     brush,
                     brush_offset,
                     boundary_fragments,
@@ -2468,6 +2479,7 @@ pub const Blend = struct {
         comptime fill_rule: Style.FillRule,
         stroke: ?Style.Stroke,
         config: KernelConfig,
+        transform: TransformF32.Affine,
         brush: Style.Brush,
         brush_offset: u32,
         boundary_fragments: []const BoundaryFragment,
@@ -2480,8 +2492,11 @@ pub const Blend = struct {
         var brush_color = getColor(draw_data, brush_offset);
 
         if (stroke) |s| {
-            if (s.width < config.min_stroke_width) {
-                brush_color.a = brush_color.a * (s.width / config.min_stroke_width);
+            const scale = transform.getScale() / 2.0;
+            const stroke_width = s.width * scale;
+
+            if (stroke_width < config.min_stroke_width) {
+                brush_color.a = brush_color.a * (stroke_width / config.min_stroke_width);
             }
         }
 

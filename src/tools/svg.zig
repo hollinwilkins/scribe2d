@@ -23,6 +23,15 @@ pub fn main() !void {
     defer encoder.deinit();
 
     try svg.encode(&encoder);
+
+    const bigger = (core.TransformF32{
+        .scale = core.PointF32.create(2.0, 2.0),
+    }).toAffine();
+
+    for (encoder.transforms.items) |*tf| {
+        tf.* = bigger.mul(tf.*);
+    }
+
     const bounds = encoder.calculateBounds();
 
     const center = (core.TransformF32{

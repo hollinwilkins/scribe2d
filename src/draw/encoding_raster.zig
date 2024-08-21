@@ -528,6 +528,7 @@ pub const CpuRasterizer = struct {
         for (0..self.paths.items.len) |path_index| {
             const path = self.paths.items[path_index];
             const path_monoid = self.path_monoids.items[path.segment_index];
+            const transform = self.encoding.getTransform(path_monoid.transform_index);
             const style = self.encoding.getStyle(path_monoid.style_index);
             const style_offset = PathOffset.styleOffset(
                 @intCast(path_monoid.style_index),
@@ -549,6 +550,7 @@ pub const CpuRasterizer = struct {
                             .{
                                 null,
                                 self.config.kernel_config,
+                                transform,
                                 style.fill.brush,
                                 style_offset.start_fill_offset,
                                 self.boundary_fragments.items,
@@ -573,6 +575,7 @@ pub const CpuRasterizer = struct {
                                 style.fill.rule,
                                 null,
                                 self.config.kernel_config,
+                                transform,
                                 style.fill.brush,
                                 style_offset.start_fill_offset,
                                 self.boundary_fragments.items,
@@ -603,6 +606,7 @@ pub const CpuRasterizer = struct {
                             .{
                                 style.stroke,
                                 self.config.kernel_config,
+                                transform,
                                 style.stroke.brush,
                                 style_offset.start_stroke_offset,
                                 self.boundary_fragments.items,
@@ -627,6 +631,7 @@ pub const CpuRasterizer = struct {
                                 .non_zero,
                                 style.stroke,
                                 self.config.kernel_config,
+                                transform,
                                 style.stroke.brush,
                                 style_offset.start_stroke_offset,
                                 self.boundary_fragments.items,

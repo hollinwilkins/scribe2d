@@ -231,12 +231,15 @@ pub const Svg = struct {
             const f = parser.readF32() orelse @panic("invalid matrix");
             _ = parser.readExpected(')');
 
-            return TransformF32.Affine{
+            const affine = TransformF32.Affine{
                 .coefficients = [6]f32{
                     a, c, e,
                     b, d, f,
                 },
             };
+
+            std.debug.print("TRANSFORM SCALE: {}\n", .{affine.getScale()});
+            return affine;
         }
 
         return transform.toAffine();
