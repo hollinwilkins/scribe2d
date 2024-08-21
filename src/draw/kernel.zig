@@ -2539,15 +2539,17 @@ pub const Blend = struct {
                         if (is_span) {
                             // flush previous to current
 
-                            var start_x = previous_merge_fragment.pixel.x;
-                            switch (fill_rule) {
-                                .even_odd => start_x += 1,
-                                .non_zero => {
-                                    if (@abs(current_merge_fragment.main_ray_winding) == 1) {
-                                        start_x += 1;
-                                    }
-                                },
-                            }
+                            // TODO: this probably needs adjusting for non_zero fill rule
+                            const start_x = previous_merge_fragment.pixel.x + 1;
+                            // var start_x = previous_merge_fragment.pixel.x;
+                            // switch (fill_rule) {
+                            //     .non_zero => start_x += 1,
+                            //     .even_odd => {
+                            //         if (@as(u16, @intFromFloat(@abs(current_merge_fragment.main_ray_winding))) & 1 == 1) {
+                            //             start_x += 1;
+                            //         }
+                            //     },
+                            // }
 
                             const end_x = current_merge_fragment.pixel.x;
                             const x_range: u32 = @intCast(end_x - start_x);
