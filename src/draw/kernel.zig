@@ -586,7 +586,16 @@ pub const LineAllocator = struct {
 
         switch (stroke.join) {
             .bevel => line_count.* += 2,
-            .miter => line_count.* += 4,
+            .miter => {
+                const hypot = std.math.hypot(cr, d);
+                const miter_limit = stroke.miter_limit;
+
+                if (2.0 * hypot < (hypot + d) * miter_limit * miter_limit and cr != 0.0) {
+                    line_count.* += 1;
+                }
+
+                line_count.* += 2;
+            },
             .round => {
                 if (cr > 0.0) {
                     flattenArc(

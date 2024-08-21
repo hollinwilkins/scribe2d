@@ -129,7 +129,7 @@ pub const Svg = struct {
                 style = if (style == null) Style{} else style;
                 style.?.setStroke(Style.Stroke{
                     .brush = .color,
-                    .join = .bevel,
+                    .join = .miter,
                     .start_cap = .butt,
                     .end_cap = .butt,
                 });
@@ -176,7 +176,7 @@ pub const Svg = struct {
                 style = if (style == null) Style{} else style;
                 style.?.setStroke(Style.Stroke{
                     .brush = .color,
-                    .join = .bevel,
+                    .join = .miter,
                     .start_cap = .butt,
                     .end_cap = .butt,
                 });

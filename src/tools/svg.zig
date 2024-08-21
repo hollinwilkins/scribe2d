@@ -25,7 +25,7 @@ pub fn main() !void {
     try svg.encode(&encoder);
 
     const bigger = (core.TransformF32{
-        .scale = core.PointF32.create(2.0, 2.0),
+        .scale = core.PointF32.create(4.0, 4.0),
     }).toAffine();
 
     for (encoder.transforms.items) |*tf| {
