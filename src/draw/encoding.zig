@@ -669,9 +669,6 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn finish(self: *@This()) void {
-            std.debug.assert(true);
-            std.debug.assert(true);
-
             if (self.isEmpty() or self.state == .start) {
                 return;
             }
@@ -695,9 +692,7 @@ pub fn PathEncoder(comptime T: type) type {
                         if (!std.meta.eql(start_point, end_point)) {
                             self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
 
-                            if (self.is_fill) {
-                                self.lineToPoint(start_point) catch @panic("could not close subpath");
-                            }
+                            self.lineToPoint(start_point) catch @panic("could not close subpath");
 
                             if (self.encoder.currentPathTag()) |tag| {
                                 tag.segment.cap = true;

@@ -212,15 +212,20 @@ pub const CpuRasterizer = struct {
         }
 
         try self.flatten(&pool);
+
+        if (!self.config.runBoundary()) {
+            return;
+        }
+
         try self.allocateBoundaryFragments(&pool);
         try self.tile(&pool);
 
         // calculate scanline encoding
         try self.kernelRasterize(&pool);
 
-        // if (!self.config.runFlushTexture()) {
-        //     return;
-        // }
+        if (!self.config.runFlushTexture()) {
+            return;
+        }
 
         // write scanline encoding to texture
         self.flushTexture(&pool, texture);
@@ -433,9 +438,9 @@ pub const CpuRasterizer = struct {
     }
 
     fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
-        // if (!self.config.runIntersect()) {
-        //     return;
-        // }
+        if (!self.config.runMerge()) {
+            return;
+        }
 
         var wg = std.Thread.WaitGroup{};
         const rasterizer = kernel_module.Rasterize;
@@ -460,10 +465,6 @@ pub const CpuRasterizer = struct {
         wg.wait();
         wg.reset();
 
-        // if (!self.config.runMerge()) {
-        //     return;
-        // }
-
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
             pool.spawnWg(
@@ -481,9 +482,9 @@ pub const CpuRasterizer = struct {
         wg.wait();
         wg.reset();
 
-        // if (!self.config.runMask()) {
-        //     return;
-        // }
+        if (!self.config.runMask()) {
+            return;
+        }
 
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
