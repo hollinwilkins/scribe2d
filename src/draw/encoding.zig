@@ -215,7 +215,6 @@ pub fn MonoidFunctions(comptime T: type, comptime M: type) type {
 
 pub const PathMonoid = extern struct {
     path_index: u32 = 0,
-    subpath_index: u32 = 0,
     segment_index: u32 = 0,
     segment_offset: u32 = 0,
     transform_index: i32 = 0,
@@ -238,7 +237,7 @@ pub const PathMonoid = extern struct {
             .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
         };
         var path_offset: u32 = 0;
-        if (index.path == 1 or index.subpath == 1) {
+        if (segment.subpath_end) {
             path_offset += switch (segment.kind) {
                 .line_f32 => @sizeOf(PointF32),
                 .line_i16 => @sizeOf(PointI16),
@@ -252,7 +251,6 @@ pub const PathMonoid = extern struct {
         }
         return @This(){
             .path_index = @intCast(index.path),
-            .subpath_index = @intCast(index.subpath),
             .segment_index = 1,
             .segment_offset = path_offset + segment_offset,
             .transform_index = @intCast(index.transform),
@@ -263,7 +261,6 @@ pub const PathMonoid = extern struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .path_index = self.path_index + other.path_index,
-            .subpath_index = self.subpath_index + other.subpath_index,
             .segment_index = self.segment_index + other.segment_index,
             .segment_offset = self.segment_offset + other.segment_offset,
             .transform_index = self.transform_index + other.transform_index,
@@ -274,11 +271,9 @@ pub const PathMonoid = extern struct {
     pub fn reexpand(expanded: []@This()) void {
         for (expanded) |*monoid| {
             std.debug.assert(monoid.path_index > 0);
-            std.debug.assert(monoid.subpath_index > 0);
             std.debug.assert(monoid.segment_index > 0);
 
             monoid.path_index -= 1;
-            monoid.subpath_index -= 1;
             monoid.segment_index -= 1;
             monoid.style_index -= 1;
             monoid.transform_index -= 1;
@@ -305,6 +300,7 @@ pub const SegmentData = struct {
 // Encodes all data needed for a single draw command to the GPU or CPU
 // This may need to be a single buffer with a Config
 pub const Encoding = struct {
+    paths: u32,
     path_tags: []const PathTag,
     transforms: []const TransformF32.Affine,
     styles: []const Style,
@@ -426,6 +422,7 @@ pub const Encoder = struct {
 
     allocator: Allocator,
     bounds: RectF32 = RectF32.NONE,
+    paths: u32 = 0,
     path_tags: PathTagList = PathTagList{},
     transforms: AffineList = AffineList{},
     styles: StyleList = StyleList{},
@@ -440,6 +437,7 @@ pub const Encoder = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        self.paths = 0;
         self.path_tags.deinit(self.allocator);
         self.transforms.deinit(self.allocator);
         self.styles.deinit(self.allocator);
@@ -448,6 +446,7 @@ pub const Encoder = struct {
     }
 
     pub fn reset(self: *@This()) void {
+        self.paths = 0;
         self.path_tags.items.len = 0;
         self.transforms.items.len = 0;
         self.styles.items.len = 0;
@@ -457,6 +456,7 @@ pub const Encoder = struct {
 
     pub fn encode(self: @This()) Encoding {
         return Encoding{
+            .paths = self.paths,
             .path_tags = self.path_tags.items,
             .transforms = self.transforms.items,
             .styles = self.styles.items,
@@ -475,7 +475,7 @@ pub const Encoder = struct {
 
         if (self.staged.style) {
             self.staged.style = false;
-            self.staged.draw = false;
+            self.staged.draw = 0;
             tag2.index.style = 1;
         }
 
@@ -511,6 +511,9 @@ pub const Encoder = struct {
 
     pub fn encodePathTag(self: *@This(), tag: PathTag) !void {
         const tag2 = self.encodeStaged(tag);
+        if (tag2.index.path == 1) {
+            self.paths += 1;
+        }
         (try self.path_tags.addOne(self.allocator)).* = tag2;
     }
 
@@ -678,7 +681,7 @@ pub fn PathEncoder(comptime T: type) type {
             return self.start_path_offset == self.encoder.segment_data.items.len;
         }
 
-        pub fn finish(self: *@This()) void {
+        pub fn finish(self: *@This()) !void {
             switch (self.state) {
                 .start => {
                     // do nothing, there is no data written that needs to be reversed
@@ -688,12 +691,8 @@ pub fn PathEncoder(comptime T: type) type {
                     self.encoder.dropPath(PPoint);
                 },
                 .draw => {
-                    // SAFETY: if we are in draw, there is a start/end point
-                    const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).?.*;
-                    const end_point = self.encoder.pathTailSegment(PPoint).?.*;
-                    const is_closed = std.meta.eql(start_point, end_point);
-
-                    self.finishSubpath(start_point, is_closed);
+                    // finish the current subpath being drawn
+                    try self.finishSubpath();
                 },
             }
 
@@ -735,8 +734,13 @@ pub fn PathEncoder(comptime T: type) type {
             }
         }
 
-        pub fn finishSubpath(self: *@This(), start_point: PPoint, is_closed: bool) !void {
+        pub fn finishSubpath(self: *@This()) !void {
             std.debug.assert(self.state != .draw);
+
+            // SAFETY: if we are in draw, there is a start/end point
+            const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).?.*;
+            const end_point = self.encoder.pathTailSegment(PPoint).?.*;
+            const is_closed = std.meta.eql(start_point, end_point);
 
             if (self.encoder.currentPathTag()) |path_tag| {
                 if (is_closed) {
@@ -773,7 +777,6 @@ pub fn PathEncoder(comptime T: type) type {
                 .start => {
                     // add this move_to as a point to the end of the segments buffer
                     (try self.encoder.extendPath(PPoint, null)).* = p0;
-                    self.encoder.staged.subpath = true;
                     self.state = .move_to;
                 },
                 .move_to => {
@@ -782,7 +785,7 @@ pub fn PathEncoder(comptime T: type) type {
                     self.encoder.pathTailSegment(PPoint).?.* = p0;
                 },
                 .draw => {
-                    self.finishSubpath();
+                    try self.finishSubpath();
                     (try self.encoder.extendPath(PPoint, null)).* = p0;
                     self.state = .move_to;
                 },
@@ -944,7 +947,7 @@ pub fn PathEncoder(comptime T: type) type {
 
             fn close(ctx: *anyopaque, bounds: RectF32, ppem: f32) void {
                 var b = @as(*Self, @alignCast(@ptrCast(ctx)));
-                b.close();
+                b.finish() catch @panic("could not finish PathBuilder");
 
                 const scale = (TransformF32{
                     .scale = PointF32{
