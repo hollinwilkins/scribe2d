@@ -11,7 +11,6 @@ const PointU32 = core.PointU32;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const Path = encoding_module.Path;
-const Subpath = encoding_module.Subpath;
 const SegmentData = encoding_module.SegmentData;
 const FlatSegment = encoding_module.FlatSegment;
 const Style = encoding_module.Style;
@@ -126,7 +125,6 @@ pub const LineAllocator = struct {
         config: KernelConfig,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        subpaths: []const Subpath,
         styles: []const Style,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
@@ -160,7 +158,6 @@ pub const LineAllocator = struct {
                     path_tags,
                     path_monoids,
                     transforms,
-                    subpaths,
                     segment_data,
                     &segment_offset.stroke_offset,
                 );
@@ -224,7 +221,6 @@ pub const LineAllocator = struct {
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
-        subpaths: []const Subpath,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
@@ -252,7 +248,6 @@ pub const LineAllocator = struct {
                 path_tags,
                 path_monoids,
                 transforms,
-                subpaths,
                 segment_data,
                 line_offset,
             );
@@ -404,32 +399,15 @@ pub const LineAllocator = struct {
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
-        subpaths: []const Subpath,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
         const transform = getTransform(transforms, path_monoid.transform_index);
-        const subpath = subpaths[path_monoid.subpath_index];
-        const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) subpaths[path_monoid.subpath_index + 1] else null;
-        var last_segment_offset: u32 = undefined;
-        if (next_subpath) |ns| {
-            last_segment_offset = ns.segment_index;
-        } else {
-            last_segment_offset = @intCast(path_tags.len);
-        }
-        var last_path_tag: PathTag = undefined;
-        var last_path_monoid: PathMonoid = undefined;
-        if (last_segment_offset > 0) {
-            last_path_tag = path_tags[last_segment_offset - 1];
-            last_path_monoid = path_monoids[last_segment_offset - 1];
-        } else {
-            last_path_tag = path_tags[path_tags.len - 1];
-            last_path_monoid = path_monoids[path_monoids.len - 1];
-        }
 
-        if (path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
+        if (path_tag.segment.subpath_end) {
+            // marker segment, do nothing
             return;
         }
 
@@ -449,14 +427,9 @@ pub const LineAllocator = struct {
             .y = offset,
         };
 
-        const segment_range = RangeU32{
-            .start = subpath.segment_index,
-            .end = last_segment_offset,
-        };
         const neighbor = readNeighborSegment(
             config,
             path_monoid.segment_index + 1,
-            segment_range,
             path_tags,
             path_monoids,
             segment_data,
@@ -1020,7 +993,6 @@ pub const Flatten = struct {
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
-        subpaths: []const Subpath,
         segment_data: []const u8,
         front_line_writer: *LineWriter,
         back_line_writer: *LineWriter,
@@ -1028,23 +1000,6 @@ pub const Flatten = struct {
         const path_tag = path_tags[segment_index];
         const path_monoid = path_monoids[segment_index];
         const transform = getTransform(transforms, path_monoid.transform_index);
-        const subpath = subpaths[path_monoid.subpath_index];
-        const next_subpath = if (path_monoid.subpath_index + 1 < subpaths.len) subpaths[path_monoid.subpath_index + 1] else null;
-        var last_segment_offset: u32 = undefined;
-        if (next_subpath) |ns| {
-            last_segment_offset = ns.segment_index;
-        } else {
-            last_segment_offset = @intCast(path_tags.len);
-        }
-        var last_path_tag: PathTag = undefined;
-        var last_path_monoid: PathMonoid = undefined;
-        if (last_segment_offset > 0) {
-            last_path_tag = path_tags[last_segment_offset - 1];
-            last_path_monoid = path_monoids[last_segment_offset - 1];
-        } else {
-            last_path_tag = path_tags[path_tags.len - 1];
-            last_path_monoid = path_monoids[path_monoids.len - 1];
-        }
 
         if (path_tag.segment.cap and path_monoid.segment_index == last_path_monoid.segment_index) {
             return;
@@ -1758,7 +1713,6 @@ pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: Point
 fn readNeighborSegment(
     config: KernelConfig,
     next_segment_index: u32,
-    segment_range: RangeU32,
     path_tags: []const PathTag,
     path_monoids: []const PathMonoid,
     segment_data: []const u8,

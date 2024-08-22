@@ -1066,10 +1066,6 @@ pub const Path = struct {
     }
 };
 
-pub const Subpath = struct {
-    segment_index: u32 = 0,
-};
-
 pub const PathOffset = struct {
     start_fill_offset: u32 = 0,
     end_fill_offset: u32 = 0,
