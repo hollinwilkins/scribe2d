@@ -183,13 +183,6 @@ pub const CpuRasterizer = struct {
     }
 
     pub fn rasterize(self: *@This(), texture: *TextureUnmanaged) !void {
-        var pool: std.Thread.Pool = undefined;
-        try pool.init(.{
-            .allocator = self.allocator,
-            .n_jobs = self.config.kernel_config.parallelism,
-        });
-        defer pool.deinit();
-
         // reset the rasterizer
         self.reset();
 
@@ -205,30 +198,30 @@ pub const CpuRasterizer = struct {
         }
 
         // estimate FlatEncoder memory requirements
-        try self.allocateLines(&pool);
+        try self.allocateLines();
 
         if (!self.config.runFlatten()) {
             return;
         }
 
-        try self.flatten(&pool);
+        try self.flatten();
 
         if (!self.config.runBoundary()) {
             return;
         }
 
-        try self.allocateBoundaryFragments(&pool);
-        try self.tile(&pool);
+        try self.allocateBoundaryFragments();
+        try self.tile();
 
         // calculate scanline encoding
-        try self.kernelRasterize(&pool);
+        try self.kernelRasterize();
 
         if (!self.config.runFlushTexture()) {
             return;
         }
 
         // write scanline encoding to texture
-        self.flushTexture(&pool, texture);
+        self.flushTexture(texture);
     }
 
     fn expandMonoids(self: *@This()) !void {
@@ -263,8 +256,7 @@ pub const CpuRasterizer = struct {
         SegmentOffset.expand(style_offsets, style_offsets);
     }
 
-    fn allocateLines(self: *@This(), pool: *std.Thread.Pool) !void {
-        var wg = std.Thread.WaitGroup{};
+    fn allocateLines(self: *@This()) !void {
         const allocator = kernel_module.LineAllocator;
         const segment_offsets = try self.segment_offsets.addManyAsSlice(self.allocator, self.encoding.path_tags.len);
         const range = RangeU32{
@@ -274,24 +266,18 @@ pub const CpuRasterizer = struct {
         var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
         while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                allocator.flatten,
-                .{
-                    self.config.kernel_config,
-                    self.encoding.path_tags,
-                    self.path_monoids.items,
-                    self.subpaths.items,
-                    self.encoding.styles,
-                    self.encoding.transforms,
-                    self.encoding.segment_data,
-                    chunk,
-                    segment_offsets,
-                },
+            allocator.flatten(
+                self.config.kernel_config,
+                self.encoding.path_tags,
+                self.path_monoids.items,
+                self.subpaths.items,
+                self.encoding.styles,
+                self.encoding.transforms,
+                self.encoding.segment_data,
+                chunk,
+                segment_offsets,
             );
         }
-
-        wg.wait();
 
         SegmentOffset.expand(segment_offsets, segment_offsets);
         const last_segment_offset = self.segment_offsets.getLast();
@@ -305,7 +291,7 @@ pub const CpuRasterizer = struct {
         }
     }
 
-    fn flatten(self: *@This(), pool: *std.Thread.Pool) !void {
+    fn flatten(self: *@This()) !void {
         var wg = std.Thread.WaitGroup{};
         const lines = self.lines.items;
 
@@ -316,21 +302,17 @@ pub const CpuRasterizer = struct {
         var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
         while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                kernel_module.Flatten.flatten,
-                .{
-                    self.config.kernel_config,
-                    self.encoding.path_tags,
-                    self.path_monoids.items,
-                    self.encoding.styles,
-                    self.encoding.transforms,
-                    self.subpaths.items,
-                    self.encoding.segment_data,
-                    chunk,
-                    self.paths.items,
-                    lines,
-                },
+            kernel_module.Flatten.flatten(
+                self.config.kernel_config,
+                self.encoding.path_tags,
+                self.path_monoids.items,
+                self.encoding.styles,
+                self.encoding.transforms,
+                self.subpaths.items,
+                self.encoding.segment_data,
+                chunk,
+                self.paths.items,
+                lines,
             );
         }
 
@@ -343,8 +325,7 @@ pub const CpuRasterizer = struct {
         }
     }
 
-    fn allocateBoundaryFragments(self: *@This(), pool: *std.Thread.Pool) !void {
-        var wg = std.Thread.WaitGroup{};
+    fn allocateBoundaryFragments(self: *@This()) !void {
         const allocator = kernel_module.BoundaryAllocator;
         const intersection_offsets = try self.intersection_offsets.addManyAsSlice(self.allocator, self.lines.items.len);
         const range = RangeU32{
@@ -354,18 +335,12 @@ pub const CpuRasterizer = struct {
         var chunk_iter = range.chunkIterator(self.config.kernel_config.chunk_size);
 
         while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                allocator.intersect,
-                .{
-                    self.lines.items,
-                    chunk,
-                    intersection_offsets,
-                },
+            allocator.intersect(
+                self.lines.items,
+                chunk,
+                intersection_offsets,
             );
         }
-
-        wg.wait();
 
         IntersectionOffset.expand(intersection_offsets, intersection_offsets);
 
@@ -380,8 +355,7 @@ pub const CpuRasterizer = struct {
         );
     }
 
-    fn tile(self: *@This(), pool: *std.Thread.Pool) !void {
-        var wg = std.Thread.WaitGroup{};
+    fn tile(self: *@This()) !void {
         const tile_generator = kernel_module.TileGenerator;
         const boundary_fragments = self.boundary_fragments.items;
 
@@ -402,32 +376,22 @@ pub const CpuRasterizer = struct {
                 .offset = &path.stroke_bump,
             };
 
-            pool.spawnWg(
-                &wg,
-                tile_generator.tile,
-                .{
-                    self.half_planes,
-                    self.lines.items,
-                    fill_range,
-                    fill_bump,
-                    boundary_fragments,
-                },
+            tile_generator.tile(
+                self.half_planes,
+                self.lines.items,
+                fill_range,
+                fill_bump,
+                boundary_fragments,
             );
 
-            pool.spawnWg(
-                &wg,
-                tile_generator.tile,
-                .{
-                    self.half_planes,
-                    self.lines.items,
-                    stroke_range,
-                    stroke_bump,
-                    boundary_fragments,
-                },
+            tile_generator.tile(
+                self.half_planes,
+                self.lines.items,
+                stroke_range,
+                stroke_bump,
+                boundary_fragments,
             );
         }
-
-        wg.wait();
 
         for (self.paths.items) |*path| {
             path.boundary_offset.end_fill_offset = path.boundary_offset.start_fill_offset + path.fill_bump.raw;
@@ -437,7 +401,7 @@ pub const CpuRasterizer = struct {
         }
     }
 
-    fn kernelRasterize(self: *@This(), pool: *std.Thread.Pool) !void {
+    fn kernelRasterize(self: *@This()) !void {
         if (!self.config.runMerge()) {
             return;
         }
@@ -451,36 +415,22 @@ pub const CpuRasterizer = struct {
         };
         var chunk_iter = path_range.chunkIterator(self.config.kernel_config.chunk_size);
         while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.boundaryFinish,
-                .{
-                    chunk,
-                    self.paths.items,
-                    self.boundary_fragments.items,
-                },
+            rasterizer.boundaryFinish(
+                chunk,
+                self.paths.items,
+                self.boundary_fragments.items,
             );
         }
-
-        wg.wait();
-        wg.reset();
 
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.merge,
-                .{
-                    self.config.kernel_config,
-                    self.paths.items,
-                    chunk,
-                    self.boundary_fragments.items,
-                },
+            rasterizer.merge(
+                self.config.kernel_config,
+                self.paths.items,
+                chunk,
+                self.boundary_fragments.items,
             );
         }
-
-        wg.wait();
-        wg.reset();
 
         if (!self.config.runMask()) {
             return;
@@ -488,42 +438,30 @@ pub const CpuRasterizer = struct {
 
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.windMainRay,
-                .{
-                    self.config.kernel_config,
-                    self.paths.items,
-                    chunk,
-                    self.boundary_fragments.items,
-                },
+            rasterizer.windMainRay(
+                self.config.kernel_config,
+                self.paths.items,
+                chunk,
+                self.boundary_fragments.items,
             );
         }
 
-        wg.wait();
-        wg.reset();
-
         chunk_iter.reset();
         while (chunk_iter.next()) |chunk| {
-            pool.spawnWg(
-                &wg,
-                rasterizer.mask,
-                .{
-                    self.config.kernel_config,
-                    self.path_monoids.items,
-                    self.paths.items,
-                    self.encoding.styles,
-                    chunk,
-                    self.boundary_fragments.items,
-                },
+            rasterizer.mask(
+                self.config.kernel_config,
+                self.path_monoids.items,
+                self.paths.items,
+                self.encoding.styles,
+                chunk,
+                self.boundary_fragments.items,
             );
         }
 
         wg.wait();
     }
 
-    fn flushTexture(self: @This(), pool: *std.Thread.Pool, texture: *TextureUnmanaged) void {
-        var wg = std.Thread.WaitGroup{};
+    fn flushTexture(self: @This(), texture: *TextureUnmanaged) void {
         const blender = kernel_module.Blend;
 
         for (0..self.paths.items.len) |path_index| {
@@ -545,50 +483,36 @@ pub const CpuRasterizer = struct {
                 if (self.config.flush_texture_boundary) {
                     var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
                     while (chunk_iter.next()) |chunk| {
-                        pool.spawnWg(
-                            &wg,
-                            blender.fill,
-                            .{
-                                null,
-                                self.config.kernel_config,
-                                transform,
-                                style.fill.brush,
-                                style_offset.start_fill_offset,
-                                self.boundary_fragments.items,
-                                self.encoding.draw_data,
-                                chunk,
-                                texture,
-                            },
+                        blender.fill(
+                            null,
+                            self.config.kernel_config,
+                            transform,
+                            style.fill.brush,
+                            style_offset.start_fill_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
                         );
                     }
-
-                    wg.wait();
-                    wg.reset();
                 }
 
                 if (self.config.flush_texture_span) {
                     var chunk_iter = fill_range.chunkIterator(self.config.kernel_config.chunk_size);
                     while (chunk_iter.next()) |chunk| {
-                        pool.spawnWg(
-                            &wg,
-                            blender.fillSpan,
-                            .{
-                                style.fill.rule,
-                                null,
-                                self.config.kernel_config,
-                                transform,
-                                style.fill.brush,
-                                style_offset.start_fill_offset,
-                                self.boundary_fragments.items,
-                                self.encoding.draw_data,
-                                chunk,
-                                texture,
-                            },
+                        blender.fillSpan(
+                            style.fill.rule,
+                            null,
+                            self.config.kernel_config,
+                            transform,
+                            style.fill.brush,
+                            style_offset.start_fill_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
                         );
                     }
-
-                    wg.wait();
-                    wg.reset();
                 }
             }
 
@@ -601,50 +525,36 @@ pub const CpuRasterizer = struct {
                 if (self.config.flush_texture_boundary) {
                     var chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
                     while (chunk_iter.next()) |chunk| {
-                        pool.spawnWg(
-                            &wg,
-                            blender.fill,
-                            .{
-                                style.stroke,
-                                self.config.kernel_config,
-                                transform,
-                                style.stroke.brush,
-                                style_offset.start_stroke_offset,
-                                self.boundary_fragments.items,
-                                self.encoding.draw_data,
-                                chunk,
-                                texture,
-                            },
+                        blender.fill(
+                            style.stroke,
+                            self.config.kernel_config,
+                            transform,
+                            style.stroke.brush,
+                            style_offset.start_stroke_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
                         );
                     }
-
-                    wg.wait();
-                    wg.reset();
                 }
 
                 if (self.config.flush_texture_span) {
                     var chunk_iter = stroke_range.chunkIterator(self.config.kernel_config.chunk_size);
                     while (chunk_iter.next()) |chunk| {
-                        pool.spawnWg(
-                            &wg,
-                            blender.fillSpan,
-                            .{
-                                .non_zero,
-                                style.stroke,
-                                self.config.kernel_config,
-                                transform,
-                                style.stroke.brush,
-                                style_offset.start_stroke_offset,
-                                self.boundary_fragments.items,
-                                self.encoding.draw_data,
-                                chunk,
-                                texture,
-                            },
+                        blender.fillSpan(
+                            .non_zero,
+                            style.stroke,
+                            self.config.kernel_config,
+                            transform,
+                            style.stroke.brush,
+                            style_offset.start_stroke_offset,
+                            self.boundary_fragments.items,
+                            self.encoding.draw_data,
+                            chunk,
+                            texture,
                         );
                     }
-
-                    wg.wait();
-                    wg.reset();
                 }
             }
         }
