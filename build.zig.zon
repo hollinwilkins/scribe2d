@@ -17,6 +17,8 @@
     .dependencies = .{
         .system_sdk = .{ .path = "./deps/zig-gamedev/libs/system-sdk" },
         .zstbi = .{ .path = "./deps/zig-gamedev/libs/zstbi" },
+        .zgpu = .{ .path = "./deps/zig-gamedev/libs/zgpu" },
+        .zpool = .{ .path = "./deps/zig-gamedev/libs/zpool" },
         .zdawn = .{ .path = "./deps/zdawn" },
         .dawn_x86_64_windows_gnu = .{
             .url = "https://github.com/michal-z/webgpu_dawn-x86_64-windows-gnu/archive/d3a68014e6b6b53fd330a0ccba99e4dcfffddae5.tar.gz",

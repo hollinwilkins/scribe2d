@@ -146,6 +146,7 @@ pub fn linkSystemDeps(compile_step: *std.Build.Step.Compile) void {
         },
         .macos => {
             compile_step.linkSystemLibrary("objc");
+            compile_step.linkFramework("CoreFoundation");
             compile_step.linkFramework("Metal");
             compile_step.linkFramework("CoreGraphics");
             compile_step.linkFramework("Foundation");

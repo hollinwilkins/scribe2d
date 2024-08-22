@@ -41,7 +41,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/tools/draw_glyph.zig"),
         .target = target,
         .optimize = optimize,
-        .single_threaded = true,
     });
     draw_glyph_exe.root_module.addImport("scribe", &lib.root_module);
     b.installArtifact(draw_glyph_exe);
@@ -58,7 +57,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/tools/svg.zig"),
         .target = target,
         .optimize = optimize,
-        .single_threaded = true,
     });
     svg_exe.root_module.addImport("scribe", &lib.root_module);
     b.installArtifact(svg_exe);
@@ -103,6 +101,8 @@ pub fn build(b: *std.Build) void {
         draw_glyph_exe.linkLibrary(dep.artifact("zstbi"));
         svg_exe.root_module.addImport("zstbi", dep.module("root"));
         svg_exe.linkLibrary(dep.artifact("zstbi"));
+        lib.root_module.addImport("zstbi", dep.module("root"));
+        lib.linkLibrary(dep.artifact("zstbi"));
     }
 
     if (b.lazyDependency("zdawn", .{
@@ -112,9 +112,11 @@ pub fn build(b: *std.Build) void {
         @import("zdawn").addLibraryPathsTo(draw_glyph_exe);
         draw_glyph_exe.root_module.addImport("zdawn", dep.module("root"));
         draw_glyph_exe.linkLibrary(dep.artifact("zdawn"));
+
         @import("zdawn").addLibraryPathsTo(svg_exe);
         svg_exe.root_module.addImport("zdawn", dep.module("root"));
         svg_exe.linkLibrary(dep.artifact("zdawn"));
+        
         @import("zdawn").addLibraryPathsTo(lib);
         lib.root_module.addImport("zdawn", dep.module("root"));
         lib.linkLibrary(dep.artifact("zdawn"));
