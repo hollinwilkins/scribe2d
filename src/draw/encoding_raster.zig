@@ -120,12 +120,10 @@ pub const CpuRasterizer = struct {
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const PathList = std.ArrayListUnmanaged(Path);
     const SubpathList = std.ArrayListUnmanaged(Subpath);
-    const FlatSegmentList = std.ArrayListUnmanaged(FlatSegment);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
     const IntersectionOffsetList = std.ArrayListUnmanaged(IntersectionOffset);
     const LinesList = std.ArrayListUnmanaged(LineF32);
     const Buffer = std.ArrayListUnmanaged(u8);
-    const GridIntersectionList = std.ArrayListUnmanaged(GridIntersection);
     const BoundaryFragmentList = std.ArrayListUnmanaged(BoundaryFragment);
 
     allocator: Allocator,
@@ -138,9 +136,7 @@ pub const CpuRasterizer = struct {
     subpaths: SubpathList = SubpathList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     intersection_offsets: IntersectionOffsetList = IntersectionOffsetList{},
-    flat_segments: FlatSegmentList = FlatSegmentList{},
     lines: LinesList = LinesList{},
-    grid_intersections: GridIntersectionList = GridIntersectionList{},
     boundary_fragments: BoundaryFragmentList = BoundaryFragmentList{},
 
     pub fn init(
@@ -164,9 +160,7 @@ pub const CpuRasterizer = struct {
         self.subpaths.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
         self.intersection_offsets.deinit(self.allocator);
-        self.flat_segments.deinit(self.allocator);
         self.lines.deinit(self.allocator);
-        self.grid_intersections.deinit(self.allocator);
         self.boundary_fragments.deinit(self.allocator);
     }
 
@@ -176,9 +170,7 @@ pub const CpuRasterizer = struct {
         self.paths.items.len = 0;
         self.subpaths.items.len = 0;
         self.segment_offsets.items.len = 0;
-        self.flat_segments.items.len = 0;
         self.lines.items.len = 0;
-        self.grid_intersections.items.len = 0;
         self.boundary_fragments.items.len = 0;
     }
 
