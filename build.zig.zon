@@ -15,7 +15,7 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .stystem_sdk = .{ .path = "./deps/zig-gamedev/libs/system-sdk" },
+        .system_sdk = .{ .path = "./deps/zig-gamedev/libs/system-sdk" },
         .zstbi = .{ .path = "./deps/zig-gamedev/libs/zstbi" },
         .zdawn = .{ .path = "./deps/zdawn" },
         .dawn_x86_64_windows_gnu = .{

@@ -124,7 +124,7 @@ pub fn build(b: *std.Build) void {
 
     const tests = b.addTest(.{
         .name = "zgpu-tests",
-        .root_source_file = b.path("src/zgpu.zig"),
+        .root_source_file = b.path("src/zdawn.zig"),
         .target = target,
         .optimize = optimize,
     });

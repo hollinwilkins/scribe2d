@@ -1,9 +1,11 @@
 const std = @import("std");
 const scribe = @import("scribe");
 const zstbi = @import("zstbi");
+const zdawn = @import("zdawn");
 const text = scribe.text;
 const draw = scribe.draw;
 const core = scribe.core;
+const wgpu = zdawn.wgpu;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -48,6 +50,9 @@ pub fn main() !void {
     };
 
     const encoding = encoder.encode();
+
+    const gctx = try zdawn.GraphicsContext.create(allocator, .{});
+    defer gctx.destroy(allocator);
 
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();

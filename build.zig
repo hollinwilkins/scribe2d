@@ -91,8 +91,9 @@ pub fn build(b: *std.Build) void {
     const install_encoding_tests_step = b.step("install-test-encoding", "Install encoding unit tests");
     install_encoding_tests_step.dependOn(&install_encoding_tests.step);
 
-    // @import("system_sdk").addLibraryPathsTo(draw_glyph_exe);
-    // @import("system_sdk").addLibraryPathsTo(svg_exe);
+    @import("system_sdk").addLibraryPathsTo(draw_glyph_exe);
+    @import("system_sdk").addLibraryPathsTo(svg_exe);
+    @import("system_sdk").addLibraryPathsTo(lib);
 
     if (b.lazyDependency("zstbi", .{
         .target = target,
@@ -104,16 +105,19 @@ pub fn build(b: *std.Build) void {
         svg_exe.linkLibrary(dep.artifact("zstbi"));
     }
 
-     if (b.lazyDependency("zdawn", .{
+    if (b.lazyDependency("zdawn", .{
         .target = target,
         .optimize = optimize,
     })) |dep| {
+        @import("zdawn").addLibraryPathsTo(draw_glyph_exe);
         draw_glyph_exe.root_module.addImport("zdawn", dep.module("root"));
-        // draw_glyph_exe.linkLibrary(dep.artifact("zstbi"));
+        draw_glyph_exe.linkLibrary(dep.artifact("zdawn"));
+        @import("zdawn").addLibraryPathsTo(svg_exe);
         svg_exe.root_module.addImport("zdawn", dep.module("root"));
-        // svg_exe.linkLibrary(dep.artifact("zstbi"));
+        svg_exe.linkLibrary(dep.artifact("zdawn"));
+        @import("zdawn").addLibraryPathsTo(lib);
         lib.root_module.addImport("zdawn", dep.module("root"));
-        // svg_exe.linkLibrary(dep.artifact("zstbi"));
+        lib.linkLibrary(dep.artifact("zdawn"));
     }
 }
 

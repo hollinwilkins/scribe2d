@@ -17,16 +17,18 @@ test {
 }
 
 pub const GraphicsContextOptions = struct {
+    present_mode: wgpu.PresentMode = .fifo,
     required_features: []const wgpu.FeatureName = &.{},
     required_limits: ?*const wgpu.RequiredLimits = null,
 };
 
 pub const GraphicsContext = struct {
+    stats: FrameStats = .{},
+
     native_instance: DawnNativeInstance,
     instance: wgpu.Instance,
     device: wgpu.Device,
     queue: wgpu.Queue,
-    surface: wgpu.Surface,
 
     buffer_pool: BufferPool,
     texture_pool: TexturePool,
@@ -208,8 +210,6 @@ pub const GraphicsContext = struct {
         gctx.sampler_pool.deinit(allocator);
         gctx.render_pipeline_pool.deinit(allocator);
         gctx.compute_pipeline_pool.deinit(allocator);
-        gctx.surface.release();
-        gctx.swapchain.release();
         gctx.queue.release();
         gctx.device.release();
         dniDestroy(gctx.native_instance);
