@@ -104,14 +104,16 @@ pub fn build(b: *std.Build) void {
         svg_exe.linkLibrary(dep.artifact("zstbi"));
     }
 
-    if (b.lazyDependency("zgpu", .{
+     if (b.lazyDependency("zdawn", .{
         .target = target,
         .optimize = optimize,
     })) |dep| {
-        draw_glyph_exe.root_module.addImport("zgpu", dep.module("root"));
-        // draw_glyph_exe.linkLibrary(dep.artifact("zdawn"));
-        svg_exe.root_module.addImport("zgpu", dep.module("root"));
-        // svg_exe.linkLibrary(dep.artifact("zdawn"));
+        draw_glyph_exe.root_module.addImport("zdawn", dep.module("root"));
+        // draw_glyph_exe.linkLibrary(dep.artifact("zstbi"));
+        svg_exe.root_module.addImport("zdawn", dep.module("root"));
+        // svg_exe.linkLibrary(dep.artifact("zstbi"));
+        lib.root_module.addImport("zdawn", dep.module("root"));
+        // svg_exe.linkLibrary(dep.artifact("zstbi"));
     }
 }
 
