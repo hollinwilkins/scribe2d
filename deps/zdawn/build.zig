@@ -85,9 +85,9 @@ pub fn build(b: *std.Build) void {
     const options_module = options_step.createModule();
 
     _ = b.addModule("root", .{
-        .root_source_file = b.path("src/zgpu.zig"),
+        .root_source_file = b.path("src/zdawn.zig"),
         .imports = &.{
-            .{ .name = "zgpu_options", .module = options_module },
+            .{ .name = "zdawn_options", .module = options_module },
             .{ .name = "zpool", .module = b.dependency("zpool", .{}).module("root") },
         },
     });
