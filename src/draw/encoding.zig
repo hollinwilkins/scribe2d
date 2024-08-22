@@ -57,6 +57,8 @@ pub const PathTag = packed struct {
         kind: Kind,
         // draw caps if true
         cap: bool = false,
+        // marks final segment in a subpath
+        subpath_end: bool = false,
     };
 
     pub const Index = packed struct {
@@ -64,8 +66,6 @@ pub const PathTag = packed struct {
         // set to 1 for the start of a new path
         // 1-based indexing
         path: u1 = 0,
-        // increment subpath by 1
-        subpath: u1 = 0,
         // increments transform index by 1 or 0
         // set to 1 for a new transform
         transform: u1 = 0,
@@ -414,9 +414,9 @@ pub const Encoding = struct {
 pub const Encoder = struct {
     pub const StageFlags = struct {
         path: bool = false,
-        subpath: bool = false,
         transform: bool = false,
         style: bool = false,
+        draw: u16 = 0,
     };
 
     const PathTagList = std.ArrayListUnmanaged(PathTag);
@@ -465,6 +465,38 @@ pub const Encoder = struct {
         };
     }
 
+    pub fn encodeStaged(self: *@This(), tag: PathTag) PathTag {
+        var tag2 = tag;
+
+        if (self.staged.path) {
+            self.staged.path = false;
+            tag2.index.path = 1;
+        }
+
+        if (self.staged.style) {
+            self.staged.style = false;
+            self.staged.draw = false;
+            tag2.index.style = 1;
+        }
+
+        if (self.staged.transform) {
+            self.staged.transform = false;
+            tag2.index.transform = 1;
+        }
+
+        return tag2;
+    }
+
+    pub fn unstage(self: *@This()) void {
+        self.staged.path = false;
+
+        self.draw_data.items.len -= self.staged.draw;
+        self.staged.style = false;
+        self.staged.draw = 0;
+
+        self.staged.transform = false;
+    }
+
     pub fn calculateBounds(self: @This()) RectF32 {
         return self.encode().calculateBounds();
     }
@@ -478,30 +510,7 @@ pub const Encoder = struct {
     }
 
     pub fn encodePathTag(self: *@This(), tag: PathTag) !void {
-        std.debug.assert(self.styles.items.len > 0);
-
-        var tag2 = tag;
-
-        if (self.staged.path) {
-            self.staged.path = false;
-            tag2.index.path = 1;
-        }
-
-        if (self.staged.subpath) {
-            self.staged.subpath = false;
-            tag2.index.subpath = 1;
-        }
-
-        if (self.staged.style) {
-            self.staged.style = false;
-            tag2.index.style = 1;
-        }
-
-        if (self.staged.transform) {
-            self.staged.transform = false;
-            tag2.index.transform = 1;
-        }
-
+        const tag2 = self.encodeStaged(tag);
         (try self.path_tags.addOne(self.allocator)).* = tag2;
     }
 
@@ -580,6 +589,7 @@ pub const Encoder = struct {
         // need to allow encoding color w/ style to avoid errors
         const bytes = (try self.draw_data.addManyAsSlice(self.allocator, @sizeOf(ColorU8)));
         std.mem.bytesAsValue(ColorU8, bytes).* = color;
+        self.staged.draw += @sizeOf(ColorU8);
     }
 
     pub fn pathEncoder(self: *@This(), comptime T: type) PathEncoder(T) {
@@ -669,42 +679,25 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn finish(self: *@This()) void {
-            if (self.isEmpty() or self.state == .start) {
-                return;
-            }
-
-            self.close();
-            self.encoder.staged.path = false;
-            self.encoder.staged.subpath = false;
-        }
-
-        pub fn close(self: *@This()) void {
             switch (self.state) {
-                .start => return,
-                .move_to => self.encoder.dropPath(PPoint),
+                .start => {
+                    // do nothing, there is no data written that needs to be reversed
+                },
+                .move_to => {
+                    // unwind the move_to point
+                    self.encoder.dropPath(PPoint);
+                },
                 .draw => {
-                    cap_and_close_fill: {
-                        const start_point_p = self.encoder.pathSegment(PPoint, self.start_subpath_offset) orelse break :cap_and_close_fill;
-                        const end_point_p = self.encoder.pathTailSegment(PPoint) orelse break :cap_and_close_fill;
-                        const start_point = start_point_p.*;
-                        const end_point = end_point_p.*;
+                    // SAFETY: if we are in draw, there is a start/end point
+                    const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).?.*;
+                    const end_point = self.encoder.pathTailSegment(PPoint).?.*;
+                    const is_closed = std.meta.eql(start_point, end_point);
 
-                        if (!std.meta.eql(start_point, end_point)) {
-                            self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
-
-                            self.lineToPoint(start_point) catch @panic("could not close subpath");
-
-                            if (self.encoder.currentPathTag()) |tag| {
-                                tag.segment.cap = true;
-                            }
-                        }
-                    }
-
-                    self.start_subpath_index = self.encoder.path_tags.items.len;
-                    self.start_subpath_offset = self.encoder.segment_data.items.len;
-                    self.encoder.staged.subpath = true;
+                    self.finishSubpath(start_point, is_closed);
                 },
             }
+
+            self.encoder.unstage();
         }
 
         pub fn currentPoint(self: @This()) PPoint {
@@ -742,6 +735,35 @@ pub fn PathEncoder(comptime T: type) type {
             }
         }
 
+        pub fn finishSubpath(self: *@This(), start_point: PPoint, is_closed: bool) !void {
+            std.debug.assert(self.state != .draw);
+
+            if (self.encoder.currentPathTag()) |path_tag| {
+                if (is_closed) {
+                    // create a line to the first tangent
+                    // TODO: should be first tangent, not start point
+                    (try self.encoder.extendPath(ExtendLine, ExtendLine.KIND)).* = ExtendLine{
+                        .p1 = start_point,
+                    };
+                    // mark end of subpath on the line we just wrote
+                    self.encoder.currentPathTag().?.segment.subpath_end = true;
+                } else {
+                    // create a quad with start point/first tangent
+                    // TODO: should be first tangent (p2), not start point
+                    (try self.encoder.extendPath(ExtendQuadraticBezier, ExtendQuadraticBezier.KIND)).* = ExtendQuadraticBezier{
+                        .p1 = start_point,
+                        .p2 = start_point,
+                    };
+                    // mark end of subpath on the line we just wrote
+                    self.encoder.currentPathTag().?.segment.subpath_end = true;
+                    // cap the first path_tag in the subpath
+                    self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
+                    // cap the last drawn segment of the subpath
+                    path_tag.segment.cap = true;
+                }
+            }
+        }
+
         pub fn moveTo(self: *@This(), x: T, y: T) !void {
             try self.moveToPoint(PPoint.create(x, y));
         }
@@ -760,7 +782,7 @@ pub fn PathEncoder(comptime T: type) type {
                     self.encoder.pathTailSegment(PPoint).?.* = p0;
                 },
                 .draw => {
-                    self.close();
+                    self.finishSubpath();
                     (try self.encoder.extendPath(PPoint, null)).* = p0;
                     self.state = .move_to;
                 },
