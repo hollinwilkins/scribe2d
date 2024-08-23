@@ -451,7 +451,8 @@ pub const LineAllocator = struct {
             .y = offset,
         };
 
-        const neighbor = readNeighborSegment(
+        var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
+        var tan_next = readNeighborSegment(
             config,
             path_monoid.segment_index + 1,
             path_tags,
@@ -459,8 +460,6 @@ pub const LineAllocator = struct {
             transforms,
             segment_data,
         );
-        var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
-        var tan_next = neighbor.tangent;
         var tan_start = cubicStartTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
 
         if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
@@ -1008,7 +1007,8 @@ pub const Flatten = struct {
             .y = offset,
         };
 
-        const neighbor = readNeighborSegment(
+        var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
+        var tan_next = readNeighborSegment(
             config,
             path_monoid.segment_index + 1,
             path_tags,
@@ -1016,8 +1016,6 @@ pub const Flatten = struct {
             transforms,
             segment_data,
         );
-        var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
-        var tan_next = neighbor.tangent;
         var tan_start = cubicStartTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
 
         if (tan_start.dot(tan_start) < config.tangent_threshold_pow2) {
@@ -1547,10 +1545,10 @@ pub fn getArcPoints(config: KernelConfig, path_tag: PathTag, path_monoid: PathMo
 }
 
 pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) CubicBezierF32 {
-    return getCubicPointsRaw(path_tag.kind, path_monoid.segment_offset, segment_data);
+    return getCubicPointsRaw(path_tag.segment.kind, path_monoid.segment_offset, segment_data);
 }
 
-pub fn getCubicPointsRaw(comptime kind: PathTag.Kind, offset: u32, segment_data: []const u8) CubicBezierF32 {
+pub fn getCubicPointsRaw(kind: PathTag.Kind, offset: u32, segment_data: []const u8) CubicBezierF32 {
     var cubic_points: CubicBezierF32 = undefined;
     const sd = SegmentData{
         .segment_data = segment_data,

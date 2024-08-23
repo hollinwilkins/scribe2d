@@ -15,7 +15,6 @@ const Encoding = encoding_module.Encoding;
 const PathMonoid = encoding_module.PathMonoid;
 const BumpAllocator = encoding_module.BumpAllocator;
 const Path = encoding_module.Path;
-const Subpath = encoding_module.Subpath;
 const PathOffset = encoding_module.PathOffset;
 const FlatPath = encoding_module.FlatPath;
 const FlatSubpath = encoding_module.FlatSubpath;
@@ -119,7 +118,6 @@ pub const CpuRasterizer = struct {
 
     const PathMonoidList = std.ArrayListUnmanaged(PathMonoid);
     const PathList = std.ArrayListUnmanaged(Path);
-    const SubpathList = std.ArrayListUnmanaged(Subpath);
     const SegmentOffsetList = std.ArrayListUnmanaged(SegmentOffset);
     const IntersectionOffsetList = std.ArrayListUnmanaged(IntersectionOffset);
     const LinesList = std.ArrayListUnmanaged(LineF32);
@@ -133,7 +131,6 @@ pub const CpuRasterizer = struct {
     path_monoids: PathMonoidList = PathMonoidList{},
     style_offsets: SegmentOffsetList = SegmentOffsetList{},
     paths: PathList = PathList{},
-    subpaths: SubpathList = SubpathList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     intersection_offsets: IntersectionOffsetList = IntersectionOffsetList{},
     lines: LinesList = LinesList{},
@@ -157,7 +154,6 @@ pub const CpuRasterizer = struct {
         self.path_monoids.deinit(self.allocator);
         self.style_offsets.deinit(self.allocator);
         self.paths.deinit(self.allocator);
-        self.subpaths.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
         self.intersection_offsets.deinit(self.allocator);
         self.lines.deinit(self.allocator);
@@ -168,7 +164,6 @@ pub const CpuRasterizer = struct {
         self.path_monoids.items.len = 0;
         self.style_offsets.items.len = 0;
         self.paths.items.len = 0;
-        self.subpaths.items.len = 0;
         self.segment_offsets.items.len = 0;
         self.lines.items.len = 0;
         self.boundary_fragments.items.len = 0;
@@ -255,7 +250,6 @@ pub const CpuRasterizer = struct {
                 self.config.kernel_config,
                 self.encoding.path_tags,
                 self.path_monoids.items,
-                self.subpaths.items,
                 self.encoding.styles,
                 self.encoding.transforms,
                 self.encoding.segment_data,
@@ -293,7 +287,6 @@ pub const CpuRasterizer = struct {
                 self.path_monoids.items,
                 self.encoding.styles,
                 self.encoding.transforms,
-                self.subpaths.items,
                 self.encoding.segment_data,
                 chunk,
                 self.paths.items,

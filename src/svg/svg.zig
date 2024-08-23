@@ -196,10 +196,11 @@ pub const Svg = struct {
 
         if (path_el.attr("d")) |path| {
             var path_encoder = encoder.pathEncoder(f32);
-            defer path_encoder.finish();
 
             var path_parser = PathParser.create(path, &path_encoder);
             try path_parser.encode();
+
+            try path_encoder.finish();
         }
     }
 
@@ -626,7 +627,7 @@ pub const PathParser = struct {
                 }
             },
             .close => {
-                self.path_encoder.close();
+                try self.path_encoder.close();
             },
         }
     }

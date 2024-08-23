@@ -62,40 +62,40 @@ pub const PathTag = packed struct {
 
         pub fn size(self: @This()) u32 {
             switch (self.kind) {
-                .line_i16 => @sizeOf(LineI16),
-                .line_f32 => @sizeOf(LineF32),
-                .arc_i16 => @sizeOf(ArcI16),
-                .arc_f32 => @sizeOf(ArcF32),
-                .quadratic_bezier_i16 => @sizeOf(QuadraticBezierI16),
-                .quadratic_bezier_f32 => @sizeOf(QuadraticBezierF32),
-                .cubic_bezier_i16 => @sizeOf(CubicBezierI16),
-                .cubic_bezier_f32 => @sizeOf(CubicBezierF32),
+                .line_i16 => return @sizeOf(LineI16),
+                .line_f32 => return @sizeOf(LineF32),
+                .arc_i16 => return @sizeOf(ArcI16),
+                .arc_f32 => return @sizeOf(ArcF32),
+                .quadratic_bezier_i16 => return @sizeOf(QuadraticBezierI16),
+                .quadratic_bezier_f32 => return @sizeOf(QuadraticBezierF32),
+                .cubic_bezier_i16 => return @sizeOf(CubicBezierI16),
+                .cubic_bezier_f32 => return @sizeOf(CubicBezierF32),
             }
         }
 
         pub fn pointSize(self: @This()) u32 {
             switch (self.kind) {
-                .line_i16 => @sizeOf(PointI16),
-                .line_f32 => @sizeOf(PointF32),
-                .arc_i16 => @sizeOf(PointI16),
-                .arc_f32 => @sizeOf(PointF32),
-                .quadratic_bezier_i16 => @sizeOf(PointI16),
-                .quadratic_bezier_f32 => @sizeOf(PointF32),
-                .cubic_bezier_i16 => @sizeOf(PointI16),
-                .cubic_bezier_f32 => @sizeOf(PointF32),
+                .line_i16 => return @sizeOf(PointI16),
+                .line_f32 => return @sizeOf(PointF32),
+                .arc_i16 => return @sizeOf(PointI16),
+                .arc_f32 => return @sizeOf(PointF32),
+                .quadratic_bezier_i16 => return @sizeOf(PointI16),
+                .quadratic_bezier_f32 => return @sizeOf(PointF32),
+                .cubic_bezier_i16 => return @sizeOf(PointI16),
+                .cubic_bezier_f32 => return @sizeOf(PointF32),
             }
         }
 
         pub fn extendSize(self: @This()) u32 {
             switch (self.kind) {
-                .line_i16 => @sizeOf(LineI16) - @sizeOf(PointI16),
-                .line_f32 => @sizeOf(LineF32) - @sizeOf(PointF32),
-                .arc_i16 => @sizeOf(ArcI16) - @sizeOf(PointI16),
-                .arc_f32 => @sizeOf(ArcF32) - @sizeOf(PointF32),
-                .quadratic_bezier_i16 => @sizeOf(QuadraticBezierI16) - @sizeOf(PointI16),
-                .quadratic_bezier_f32 => @sizeOf(QuadraticBezierF32) - @sizeOf(PointF32),
-                .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
-                .cubic_bezier_f32 => @sizeOf(CubicBezierF32) - @sizeOf(PointF32),
+                .line_i16 => return @sizeOf(LineI16) - @sizeOf(PointI16),
+                .line_f32 => return @sizeOf(LineF32) - @sizeOf(PointF32),
+                .arc_i16 => return @sizeOf(ArcI16) - @sizeOf(PointI16),
+                .arc_f32 => return @sizeOf(ArcF32) - @sizeOf(PointF32),
+                .quadratic_bezier_i16 => return @sizeOf(QuadraticBezierI16) - @sizeOf(PointI16),
+                .quadratic_bezier_f32 => return @sizeOf(QuadraticBezierF32) - @sizeOf(PointF32),
+                .cubic_bezier_i16 => return @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
+                .cubic_bezier_f32 => return @sizeOf(CubicBezierF32) - @sizeOf(PointF32),
             }
         }
     };
@@ -782,7 +782,7 @@ pub fn PathEncoder(comptime T: type) type {
         pub fn writeLastSegment(self: *@This()) !void {
             const first_path_tag = self.encoder.path_tags.items[self.start_subpath_index];
             const segment_size = first_path_tag.segment.size();
-            const bytes = self.encoder.segment_data[self.start_subpath_offset..self.start_path_offset + segment_size];
+            const bytes = self.encoder.segment_data.items[self.start_subpath_offset..self.start_path_offset + segment_size];
             const extend_bytes = try self.encoder.extendPathBytes(first_path_tag.segment.kind, segment_size);
             std.mem.copyForwards(u8, extend_bytes, bytes);
             // mark end of subpath on the line we just wrote
@@ -809,6 +809,26 @@ pub fn PathEncoder(comptime T: type) type {
                     try self.finishSubpath();
                     (try self.encoder.extendPath(PPoint, null)).* = p0;
                     self.state = .move_to;
+                },
+            }
+        }
+
+        pub fn close(self: *@This()) !void {
+            switch (self.state) {
+                .start => {
+                    return; // do nothing
+                },
+                .move_to => {
+                    return; // do nothing
+                },
+                .draw => {
+                    // SAFETY: we are in draw state
+                    const first_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).?.*;
+                    const last_point = self.lastPoint().?;
+
+                    if (!std.meta.eql(first_point, last_point)) {
+                        try self.lineToPoint(first_point);
+                    }
                 },
             }
         }
