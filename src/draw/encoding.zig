@@ -759,7 +759,7 @@ pub fn PathEncoder(comptime T: type) type {
         }
 
         pub fn finishSubpath(self: *@This()) !void {
-            std.debug.assert(self.state != .draw);
+            std.debug.assert(self.state == .draw);
 
             // SAFETY: if we are in draw, there is a start/end point
             const start_point = self.encoder.pathSegment(PPoint, self.start_subpath_offset).?.*;
