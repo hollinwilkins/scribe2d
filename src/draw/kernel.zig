@@ -10,6 +10,7 @@ const RangeU32 = core.RangeU32;
 const PointU32 = core.PointU32;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
+const SegmentMeta = encoding_module.SegmentMeta;
 const Path = encoding_module.Path;
 const SegmentData = encoding_module.SegmentData;
 const FlatSegment = encoding_module.FlatSegment;
@@ -133,17 +134,16 @@ pub const LineAllocator = struct {
         segment_offsets: []SegmentOffset,
     ) void {
         for (range.start..range.end) |segment_index| {
-            const path_monoid = path_monoids[segment_index];
-            const style = getStyle(styles, path_monoid.style_index);
-            const segment_offset = &segment_offsets[path_monoid.segment_index];
+            const segment_metadata = getSegmentMeta(@intCast(segment_index), path_tags, path_monoids);
+            const style = getStyle(styles, segment_metadata.path_monoid.style_index);
+            const segment_offset = &segment_offsets[segment_metadata.path_monoid.segment_index];
             segment_offset.* = SegmentOffset{};
 
             if (style.isFill()) {
                 flattenFill(
                     config,
-                    @intCast(segment_index),
+                    segment_metadata,
                     path_tags,
-                    path_monoids,
                     transforms,
                     segment_data,
                     &segment_offset.fill_offset,
@@ -154,9 +154,7 @@ pub const LineAllocator = struct {
                 flattenStroke(
                     config,
                     style.stroke,
-                    @intCast(segment_index),
-                    path_tags,
-                    path_monoids,
+                    segment_metadata,
                     transforms,
                     segment_data,
                     &segment_offset.stroke_offset,
@@ -167,18 +165,15 @@ pub const LineAllocator = struct {
 
     pub fn flattenFill(
         config: KernelConfig,
-        segment_index: u32,
+        segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
-        const path_tag = path_tags[segment_index];
-        const path_monoid = path_monoids[segment_index];
-        const transform = getTransform(transforms, path_monoid.transform_index);
+        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
-        if (path_tag.isArc()) {
+        if (segment_metadata.path_tag.isArc()) {
             @panic("Arc is not yet supported.");
             // const arc_points = getArcPoints(
             //     config,
@@ -198,14 +193,14 @@ pub const LineAllocator = struct {
         } else {
             flatten: {
                 var cubic_points: CubicBezierF32 = undefined;
-                if (path_tag.segment.subpath_end) {
-                    const previous_path_tag = path_tags[segment_index - 1];
+                if (segment_metadata.path_tag.segment.subpath_end) {
+                    const previous_path_tag = path_tags[segment_metadata.segment_index - 1];
                     if (previous_path_tag.segment.cap) {
                         // we need to draw the final fill line
                         // TODO: should be LineF32 or LineI16
                         cubic_points = getCubicPointsRaw(
                             .line_f32,
-                            path_monoid.segment_offset - @sizeOf(PointF32),
+                            segment_metadata.path_monoid.segment_offset - @sizeOf(PointF32),
                             segment_data,
                         );
                     } else {
@@ -213,8 +208,7 @@ pub const LineAllocator = struct {
                     }
                 } else {
                     cubic_points = getCubicPoints(
-                        path_tag,
-                        path_monoid,
+                        segment_metadata,
                         segment_data,
                     );
                 }
@@ -235,16 +229,12 @@ pub const LineAllocator = struct {
     pub fn flattenStroke(
         config: KernelConfig,
         stroke: Style.Stroke,
-        segment_index: u32,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
+        segment_metadata: SegmentMeta,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
-        const path_tag = path_tags[segment_index];
-
-        if (path_tag.isArc()) {
+        if (segment_metadata.path_tag.isArc()) {
             @panic("Arc is not supported yet.");
             // flattenStrokeArc(
             //     config,
@@ -260,16 +250,14 @@ pub const LineAllocator = struct {
             // );
         } else {
             flatten: {
-                if (path_tag.segment.subpath_end) {
+                if (segment_metadata.path_tag.segment.subpath_end) {
                     break :flatten;
                 }
 
                 flattenStrokeEuler(
                     config,
                     stroke,
-                    segment_index,
-                    path_tags,
-                    path_monoids,
+                    segment_metadata,
                     transforms,
                     segment_data,
                     line_offset,
@@ -419,25 +407,20 @@ pub const LineAllocator = struct {
     fn flattenStrokeEuler(
         config: KernelConfig,
         stroke: Style.Stroke,
-        segment_index: u32,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
+        segment_metadata: SegmentMeta,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
-        const path_tag = path_tags[segment_index];
-        const path_monoid = path_monoids[segment_index];
-        const transform = getTransform(transforms, path_monoid.transform_index);
+        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
-        if (path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.subpath_end) {
             // marker segment, do nothing
             return;
         }
 
         const cubic_points = getCubicPoints(
-            path_tag,
-            path_monoid,
+            segment_metadata,
             segment_data,
         ).affineTransform(transform);
 
@@ -454,9 +437,7 @@ pub const LineAllocator = struct {
         var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = readNeighborSegment(
             config,
-            path_monoid.segment_index + 1,
-            path_tags,
-            path_monoids,
+            segment_metadata,
             transforms,
             segment_data,
         );
@@ -493,7 +474,7 @@ pub const LineAllocator = struct {
             .y = offset_tangent.x,
         };
 
-        if (path_tag.segment.cap and !path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and !segment_metadata.path_tag.segment.subpath_end) {
             // draw start cap on left side
             drawCap(
                 config,
@@ -524,7 +505,7 @@ pub const LineAllocator = struct {
             line_offset,
         );
 
-        if (path_tag.segment.cap and path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and segment_metadata.path_tag.segment.subpath_end) {
             // draw end cap on left side
             drawCap(
                 config,
@@ -686,9 +667,13 @@ pub const Flatten = struct {
         lines: []LineF32,
     ) void {
         for (range.start..range.end) |segment_index| {
-            const path_monoid = path_monoids[segment_index];
-            const style = getStyle(styles, path_monoid.style_index);
-            const path = &paths[path_monoid.path_index];
+            const segment_metadata = getSegmentMeta(
+                @intCast(segment_index),
+                path_tags,
+                path_monoids,
+            );
+            const style = getStyle(styles, segment_metadata.path_monoid.style_index);
+            const path = &paths[segment_metadata.path_monoid.path_index];
 
             if (style.isFill()) {
                 var fill_bump = BumpAllocator{
@@ -704,9 +689,8 @@ pub const Flatten = struct {
 
                 flattenFill(
                     config,
-                    @intCast(segment_index),
+                    segment_metadata,
                     path_tags,
-                    path_monoids,
                     transforms,
                     segment_data,
                     &line_writer,
@@ -736,7 +720,7 @@ pub const Flatten = struct {
                 flattenStroke(
                     config,
                     style.stroke,
-                    @intCast(segment_index),
+                    segment_metadata,
                     path_tags,
                     path_monoids,
                     transforms,
@@ -754,27 +738,24 @@ pub const Flatten = struct {
 
     pub fn flattenFill(
         config: KernelConfig,
-        segment_index: u32,
+        segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_writer: *LineWriter,
     ) void {
-        const path_tag = path_tags[segment_index];
-        const path_monoid = path_monoids[segment_index];
-        const transform = getTransform(transforms, path_monoid.transform_index);
+        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
         flatten: {
             var cubic_points: CubicBezierF32 = undefined;
-            if (path_tag.segment.subpath_end) {
-                const previous_path_tag = path_tags[segment_index - 1];
+            if (segment_metadata.path_tag.segment.subpath_end) {
+                const previous_path_tag = path_tags[segment_metadata.segment_index - 1];
                 if (previous_path_tag.segment.cap) {
                     // we need to draw the final fill line
                     // TODO: should be LineF32 or LineI16
                     cubic_points = getCubicPointsRaw(
                         .line_f32,
-                        path_monoid.segment_offset - @sizeOf(PointF32),
+                        segment_metadata.path_monoid.segment_offset - @sizeOf(PointF32),
                         segment_data,
                     );
                 } else {
@@ -782,8 +763,7 @@ pub const Flatten = struct {
                 }
             } else {
                 cubic_points = getCubicPoints(
-                    path_tag,
-                    path_monoid,
+                    segment_metadata,
                     segment_data,
                 );
             }
@@ -803,7 +783,7 @@ pub const Flatten = struct {
     pub fn flattenStroke(
         config: KernelConfig,
         stroke: Style.Stroke,
-        segment_index: u32,
+        segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
@@ -811,7 +791,7 @@ pub const Flatten = struct {
         front_line_writer: *LineWriter,
         back_line_writer: *LineWriter,
     ) void {
-        const path_tag = path_tags[segment_index];
+        const path_tag = path_tags[segment_metadata.segment_index];
 
         if (path_tag.isArc()) {
             @panic("arcs not supported yet");
@@ -830,7 +810,7 @@ pub const Flatten = struct {
             flattenStrokeEuler(
                 config,
                 stroke,
-                segment_index,
+                segment_metadata,
                 path_tags,
                 path_monoids,
                 transforms,
@@ -979,7 +959,7 @@ pub const Flatten = struct {
     fn flattenStrokeEuler(
         config: KernelConfig,
         stroke: Style.Stroke,
-        segment_index: u32,
+        segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
@@ -987,13 +967,10 @@ pub const Flatten = struct {
         front_line_writer: *LineWriter,
         back_line_writer: *LineWriter,
     ) void {
-        const path_tag = path_tags[segment_index];
-        const path_monoid = path_monoids[segment_index];
-        const transform = getTransform(transforms, path_monoid.transform_index);
+        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
         const cubic_points = getCubicPoints(
-            path_tag,
-            path_monoid,
+            segment_metadata,
             segment_data,
         ).affineTransform(transform);
 
@@ -1010,9 +987,11 @@ pub const Flatten = struct {
         var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = readNeighborSegment(
             config,
-            path_monoid.segment_index + 1,
-            path_tags,
-            path_monoids,
+            getSegmentMeta(
+                segment_metadata.path_monoid.segment_index + 1,
+                path_tags,
+                path_monoids,
+            ),
             transforms,
             segment_data,
         );
@@ -1054,7 +1033,7 @@ pub const Flatten = struct {
             .y = tan_next_norm.x,
         });
 
-        if (path_tag.segment.cap and !path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and !segment_metadata.path_tag.segment.subpath_end) {
             // draw start cap on left side
             drawCap(
                 config,
@@ -1087,7 +1066,7 @@ pub const Flatten = struct {
             back_line_writer,
         );
 
-        if (path_tag.segment.cap and path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and segment_metadata.path_tag.segment.subpath_end) {
             // draw end cap on left side
             drawCap(
                 config,
@@ -1544,8 +1523,12 @@ pub fn getArcPoints(config: KernelConfig, path_tag: PathTag, path_monoid: PathMo
     return arc_points;
 }
 
-pub fn getCubicPoints(path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) CubicBezierF32 {
-    return getCubicPointsRaw(path_tag.segment.kind, path_monoid.segment_offset, segment_data);
+pub fn getCubicPoints(segment_metadata: SegmentMeta, segment_data: []const u8) CubicBezierF32 {
+    return getCubicPointsRaw(
+        segment_metadata.path_tag.segment.kind,
+        segment_metadata.path_monoid.segment_offset,
+        segment_data,
+    );
 }
 
 pub fn getCubicPointsRaw(kind: PathTag.Kind, offset: u32, segment_data: []const u8) CubicBezierF32 {
@@ -1697,22 +1680,17 @@ pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: Point
 
 fn readNeighborSegment(
     config: KernelConfig,
-    segment_index: u32,
-    path_tags: []const PathTag,
-    path_monoids: []const PathMonoid,
+    segment_metadata: SegmentMeta,
     transforms: []const TransformF32.Affine,
     segment_data: []const u8,
 ) PointF32 {
-    const path_tag = path_tags[segment_index];
-    const path_monoid = path_monoids[segment_index];
-    const transform = getTransform(transforms, path_monoid.transform_index);
+    const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
-    if (path_tag.isArc()) {
+    if (segment_metadata.path_tag.isArc()) {
         @panic("Arc not yet supported.");
     } else {
         const cubic_points = getCubicPoints(
-            path_tag,
-            path_monoid,
+            segment_metadata,
             segment_data,
         ).affineTransform(transform);
 
@@ -2533,4 +2511,19 @@ fn getTransform(transforms: []const TransformF32.Affine, transform_index: i32) T
     }
 
     return TransformF32.Affine.IDENTITY;
+}
+
+fn getSegmentMeta(
+    segment_index: u32,
+    path_tags: []const PathTag,
+    path_monoids: []const PathMonoid,
+) SegmentMeta {
+    const path_tag = path_tags[segment_index];
+    const path_monoid = path_monoids[segment_index];
+
+    return SegmentMeta{
+        .segment_index = segment_index,
+        .path_tag = path_tag,
+        .path_monoid = path_monoid,
+    };
 }

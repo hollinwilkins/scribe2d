@@ -254,6 +254,7 @@ pub fn MonoidFunctions(comptime T: type, comptime M: type) type {
 
 pub const PathMonoid = extern struct {
     path_index: u32 = 0,
+    subpath_index: u32 = 0,
     segment_index: u32 = 0,
     segment_offset: u32 = 0,
     transform_index: i32 = 0,
@@ -267,10 +268,11 @@ pub const PathMonoid = extern struct {
         var segment_offset = tag.segment.extendSize();
         // 1 point because the subpath end is not an extension
         // 1 point for the first point of the next subpath
-        segment_offset += @as(u1, @intFromBool(tag.segment.subpath_end)) * tag.segment.pointSize() * 2;
+        segment_offset += @as(u32, @intFromBool(tag.segment.subpath_end)) * tag.segment.pointSize() * 2;
 
         return @This(){
             .path_index = @intCast(tag.index.path),
+            .subpath_index = @as(u32, @intFromBool(tag.segment.subpath_end)),
             .segment_index = 1,
             .segment_offset = segment_offset,
             .transform_index = @intCast(tag.index.transform),
@@ -281,28 +283,19 @@ pub const PathMonoid = extern struct {
     pub fn combine(self: @This(), other: @This()) @This() {
         return @This(){
             .path_index = self.path_index + other.path_index,
+            .subpath_index = self.subpath_index + other.subpath_index,
             .segment_index = self.segment_index + other.segment_index,
             .segment_offset = self.segment_offset + other.segment_offset,
             .transform_index = self.transform_index + other.transform_index,
             .style_index = self.style_index + other.style_index,
         };
     }
+};
 
-    pub fn reexpand(expanded: []@This()) void {
-        for (expanded) |*monoid| {
-            std.debug.assert(monoid.path_index > 0);
-            std.debug.assert(monoid.segment_index > 0);
-
-            monoid.path_index -= 1;
-            monoid.segment_index -= 1;
-            monoid.style_index -= 1;
-            monoid.transform_index -= 1;
-        }
-    }
-
-    pub fn getSegmentOffset(self: @This(), comptime T: type) u32 {
-        return self.segment_offset - @sizeOf(T);
-    }
+pub const SegmentMeta = struct {
+    segment_index: u32,
+    path_tag: PathTag,
+    path_monoid: PathMonoid,
 };
 
 pub const SegmentData = struct {

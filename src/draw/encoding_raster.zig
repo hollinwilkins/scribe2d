@@ -9,6 +9,7 @@ const Allocator = mem.Allocator;
 const RangeU32 = core.RangeU32;
 const LineF32 = core.LineF32;
 const PointU32 = core.PointU32;
+const PointF32 = core.PointF32;
 const KernelConfig = kernel_module.KernelConfig;
 const Style = encoding_module.Style;
 const Encoding = encoding_module.Encoding;
@@ -217,7 +218,16 @@ pub const CpuRasterizer = struct {
 
         const last_path_monoid = path_monoids[path_monoids.len - 1];
         const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index + 1);
-        for (self.encoding.path_tags, path_monoids) |path_tag, path_monoid| {
+        for (self.encoding.path_tags, path_monoids) |path_tag, *path_monoid| {
+            path_monoid.path_index -= 1;
+            path_monoid.segment_index -= 1;
+            path_monoid.style_index -= 1;
+            path_monoid.transform_index -= 1;
+            // TODO: should support PointI16 too
+            path_monoid.segment_offset += (path_monoid.subpath_index + 1) * @sizeOf(PointF32);
+            path_monoid.segment_offset -= @as(u32, @intFromBool(path_tag.segment.subpath_end)) * @sizeOf(PointF32);
+            path_monoid.segment_offset -= path_tag.segment.size();
+
             if (path_tag.index.path == 1) {
                 paths[path_monoid.path_index] = Path{
                     .segment_index = path_monoid.segment_index,
