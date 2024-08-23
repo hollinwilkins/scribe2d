@@ -59,6 +59,45 @@ pub const PathTag = packed struct {
         cap: bool = false,
         // marks final segment in a subpath
         subpath_end: bool = false,
+
+        pub fn size(self: @This()) u32 {
+            switch (self.kind) {
+                .line_i16 => @sizeOf(LineI16),
+                .line_f32 => @sizeOf(LineF32),
+                .arc_i16 => @sizeOf(ArcI16),
+                .arc_f32 => @sizeOf(ArcF32),
+                .quadratic_bezier_i16 => @sizeOf(QuadraticBezierI16),
+                .quadratic_bezier_f32 => @sizeOf(QuadraticBezierF32),
+                .cubic_bezier_i16 => @sizeOf(CubicBezierI16),
+                .cubic_bezier_f32 => @sizeOf(CubicBezierF32),
+            }
+        }
+
+        pub fn pointSize(self: @This()) u32 {
+            switch (self.kind) {
+                .line_i16 => @sizeOf(PointI16),
+                .line_f32 => @sizeOf(PointF32),
+                .arc_i16 => @sizeOf(PointI16),
+                .arc_f32 => @sizeOf(PointF32),
+                .quadratic_bezier_i16 => @sizeOf(PointI16),
+                .quadratic_bezier_f32 => @sizeOf(PointF32),
+                .cubic_bezier_i16 => @sizeOf(PointI16),
+                .cubic_bezier_f32 => @sizeOf(PointF32),
+            }
+        }
+
+        pub fn extendSize(self: @This()) u32 {
+            switch (self.kind) {
+                .line_i16 => @sizeOf(LineI16) - @sizeOf(PointI16),
+                .line_f32 => @sizeOf(LineF32) - @sizeOf(PointF32),
+                .arc_i16 => @sizeOf(ArcI16) - @sizeOf(PointI16),
+                .arc_f32 => @sizeOf(ArcF32) - @sizeOf(PointF32),
+                .quadratic_bezier_i16 => @sizeOf(QuadraticBezierI16) - @sizeOf(PointI16),
+                .quadratic_bezier_f32 => @sizeOf(QuadraticBezierF32) - @sizeOf(PointF32),
+                .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
+                .cubic_bezier_f32 => @sizeOf(CubicBezierF32) - @sizeOf(PointF32),
+            }
+        }
     };
 
     pub const Index = packed struct {
@@ -224,37 +263,18 @@ pub const PathMonoid = extern struct {
     pub usingnamespace MonoidFunctions(PathTag, @This());
 
     pub fn createTag(tag: PathTag) @This() {
-        const segment = tag.segment;
-        const index = tag.index;
-        const segment_offset: u32 = switch (segment.kind) {
-            .line_f32 => @sizeOf(LineF32) - @sizeOf(PointF32),
-            .line_i16 => @sizeOf(LineI16) - @sizeOf(PointI16),
-            .arc_f32 => @sizeOf(ArcF32) - @sizeOf(PointF32),
-            .arc_i16 => @sizeOf(ArcI16) - @sizeOf(PointI16),
-            .quadratic_bezier_f32 => @sizeOf(QuadraticBezierF32) - @sizeOf(PointF32),
-            .quadratic_bezier_i16 => @sizeOf(QuadraticBezierI16) - @sizeOf(PointI16),
-            .cubic_bezier_f32 => @sizeOf(CubicBezierF32) - @sizeOf(PointF32),
-            .cubic_bezier_i16 => @sizeOf(CubicBezierI16) - @sizeOf(PointI16),
-        };
-        var path_offset: u32 = 0;
-        if (segment.subpath_end) {
-            path_offset += switch (segment.kind) {
-                .line_f32 => @sizeOf(PointF32),
-                .line_i16 => @sizeOf(PointI16),
-                .arc_f32 => @sizeOf(PointF32),
-                .arc_i16 => @sizeOf(PointI16),
-                .quadratic_bezier_f32 => @sizeOf(PointF32),
-                .quadratic_bezier_i16 => @sizeOf(PointI16),
-                .cubic_bezier_f32 => @sizeOf(PointF32),
-                .cubic_bezier_i16 => @sizeOf(PointI16),
-            };
-        }
+        // extend size of the segment offset
+        var segment_offset = tag.segment.extendSize();
+        // 1 point because the subpath end is not an extension
+        // 1 point for the first point of the next subpath
+        segment_offset += @as(u1, @intFromBool(tag.segment.subpath_end)) * tag.segment.pointSize() * 2;
+
         return @This(){
-            .path_index = @intCast(index.path),
+            .path_index = @intCast(tag.index.path),
             .segment_index = 1,
-            .segment_offset = path_offset + segment_offset,
-            .transform_index = @intCast(index.transform),
-            .style_index = @intCast(index.style),
+            .segment_offset = segment_offset,
+            .transform_index = @intCast(tag.index.transform),
+            .style_index = @intCast(tag.index.style),
         };
     }
 
@@ -558,12 +578,16 @@ pub const Encoder = struct {
     }
 
     pub fn extendPath(self: *@This(), comptime T: type, kind: ?PathTag.Kind) !*T {
+        const bytes = try self.extendPathBytes(kind, @sizeOf(T));
+        return @alignCast(@ptrCast(bytes.ptr));
+    }
+
+    pub fn extendPathBytes(self: *@This(), kind: ?PathTag.Kind, n: u32) ![]u8 {
         if (kind) |k| {
             try self.encodePathTag(PathTag.curve(k));
         }
 
-        const bytes = try self.segment_data.addManyAsSlice(self.allocator, @sizeOf(T));
-        return @alignCast(@ptrCast(bytes.ptr));
+        return try self.segment_data.addManyAsSlice(self.allocator, n);
     }
 
     pub fn dropPath(self: *@This(), comptime T: type) void {
@@ -743,29 +767,26 @@ pub fn PathEncoder(comptime T: type) type {
             const is_closed = std.meta.eql(start_point, end_point);
 
             if (self.encoder.currentPathTag()) |path_tag| {
-                if (is_closed) {
-                    // create a line to the first tangent
-                    // TODO: should be first tangent, not start point
-                    (try self.encoder.extendPath(ExtendLine, ExtendLine.KIND)).* = ExtendLine{
-                        .p1 = start_point,
-                    };
-                    // mark end of subpath on the line we just wrote
-                    self.encoder.currentPathTag().?.segment.subpath_end = true;
-                } else {
-                    // create a quad with start point/first tangent
-                    // TODO: should be first tangent (p2), not start point
-                    (try self.encoder.extendPath(ExtendQuadraticBezier, ExtendQuadraticBezier.KIND)).* = ExtendQuadraticBezier{
-                        .p1 = start_point,
-                        .p2 = start_point,
-                    };
-                    // mark end of subpath on the line we just wrote
-                    self.encoder.currentPathTag().?.segment.subpath_end = true;
+                try self.writeLastSegment();
+
+                if (!is_closed) {
+                    // write the first segment at the end
                     // cap the first path_tag in the subpath
                     self.encoder.path_tags.items[self.start_subpath_index].segment.cap = true;
                     // cap the last drawn segment of the subpath
                     path_tag.segment.cap = true;
                 }
             }
+        }
+
+        pub fn writeLastSegment(self: *@This()) !void {
+            const first_path_tag = self.encoder.path_tags.items[self.start_subpath_index];
+            const segment_size = first_path_tag.segment.size();
+            const bytes = self.encoder.segment_data[self.start_subpath_offset..self.start_path_offset + segment_size];
+            const extend_bytes = try self.encoder.extendPathBytes(first_path_tag.segment.kind, segment_size);
+            std.mem.copyForwards(u8, extend_bytes, bytes);
+            // mark end of subpath on the line we just wrote
+            self.encoder.currentPathTag().?.segment.subpath_end = true;
         }
 
         pub fn moveTo(self: *@This(), x: T, y: T) !void {
