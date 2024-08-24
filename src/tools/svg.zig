@@ -24,47 +24,68 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    {
-        try encoder.encodeColor(draw.ColorU8{
-            .a = 255,
-        });
-        try encoder.encodeColor(draw.ColorU8{
-            .r = 255,
-            .a = 255,
-        });
-        var style = draw.Style{};
-        style.setFill(draw.Style.Fill{
-            .brush = .color,
-        });
-        style.setStroke(draw.Style.Stroke{
-            .brush = .color,
-            .start_cap = .round,
-            .end_cap = .round,
-            .join = .miter,
-        });
-        try encoder.encodeStyle(style);
+    // {
+    //     try encoder.encodeColor(draw.ColorU8{
+    //         .a = 255,
+    //     });
+    //     try encoder.encodeColor(draw.ColorU8{
+    //         .r = 255,
+    //         .a = 255,
+    //     });
+    //     var style = draw.Style{};
+    //     style.setFill(draw.Style.Fill{
+    //         .brush = .color,
+    //     });
+    //     style.setStroke(draw.Style.Stroke{
+    //         .brush = .color,
+    //         .start_cap = .round,
+    //         .end_cap = .round,
+    //         .join = .miter,
+    //     });
+    //     try encoder.encodeStyle(style);
 
-        var path_encoder = encoder.pathEncoder(f32);
-        try path_encoder.moveTo(0.0, 0.0);
-        try path_encoder.lineTo(100.0, 100.0);
-        try path_encoder.quadTo(150.0, 150.0, 200.0, 100.0);
-        try path_encoder.cubicTo(220.0, 80.0, 140.0, 60.0, 0.0, 0.0);
+    //     var path_encoder = encoder.pathEncoder(f32);
+    //     try path_encoder.moveTo(0.0, 0.0);
+    //     try path_encoder.lineTo(100.0, 100.0);
+    //     try path_encoder.quadTo(150.0, 150.0, 200.0, 100.0);
+    //     try path_encoder.cubicTo(220.0, 80.0, 140.0, 60.0, 0.0, 0.0);
 
-        try path_encoder.moveTo(500.0, 500.0);
-        try path_encoder.cubicTo(550.0, 550.0, 512.0, 600.0, 330.0, 700.0);
-        try path_encoder.lineTo(500.0, 500.0);
-        try path_encoder.finish();
-    }
+    //     try path_encoder.moveTo(500.0, 500.0);
+    //     try path_encoder.cubicTo(550.0, 550.0, 512.0, 600.0, 330.0, 700.0);
+    //     try path_encoder.lineTo(500.0, 500.0);
+    //     try path_encoder.finish();
+    // }
 
-    {
-        var path_encoder = encoder.pathEncoder(f32);
-        try path_encoder.moveTo(700.0, 50.0);
-        try path_encoder.cubicTo(777.0, 130.0, 800.0, 100.0, 730.0, 300.0);
-        // try path_encoder.lineTo(700.0, 50.0);
-        try path_encoder.finish();
-    }
+    // {
+    //     var path_encoder = encoder.pathEncoder(f32);
+    //     try path_encoder.moveTo(700.0, 50.0);
+    //     try path_encoder.cubicTo(777.0, 130.0, 800.0, 100.0, 730.0, 300.0);
+    //     // try path_encoder.lineTo(700.0, 50.0);
+    //     try path_encoder.finish();
+    // }
 
-    // try svg.encode(&encoder);
+    // {
+    //     try encoder.encodeColor(draw.ColorU8{
+    //         .g = 255,
+    //         .a = 255,
+    //     });
+    //     var style = draw.Style{};
+    //     style.setStroke(draw.Style.Stroke{
+    //         .brush = .color,
+    //         .start_cap = .round,
+    //         .end_cap = .round,
+    //         .join = .miter,
+    //     });
+    //     try encoder.encodeStyle(style);
+
+    //     var path_encoder = encoder.pathEncoder(f32);
+    //     try path_encoder.moveTo(400.0, 500.0);
+    //     try path_encoder.lineTo(700.0, 700.0);
+    //     try path_encoder.quadTo(750.0, 650.0, 700.0, 600.0);
+    //     try path_encoder.finish();        
+    // }
+
+    try svg.encode(&encoder);
 
     // const bigger = (core.TransformF32{
     //     .scale = core.PointF32.create(4.0, 4.0),
@@ -104,7 +125,7 @@ pub fn main() !void {
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         // .debug_flags = 0,
-        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_EXPAND_MONOIDS,
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
