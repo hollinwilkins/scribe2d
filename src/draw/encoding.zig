@@ -778,8 +778,8 @@ pub fn PathEncoder(comptime T: type) type {
         pub fn writeLastSegment(self: *@This()) !void {
             const first_path_tag = self.encoder.path_tags.items[self.start_subpath_index];
             const segment_size = first_path_tag.segment.size();
-            const bytes = self.encoder.segment_data.items[self.start_subpath_offset..self.start_subpath_offset + segment_size];
             const extend_bytes = try self.encoder.extendPathBytes(first_path_tag.segment.kind, segment_size);
+            const bytes = self.encoder.segment_data.items[self.start_subpath_offset..self.start_subpath_offset + segment_size];
             std.mem.copyForwards(u8, extend_bytes, bytes);
             // mark end of subpath on the line we just wrote
             self.encoder.currentPathTag().?.segment.subpath_end = true;
