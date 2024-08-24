@@ -421,6 +421,11 @@ pub const LineAllocator = struct {
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
+        const next_segment_metadata = getSegmentMeta(
+            segment_metadata.path_monoid.segment_index + 1,
+            path_tags,
+            path_monoids,
+        );
         const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
         if (segment_metadata.path_tag.segment.subpath_end) {
@@ -446,11 +451,7 @@ pub const LineAllocator = struct {
         var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = readNeighborSegment(
             config,
-            getSegmentMeta(
-                segment_metadata.path_monoid.segment_index + 1,
-                path_tags,
-                path_monoids,
-            ),
+            next_segment_metadata,
             transforms,
             segment_data,
         );
@@ -487,7 +488,7 @@ pub const LineAllocator = struct {
             .y = offset_tangent.x,
         };
 
-        if (segment_metadata.path_tag.segment.cap and !segment_metadata.path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and !next_segment_metadata.path_tag.segment.subpath_end) {
             // draw start cap on left side
             drawCap(
                 config,
@@ -518,7 +519,7 @@ pub const LineAllocator = struct {
             line_offset,
         );
 
-        if (segment_metadata.path_tag.segment.cap and segment_metadata.path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and next_segment_metadata.path_tag.segment.subpath_end) {
             // draw end cap on left side
             drawCap(
                 config,
@@ -987,6 +988,11 @@ pub const Flatten = struct {
         front_line_writer: *LineWriter,
         back_line_writer: *LineWriter,
     ) void {
+        const next_segment_metadata = getSegmentMeta(
+            segment_metadata.path_monoid.segment_index + 1,
+            path_tags,
+            path_monoids,
+        );
         const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
         const cubic_points = getCubicPoints(
@@ -1007,11 +1013,7 @@ pub const Flatten = struct {
         var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = readNeighborSegment(
             config,
-            getSegmentMeta(
-                segment_metadata.path_monoid.segment_index + 1,
-                path_tags,
-                path_monoids,
-            ),
+            next_segment_metadata,
             transforms,
             segment_data,
         );
@@ -1053,7 +1055,7 @@ pub const Flatten = struct {
             .y = tan_next_norm.x,
         });
 
-        if (segment_metadata.path_tag.segment.cap and !segment_metadata.path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and !next_segment_metadata.path_tag.segment.subpath_end) {
             // draw start cap on left side
             drawCap(
                 config,
@@ -1086,7 +1088,7 @@ pub const Flatten = struct {
             back_line_writer,
         );
 
-        if (segment_metadata.path_tag.segment.cap and segment_metadata.path_tag.segment.subpath_end) {
+        if (segment_metadata.path_tag.segment.cap and next_segment_metadata.path_tag.segment.subpath_end) {
             // draw end cap on left side
             drawCap(
                 config,
