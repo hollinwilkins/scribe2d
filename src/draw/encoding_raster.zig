@@ -224,9 +224,9 @@ pub const CpuRasterizer = struct {
             path_monoid.style_index -= 1;
             path_monoid.transform_index -= 1;
             // TODO: should support PointI16 too
-            path_monoid.segment_offset += (path_monoid.subpath_index + 1) * @sizeOf(PointF32);
-            path_monoid.segment_offset -= @as(u32, @intFromBool(path_tag.segment.subpath_end)) * (@sizeOf(PointF32) * 2);
+            path_monoid.segment_offset += @sizeOf(PointF32); // add 1 for the first subpath
             path_monoid.segment_offset -= path_tag.segment.size();
+            path_monoid.segment_offset -= @as(u32, @intFromBool(path_tag.segment.subpath_end)) * @sizeOf(PointF32);
 
             if (path_tag.index.path == 1) {
                 paths[path_monoid.path_index] = Path{
@@ -553,8 +553,12 @@ pub const CpuRasterizer = struct {
 
         if (self.config.debugExpandMonoids()) {
             std.debug.print("============ Path Monoids ============\n", .{});
-            for (self.path_monoids.items) |path_monoid| {
+            for (self.encoding.path_tags, self.path_monoids.items) |path_tag, path_monoid| {
                 std.debug.print("{}\n", .{path_monoid});
+                const data = self.encoding.segment_data[path_monoid.segment_offset..path_monoid.segment_offset + path_tag.segment.size()];
+                const points = std.mem.bytesAsSlice(PointF32, data);
+                std.debug.print("Points: {any}\n", .{points});
+                std.debug.print("------------\n", .{});
             }
             std.debug.print("======================================\n", .{});
         }

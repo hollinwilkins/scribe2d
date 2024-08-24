@@ -24,35 +24,39 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    // {
-    //     try encoder.encodeColor(draw.ColorU8{
-    //         .a = 255,
-    //     });
-    //     try encoder.encodeColor(draw.ColorU8{
-    //         .r = 255,
-    //         .a = 255,
-    //     });
-    //     var style = draw.Style{};
-    //     style.setFill(draw.Style.Fill{
-    //         .brush = .color,
-    //     });
-    //     style.setStroke(draw.Style.Stroke{
-    //         .brush = .color,
-    //         .start_cap = .round,
-    //         .end_cap = .round,
-    //         .join = .miter,
-    //     });
-    //     try encoder.encodeStyle(style);
+    {
+        try encoder.encodeColor(draw.ColorU8{
+            .a = 255,
+        });
+        try encoder.encodeColor(draw.ColorU8{
+            .r = 255,
+            .a = 255,
+        });
+        var style = draw.Style{};
+        style.setFill(draw.Style.Fill{
+            .brush = .color,
+        });
+        style.setStroke(draw.Style.Stroke{
+            .brush = .color,
+            .start_cap = .round,
+            .end_cap = .round,
+            .join = .miter,
+        });
+        try encoder.encodeStyle(style);
 
-    //     var path_encoder = encoder.pathEncoder(f32);
-    //     try path_encoder.moveTo(0.0, 0.0);
-    //     try path_encoder.lineTo(100.0, 100.0);
-    //     try path_encoder.quadTo(150.0, 150.0, 200.0, 100.0);
-    //     try path_encoder.cubicTo(220.0, 80.0, 140.0, 60.0, 0.0, 0.0);
-    //     try path_encoder.finish();
-    // }
+        var path_encoder = encoder.pathEncoder(f32);
+        try path_encoder.moveTo(0.0, 0.0);
+        try path_encoder.lineTo(100.0, 100.0);
+        try path_encoder.quadTo(150.0, 150.0, 200.0, 100.0);
+        try path_encoder.cubicTo(220.0, 80.0, 140.0, 60.0, 0.0, 0.0);
 
-    try svg.encode(&encoder);
+        try path_encoder.moveTo(500.0, 500.0);
+        try path_encoder.cubicTo(550.0, 550.0, 512.0, 600.0, 330.0, 700.0);
+        try path_encoder.lineTo(500.0, 500.0);
+        try path_encoder.finish();
+    }
+
+    // try svg.encode(&encoder);
 
     // const bigger = (core.TransformF32{
     //     .scale = core.PointF32.create(4.0, 4.0),
