@@ -550,6 +550,9 @@ pub const PathParser = struct {
             switch (token) {
                 .draw_mode => |draw_mode| {
                     self.setDrawMode(draw_mode);
+                    if (draw_mode.draw == .close) {
+                        try self.path_encoder.close();
+                    }
                 },
                 .points => |points| {
                     var points2 = points;
