@@ -36,9 +36,9 @@ pub fn main() !void {
 
         var path_encoder = encoder.pathEncoder(f32);
         try path_encoder.moveTo(0.0, 0.0);
-        try path_encoder.lineTo(10.0, 10.0);
-        try path_encoder.quadTo(15.0, 15.0, 20.0, 10.0);
-        try path_encoder.cubicTo(22.0, 8.0, 14.0, 6.0, 0.0, 0.0);
+        try path_encoder.lineTo(100.0, 100.0);
+        try path_encoder.quadTo(150.0, 150.0, 200.0, 100.0);
+        try path_encoder.cubicTo(220.0, 80.0, 140.0, 60.0, 0.0, 0.0);
         try path_encoder.finish();
     }
 
@@ -80,7 +80,7 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         // .debug_flags = 0,
         .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
