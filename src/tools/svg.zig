@@ -56,6 +56,14 @@ pub fn main() !void {
         try path_encoder.finish();
     }
 
+    {
+        var path_encoder = encoder.pathEncoder(f32);
+        try path_encoder.moveTo(700.0, 50.0);
+        try path_encoder.cubicTo(777.0, 130.0, 800.0, 100.0, 730.0, 300.0);
+        // try path_encoder.lineTo(700.0, 50.0);
+        try path_encoder.finish();
+    }
+
     // try svg.encode(&encoder);
 
     // const bigger = (core.TransformF32{
