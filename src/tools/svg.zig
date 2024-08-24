@@ -125,7 +125,7 @@ pub fn main() !void {
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         // .debug_flags = 0,
-        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_EXPAND_MONOIDS,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
@@ -252,7 +252,8 @@ pub fn main() !void {
                 std.debug.print("Path({})\n", .{path_monoid.path_index});
                 std.debug.print("------------- Fill Boundary Fragments ------------\n", .{});
                 for (fill_boundary_fragments) |boundary_fragment| {
-                    if (boundary_fragment.pixel.y == y and boundary_fragment.is_merge) {
+                    if (boundary_fragment.pixel.y == y) {
+                    // if (boundary_fragment.pixel.y == y and boundary_fragment.is_merge) {
                         std.debug.print("BoundaryFragment({},{})({},{})-({},{}): IsMerge({}), T1({}), T2({}), MainRayWinding({})\n", .{
                             boundary_fragment.pixel.x,
                             boundary_fragment.pixel.y,
@@ -279,7 +280,8 @@ pub fn main() !void {
 
                 std.debug.print("------------- Stroke Boundary Fragments ------------\n", .{});
                 for (stroke_boundary_fragments) |boundary_fragment| {
-                    if (boundary_fragment.pixel.y == y and boundary_fragment.is_merge) {
+                    if (boundary_fragment.pixel.y == y) {
+                    // if (boundary_fragment.pixel.y == y and boundary_fragment.is_merge) {
                         std.debug.print("BoundaryFragment({},{})({},{})-({},{}): IsMerge({}), T1({}), T2({}), MainRayWinding({})\n", .{
                             boundary_fragment.pixel.x,
                             boundary_fragment.pixel.y,

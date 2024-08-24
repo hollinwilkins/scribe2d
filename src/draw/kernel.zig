@@ -214,6 +214,7 @@ pub const LineAllocator = struct {
                         segment_data,
                     );
                 }
+                cubic_points = cubic_points.affineTransform(transform);
 
                 flattenEuler(
                     config,
@@ -780,6 +781,7 @@ pub const Flatten = struct {
                 );
             }
 
+            cubic_points = cubic_points.affineTransform(transform);
             flattenEuler(
                 config,
                 cubic_points,
@@ -2223,7 +2225,12 @@ pub const Rasterize = struct {
                 boundary_fragment.main_ray_winding = main_ray_winding;
             }
 
-            main_ray_winding += boundary_fragment.calculateMainRayWinding();
+            const boundary_framgent_winding = boundary_fragment.calculateMainRayWinding();
+            main_ray_winding += boundary_framgent_winding;
+
+            if (!boundary_fragment.is_merge) {
+                boundary_fragment.main_ray_winding = boundary_framgent_winding;
+            }
         }
     }
 
