@@ -28,9 +28,19 @@ pub fn main() !void {
         try encoder.encodeColor(draw.ColorU8{
             .a = 255,
         });
+        try encoder.encodeColor(draw.ColorU8{
+            .r = 255,
+            .a = 255,
+        });
         var style = draw.Style{};
         style.setFill(draw.Style.Fill{
             .brush = .color,
+        });
+        style.setStroke(draw.Style.Stroke{
+            .brush = .color,
+            .start_cap = .round,
+            .end_cap = .round,
+            .join = .miter,
         });
         try encoder.encodeStyle(style);
 
@@ -82,7 +92,7 @@ pub fn main() !void {
     const rasterizer_config = draw.CpuRasterizer.Config{
         .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         // .debug_flags = 0,
-        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALL,
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,

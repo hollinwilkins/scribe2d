@@ -155,6 +155,8 @@ pub const LineAllocator = struct {
                     config,
                     style.stroke,
                     segment_metadata,
+                    path_tags,
+                    path_monoids,
                     transforms,
                     segment_data,
                     &segment_offset.stroke_offset,
@@ -230,6 +232,8 @@ pub const LineAllocator = struct {
         config: KernelConfig,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
@@ -258,6 +262,8 @@ pub const LineAllocator = struct {
                     config,
                     stroke,
                     segment_metadata,
+                    path_tags,
+                    path_monoids,
                     transforms,
                     segment_data,
                     line_offset,
@@ -408,6 +414,8 @@ pub const LineAllocator = struct {
         config: KernelConfig,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
@@ -437,7 +445,11 @@ pub const LineAllocator = struct {
         var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = readNeighborSegment(
             config,
-            segment_metadata,
+            getSegmentMeta(
+                segment_metadata.path_monoid.segment_index + 1,
+                path_tags,
+                path_monoids,
+            ),
             transforms,
             segment_data,
         );
@@ -807,17 +819,23 @@ pub const Flatten = struct {
             //     back_line_writer,
             // );
         } else {
-            flattenStrokeEuler(
-                config,
-                stroke,
-                segment_metadata,
-                path_tags,
-                path_monoids,
-                transforms,
-                segment_data,
-                front_line_writer,
-                back_line_writer,
-            );
+            flatten: {
+                if (segment_metadata.path_tag.segment.subpath_end) {
+                    break :flatten;
+                }
+
+                flattenStrokeEuler(
+                    config,
+                    stroke,
+                    segment_metadata,
+                    path_tags,
+                    path_monoids,
+                    transforms,
+                    segment_data,
+                    front_line_writer,
+                    back_line_writer,
+                );
+            }
         }
     }
 

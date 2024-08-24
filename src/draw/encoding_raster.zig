@@ -225,7 +225,7 @@ pub const CpuRasterizer = struct {
             path_monoid.transform_index -= 1;
             // TODO: should support PointI16 too
             path_monoid.segment_offset += (path_monoid.subpath_index + 1) * @sizeOf(PointF32);
-            path_monoid.segment_offset -= @as(u32, @intFromBool(path_tag.segment.subpath_end)) * @sizeOf(PointF32);
+            path_monoid.segment_offset -= @as(u32, @intFromBool(path_tag.segment.subpath_end)) * (@sizeOf(PointF32) * 2);
             path_monoid.segment_offset -= path_tag.segment.size();
 
             if (path_tag.index.path == 1) {
