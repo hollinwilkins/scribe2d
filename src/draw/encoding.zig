@@ -779,7 +779,7 @@ pub fn PathEncoder(comptime T: type) type {
             const first_path_tag = self.encoder.path_tags.items[self.start_subpath_index];
             const segment_size = first_path_tag.segment.size();
             const extend_bytes = try self.encoder.extendPathBytes(first_path_tag.segment.kind, segment_size);
-            const bytes = self.encoder.segment_data.items[self.start_subpath_offset..self.start_subpath_offset + segment_size];
+            const bytes = self.encoder.segment_data.items[self.start_subpath_offset .. self.start_subpath_offset + segment_size];
             std.mem.copyForwards(u8, extend_bytes, bytes);
             // mark end of subpath on the line we just wrote
             self.encoder.currentPathTag().?.segment.subpath_end = true;
@@ -1275,7 +1275,11 @@ pub const BoundaryFragment = struct {
     main_ray_winding: f32 = 0,
     stencil_mask: u16 = 0,
 
-    pub fn create(half_planes: *const HalfPlanesU16, grid_intersections: [2]*const GridIntersection) @This() {
+    pub fn create(
+        half_planes: *const HalfPlanesU16,
+        pixel_offset: PointI32,
+        grid_intersections: [2]*const GridIntersection,
+    ) @This() {
         const pixel = grid_intersections[0].pixel.min(grid_intersections[1].pixel);
 
         // can move diagonally, but cannot move by more than 1 pixel in both directions
@@ -1313,7 +1317,7 @@ pub const BoundaryFragment = struct {
         const masks = calculateMasks(half_planes, intersections);
 
         return @This(){
-            .pixel = pixel,
+            .pixel = pixel.add(pixel_offset),
             .masks = masks,
             .intersections = intersections,
         };

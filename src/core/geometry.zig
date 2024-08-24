@@ -167,6 +167,13 @@ pub fn Point(comptime T: type) type {
             };
         }
 
+        pub fn floor(self: @This()) @This() {
+            return @This() {
+                .x = @floor(self.x),
+                .y = @floor(self.y),
+            };
+        }
+
         pub fn min(self: @This(), other: @This()) @This() {
             return @This(){
                 .x = @min(self.x, other.x),

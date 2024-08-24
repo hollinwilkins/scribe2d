@@ -1811,13 +1811,20 @@ pub const TileGenerator = struct {
         bump: BumpAllocator,
         boundary_fragments: []BoundaryFragment,
     ) void {
+        var line = lines[line_index];
+        const min = line.p0.min(line.p1).floor();
+        const offset_x = if (min.x < 0) @abs(min.x) else 0.0;
+        const offset_y = if (min.y < 0) @abs(min.y) else 0.0;
+        const pixel_offset = PointF32.create(offset_x, offset_y);
+
         var intersection_writer = IntersectionWriter{
             .half_planes = half_planes,
             .bump = bump,
+            .pixel_offset = pixel_offset.cast(i32),
             .boundary_fragments = boundary_fragments,
         };
+        line = line.translate(pixel_offset);
 
-        const line = lines[line_index];
         if (std.meta.eql(line.p0, line.p1)) {
             return;
         }
@@ -2009,6 +2016,7 @@ pub const IntersectionWriter = struct {
     half_planes: *const HalfPlanesU16,
     bump: BumpAllocator,
     boundary_fragments: []BoundaryFragment,
+    pixel_offset: PointI32,
     previous_grid_intersection: ?GridIntersection = null,
 
     pub fn write(self: *@This(), grid_intersection2: GridIntersection) void {
@@ -2025,6 +2033,7 @@ pub const IntersectionWriter = struct {
             {
                 self.writeBoundaryFragment(BoundaryFragment.create(
                     self.half_planes,
+                    self.pixel_offset,
                     [_]*const GridIntersection{
                         previous,
                         &grid_intersection,
