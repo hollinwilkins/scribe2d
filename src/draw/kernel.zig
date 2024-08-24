@@ -1820,7 +1820,7 @@ pub const TileGenerator = struct {
         var intersection_writer = IntersectionWriter{
             .half_planes = half_planes,
             .bump = bump,
-            .pixel_offset = pixel_offset.cast(i32),
+            .pixel_offset = pixel_offset.cast(i32).negate(),
             .boundary_fragments = boundary_fragments,
         };
         line = line.translate(pixel_offset);
