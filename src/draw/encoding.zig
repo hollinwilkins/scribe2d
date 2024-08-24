@@ -290,6 +290,20 @@ pub const PathMonoid = extern struct {
             .style_index = self.style_index + other.style_index,
         };
     }
+
+    pub fn calculate(self: @This(), path_tag: PathTag) @This() {
+        var path_monoid = self;
+        path_monoid.path_index -= 1;
+        path_monoid.segment_index -= 1;
+        path_monoid.style_index -= 1;
+        path_monoid.transform_index -= 1;
+        // TODO: should support PointI16 too
+        path_monoid.segment_offset += @sizeOf(PointF32); // add 1 for the first subpath
+        path_monoid.segment_offset -= path_tag.segment.size();
+        path_monoid.segment_offset -= @as(u32, @intFromBool(path_tag.segment.subpath_end)) * @sizeOf(PointF32);
+
+        return path_monoid;
+    }
 };
 
 pub const SegmentMeta = struct {
@@ -322,11 +336,12 @@ pub const Encoding = struct {
 
     pub fn calculateBounds(self: @This()) RectF32 {
         var bounds = RectF32.NONE;
-        var path_monoid = PathMonoid{};
+        var next_path_monoid = PathMonoid{};
 
         for (self.path_tags) |path_tag| {
-            path_monoid = path_monoid.combine(PathMonoid.createTag(path_tag));
-            const transform = self.getTransform(path_monoid.transform_index - 1);
+            next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
+            const path_monoid = next_path_monoid.calculate(path_tag);
+            const transform = self.getTransform(path_monoid.transform_index);
 
             switch (path_tag.segment.kind) {
                 .line_f32 => {
@@ -389,7 +404,7 @@ pub const Encoding = struct {
     }
 
     pub fn getSegment(self: @This(), comptime T: type, path_monoid: PathMonoid) T {
-        return std.mem.bytesToValue(T, self.segment_data[path_monoid.segment_offset - @sizeOf(T) .. path_monoid.segment_offset]);
+        return std.mem.bytesToValue(T, self.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + @sizeOf(T)]);
     }
 
     pub fn getStyle(self: @This(), style_index: i32) Style {

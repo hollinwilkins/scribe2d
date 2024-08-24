@@ -219,14 +219,7 @@ pub const CpuRasterizer = struct {
         const last_path_monoid = path_monoids[path_monoids.len - 1];
         const paths = try self.paths.addManyAsSlice(self.allocator, last_path_monoid.path_index);
         for (self.encoding.path_tags, path_monoids) |path_tag, *path_monoid| {
-            path_monoid.path_index -= 1;
-            path_monoid.segment_index -= 1;
-            path_monoid.style_index -= 1;
-            path_monoid.transform_index -= 1;
-            // TODO: should support PointI16 too
-            path_monoid.segment_offset += @sizeOf(PointF32); // add 1 for the first subpath
-            path_monoid.segment_offset -= path_tag.segment.size();
-            path_monoid.segment_offset -= @as(u32, @intFromBool(path_tag.segment.subpath_end)) * @sizeOf(PointF32);
+            path_monoid.* = path_monoid.calculate(path_tag);
 
             if (path_tag.index.path == 1) {
                 paths[path_monoid.path_index] = Path{

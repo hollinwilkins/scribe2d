@@ -87,27 +87,23 @@ pub fn main() !void {
 
     try svg.encode(&encoder);
 
-    // const bigger = (core.TransformF32{
-    //     .scale = core.PointF32.create(10.0, 10.0),
-    // }).toAffine();
+    const bigger = (core.TransformF32{
+        .scale = core.PointF32.create(4.0, 4.0),
+    }).toAffine();
 
-    // for (encoder.transforms.items) |*tf| {
-    //     tf.* = bigger.mul(tf.*);
-    // }
+    for (encoder.transforms.items) |*tf| {
+        tf.* = bigger.mul(tf.*);
+    }
 
-    // const bounds = encoder.calculateBounds();
-    const bounds = core.RectF32.create(
-        core.PointF32.create(0, 0),
-        core.PointF32.create(900, 900),
-    );
+    const bounds = encoder.calculateBounds();
 
-    // const center = (core.TransformF32{
-    //     .translate = core.PointF32.create(-100.0, -4000.0),
-    // }).toAffine();
+    const center = (core.TransformF32{
+        .translate = core.PointF32.create(-bounds.min.x + 32.0, -bounds.min.y + 32.0),
+    }).toAffine();
 
-    // for (encoder.transforms.items) |*tf| {
-    //     tf.* = center.mul(tf.*);
-    // }
+    for (encoder.transforms.items) |*tf| {
+        tf.* = center.mul(tf.*);
+    }
 
     const dimensions = core.DimensionsU32{
         .width = @intFromFloat(@ceil(bounds.getWidth()) + 64.0),
