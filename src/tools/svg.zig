@@ -24,7 +24,25 @@ pub fn main() !void {
     var encoder = draw.Encoder.init(allocator);
     defer encoder.deinit();
 
-    try svg.encode(&encoder);
+    {
+        try encoder.encodeColor(draw.ColorU8{
+            .a = 255,
+        });
+        var style = draw.Style{};
+        style.setFill(draw.Style.Fill{
+            .brush = .color,
+        });
+        try encoder.encodeStyle(style);
+
+        var path_encoder = encoder.pathEncoder(f32);
+        try path_encoder.moveTo(0.0, 0.0);
+        try path_encoder.lineTo(10.0, 10.0);
+        try path_encoder.quadTo(15.0, 15.0, 20.0, 10.0);
+        try path_encoder.cubicTo(22.0, 8.0, 14.0, 6.0, 0.0, 0.0);
+        try path_encoder.finish();
+    }
+
+    // try svg.encode(&encoder);
 
     // const bigger = (core.TransformF32{
     //     .scale = core.PointF32.create(4.0, 4.0),
@@ -40,13 +58,13 @@ pub fn main() !void {
         core.PointF32.create(900, 900),
     );
 
-    const center = (core.TransformF32{
-        .translate = core.PointF32.create(-bounds.min.x + 32.0, -bounds.min.y + 32.0),
-    }).toAffine();
+    // const center = (core.TransformF32{
+    //     .translate = core.PointF32.create(-bounds.min.x + 32.0, -bounds.min.y + 32.0),
+    // }).toAffine();
 
-    for (encoder.transforms.items) |*tf| {
-        tf.* = center.mul(tf.*);
-    }
+    // for (encoder.transforms.items) |*tf| {
+    //     tf.* = center.mul(tf.*);
+    // }
 
     const dimensions = core.DimensionsU32{
         .width = @intFromFloat(@ceil(bounds.getWidth()) + 64.0),
@@ -62,9 +80,9 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const rasterizer_config = draw.CpuRasterizer.Config{
-        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALLOCATE_LINES,
-        .debug_flags = 0,
-        // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ALLOCATE_LINES,
+        .run_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
+        // .debug_flags = 0,
+        .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_FLATTEN,
         // .debug_flags = draw.CpuRasterizer.Config.RUN_FLAG_ESTIMATE_SEGMENTS,
         // .debug_single_pass = true,
         .kernel_config = draw.KernelConfig.DEFAULT,
