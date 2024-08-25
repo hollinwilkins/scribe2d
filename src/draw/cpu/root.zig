@@ -11,6 +11,7 @@ const Encoding = encoding_module.Encoding;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const KernelConfig = kernel_module.KernelConfig;
+const Projections = kernel_module.Projections;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
@@ -24,6 +25,7 @@ pub const CpuRasterizer = struct {
     half_planes: *const HalfPlanesU16,
     config: Config,
     buffers: Buffers,
+    projections: Projections = Projections{},
 
     pub fn init(
         allocator: Allocator,
@@ -32,9 +34,17 @@ pub const CpuRasterizer = struct {
     ) !@This() {
         const buffers = Buffers{
             .sizes = config.buffer_sizes,
+            .path_offsets = try allocator.alloc(
+                u32,
+                config.buffer_sizes.pathsSize() + 1,
+            ),
+            .path_tags = try allocator.alloc(
+                PathTag,
+                config.buffer_sizes.pathTagsSize(),
+            ),
             .path_monoids = try allocator.alloc(
                 PathMonoid,
-                config.buffer_sizes.pathMonoidsSize() + 1,
+                config.buffer_sizes.pathTagsSize() + 1,
             ),
             .offsets = try allocator.alloc(
                 u32,
@@ -67,24 +77,59 @@ pub const CpuRasterizer = struct {
     }
 
     pub fn rasterize(self: *@This(), encoding: Encoding) void {
-        var path_monoid_expander = PathMonoidExpander{
-            .encoding = &encoding,
-            .buffers = &self.buffers,
-            .debug_flags = &self.config.debug_flags,
-        };
+        // initialize buffer data
+        self.buffers.path_monoids[0] = PathMonoid{};
 
-        while (path_monoid_expander.next()) |expansion| {
-            var line_calculator = LineCalculator{
-                .kernel_config = self.config.kernel_config,
-                .buffers = &self.buffers,
-                .debug_flags = &self.config.debug_flags,
-                .encoding = &encoding,
-                .path_tags = expansion.path_tags,
-                .path_monoids = expansion.path_monoids,
+        var paths_iter = RangeU32.create(
+            0,
+            @intCast(encoding.path_offsets.len),
+        ).chunkIterator(self.config.buffer_sizes.pathsSize());
+        while (paths_iter.next()) |path_indices| {
+            // load path_offsets
+            self.projections.paths = path_indices;
+            std.mem.copyForwards(u32, self.buffers.path_offsets[1..], encoding.path_offsets[path_indices.start..path_indices.end]);
+            self.buffers.path_offsets[0] = encoding.path_offsets[path_indices.end - 1];
+
+            var path_segments_iter = PathSegmentsIterator{
+                .projections = &self.projections,
+                .path_offsets = self.buffers.path_offsets,
+                .chunk_size = self.buffers.sizes.pathTagsSize(),
             };
-            const line_offsets = line_calculator.calculate();
-            _ = line_offsets;
+
+            while (path_segments_iter.next()) |segment_indices| {
+                // load path tags
+                self.projections.segments = segment_indices;
+                std.mem.copyForwards(PathTag, self.buffers.path_tags, encoding.path_tags[segment_indices.start..segment_indices.end]);
+                const kernel_segment_indices = RangeU32.create(
+                    0,
+                    @intCast(segment_indices.size()),
+                );
+
+                kernel_module.PathMonoidExpander.expand(
+                    kernel_segment_indices,
+                    self.buffers.path_tags,
+                    self.buffers.path_monoids,
+                );
+
+                if (self.config.debug_flags.expand_monoids) {
+                    self.debugExpandMonoids();
+                }
+            }
         }
+    }
+
+    pub fn debugExpandMonoids(self: @This()) void {
+        _ = self;
+        // std.debug.print("============ Path Monoids ============\n", .{});
+        // const segments_size = self.projections.segments.size();
+        // for (self.buffers.path_tags[0..segments_size], self.buffers.path_monoids[1 .. 1 + segments_size]) |path_tag, path_monoid| {
+        //     std.debug.print("{}\n", .{path_monoid});
+        //     const data = self.encoding.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
+        //     const points = std.mem.bytesAsSlice(PointF32, data);
+        //     std.debug.print("Points: {any}\n", .{points});
+        //     std.debug.print("------------\n", .{});
+        // }
+        // std.debug.print("======================================\n", .{});
     }
 };
 
@@ -99,19 +144,23 @@ pub const BufferSizes = struct {
     pub const DEFAULT_PATHS_SIZE: u32 = 10;
 
     paths_size: u32 = DEFAULT_PATHS_SIZE,
-    path_monoids_size: u32 = DEFAULT_PATH_MONOIDS_SIZE,
+    path_tags_size: u32 = DEFAULT_PATH_MONOIDS_SIZE,
     lines_size: u32 = DEFAULT_LINES_SIZE,
 
-    pub fn bumpsSize(self: @This()) u32 {
-        return self.paths_size * 2;
+    pub fn pathsSize(self: @This()) u32 {
+        return self.paths_size;
     }
 
-    pub fn pathMonoidsSize(self: @This()) u32 {
-        return self.path_monoids_size;
+    pub fn bumpsSize(self: @This()) u32 {
+        return self.pathsSize() * 2;
+    }
+
+    pub fn pathTagsSize(self: @This()) u32 {
+        return self.path_tags_size;
     }
 
     pub fn offsetsSize(self: @This()) u32 {
-        return self.pathMonoidsSize() * 2;
+        return self.pathTagsSize() * 8;
     }
 
     pub fn linesSize(self: @This()) u32 {
@@ -121,145 +170,188 @@ pub const BufferSizes = struct {
 
 pub const Buffers = struct {
     sizes: BufferSizes,
+
+    path_tags: []PathTag,
     path_monoids: []PathMonoid,
+    path_offsets: []u32,
     offsets: []u32,
     bumps: []std.atomic.Value(u32),
     lines: []LineF32,
 };
 
-pub const PathMonoidExpander = struct {
-    encoding: *const Encoding,
-    buffers: *const Buffers,
-    debug_flags: *const DebugFlags,
-    path_index: u32 = 0,
+pub const PathsIterator = RangeU32.ChunkIterator;
 
-    pub fn next(self: *@This()) ?State {
-        if (self.path_index >= self.encoding.path_offsets.len) {
+pub const PathSegmentsIterator = struct {
+    projections: *const Projections,
+    path_offsets: []const u32,
+    chunk_size: u32,
+    index: u32 = 0,
+
+    pub fn next(self: *@This()) ?RangeU32 {
+        const end_index = self.projections.paths.size();
+        if (self.index >= end_index) {
             return null;
         }
 
-        const path_index = self.path_index;
-        const start_segment_offset = if (self.path_index > 0) self.encoding.path_offsets[self.path_index - 1] else 0;
-        var end_segment_offset = start_segment_offset;
+        var start_path_offset: u32 = undefined;
+        if (self.index == 0) {
+            start_path_offset = self.path_offsets[0];
+        } else {
+            start_path_offset = self.path_offsets[self.index - 1];
+        }
+        var end_path_offset: u32 = start_path_offset;
 
-        while (true) {
-            if (self.path_index >= self.encoding.path_offsets.len) {
+        while (self.index < end_index) {
+            const next_end_path_offset: u32 = self.path_offsets[self.index];
+
+            if (next_end_path_offset - start_path_offset > self.chunk_size) {
+                if (end_path_offset == start_path_offset) {
+                    @panic("path has too many segments");
+                }
                 break;
             }
 
-            const next_end_segment_offset = self.encoding.path_offsets[self.path_index];
-
-            if (next_end_segment_offset - start_segment_offset > self.buffers.sizes.pathMonoidsSize()) {
-                break;
-            }
-
-            end_segment_offset = next_end_segment_offset;
-            self.path_index += 1;
+            end_path_offset = next_end_path_offset;
+            self.index += 1;
         }
 
-        const segment_size = end_segment_offset - start_segment_offset;
-        if (segment_size == 0) {
-            self.path_index = @intCast(self.encoding.path_offsets.len);
-            return null;
-        }
-
-        const path_tags = self.encoding.path_tags[start_segment_offset..end_segment_offset];
-        const path_monoids = self.buffers.path_monoids[1 .. 1 + segment_size];
-
-        var next_path_monoid = if (path_index == 0) PathMonoid{} else self.buffers.path_monoids[0];
-        for (path_tags, path_monoids) |path_tag, *path_monoid| {
-            next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
-            path_monoid.* = next_path_monoid.calculate(path_tag);
-        }
-        self.buffers.path_monoids[0] = next_path_monoid;
-
-        if (self.debug_flags.expand_monoids) {
-            std.debug.print("============ Path Monoids ============\n", .{});
-            for (path_tags, path_monoids) |path_tag, path_monoid| {
-                std.debug.print("{}\n", .{path_monoid});
-                const data = self.encoding.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
-                const points = std.mem.bytesAsSlice(PointF32, data);
-                std.debug.print("Points: {any}\n", .{points});
-                std.debug.print("------------\n", .{});
-            }
-            std.debug.print("======================================\n", .{});
-        }
-
-        return State{
-            .path_offset = self.path_index,
-            .segment_range = RangeU32.create(
-                start_segment_offset,
-                end_segment_offset,
-            ),
-            .path_tags = path_tags,
-            .path_monoids = path_monoids,
-        };
+        return RangeU32.create(start_path_offset, end_path_offset);
     }
-
-    pub const State = struct {
-        path_offset: u32,
-        segment_range: RangeU32,
-        path_tags: []const PathTag,
-        path_monoids: []const PathMonoid,
-    };
 };
 
-pub const LineCalculator = struct {
-    kernel_config: KernelConfig,
-    encoding: *const Encoding,
-    buffers: *const Buffers,
-    debug_flags: *const DebugFlags,
-    path_tags: []const PathTag,
-    path_monoids: []const PathMonoid,
-    segment_index: u32 = 0,
+// pub const PathMonoidExpander = struct {
+//     encoding: *const Encoding,
+//     buffers: *const Buffers,
+//     debug_flags: *const DebugFlags,
+//     path_index: u32 = 0,
 
-    pub fn calculate(self: *@This()) State {
-        const line_allocator = kernel_module.LineAllocator;
-        const offsets = self.buffers.offsets[2 .. 2 + self.path_tags.len * 2];
-        line_allocator.flatten(
-            self.kernel_config,
-            self.path_tags,
-            self.path_monoids,
-            self.encoding.styles,
-            self.encoding.transforms,
-            self.encoding.segment_data,
-            offsets,
-        );
+//     pub fn next(self: *@This()) ?State {
+//         if (self.path_index >= self.encoding.path_offsets.len) {
+//             return null;
+//         }
 
-        var offset_sum: u32 = 0;
-        for (offsets) |*offset| {
-            offset_sum += offset.*;
-            offset.* = offset_sum;
-        }
+//         const path_index = self.path_index;
+//         const start_segment_offset = if (self.path_index > 0) self.encoding.path_offsets[self.path_index - 1] else 0;
+//         var end_segment_offset = start_segment_offset;
 
-        if (self.debug_flags.calculate_lines) {
-            std.debug.print("============ Line Offsets ============\n", .{});
-            for (self.path_monoids, 0..) |path_monoid, segment_index| {
-                std.debug.print("Path({})\n", .{path_monoid.path_index});
-                const fill_offset = offsets[segment_index];
-                const stroke_offset = offsets[self.path_tags.len + segment_index];
-                std.debug.print("FillOffset({}), StrokeOffset({})\n", .{
-                    fill_offset,
-                    stroke_offset,
-                });
-                std.debug.print("------------\n", .{});
-            }
-            std.debug.print("======================================\n", .{});
-        }
+//         while (true) {
+//             if (self.path_index >= self.encoding.path_offsets.len) {
+//                 break;
+//             }
 
-        return State{
-            .offsets = offsets,
-        };
-    }
+//             const next_end_segment_offset = self.encoding.path_offsets[self.path_index];
 
-    pub fn chunkSize(self: @This()) u32 {
-        return self.buffers.sizes.offsetsSize() / 2;
-    }
+//             if (next_end_segment_offset - start_segment_offset > self.buffers.sizes.pathMonoidsSize()) {
+//                 break;
+//             }
 
-    pub const State = struct {
-        offsets: []const u32,
-    };
-};
+//             end_segment_offset = next_end_segment_offset;
+//             self.path_index += 1;
+//         }
+
+//         const segment_size = end_segment_offset - start_segment_offset;
+//         if (segment_size == 0) {
+//             self.path_index = @intCast(self.encoding.path_offsets.len);
+//             return null;
+//         }
+
+//         const path_tags = self.encoding.path_tags[start_segment_offset..end_segment_offset];
+//         const path_monoids = self.buffers.path_monoids[1 .. 1 + segment_size];
+
+//         var next_path_monoid = if (path_index == 0) PathMonoid{} else self.buffers.path_monoids[0];
+//         for (path_tags, path_monoids) |path_tag, *path_monoid| {
+//             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
+//             path_monoid.* = next_path_monoid.calculate(path_tag);
+//         }
+//         self.buffers.path_monoids[0] = next_path_monoid;
+
+//         if (self.debug_flags.expand_monoids) {
+//             std.debug.print("============ Path Monoids ============\n", .{});
+//             for (path_tags, path_monoids) |path_tag, path_monoid| {
+//                 std.debug.print("{}\n", .{path_monoid});
+//                 const data = self.encoding.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
+//                 const points = std.mem.bytesAsSlice(PointF32, data);
+//                 std.debug.print("Points: {any}\n", .{points});
+//                 std.debug.print("------------\n", .{});
+//             }
+//             std.debug.print("======================================\n", .{});
+//         }
+
+//         return State{
+//             .path_offset = self.path_index,
+//             .segment_range = RangeU32.create(
+//                 start_segment_offset,
+//                 end_segment_offset,
+//             ),
+//             .path_tags = path_tags,
+//             .path_monoids = path_monoids,
+//         };
+//     }
+
+//     pub const State = struct {
+//         path_offset: u32,
+//         segment_range: RangeU32,
+//         path_tags: []const PathTag,
+//         path_monoids: []const PathMonoid,
+//     };
+// };
+
+// pub const LineCalculator = struct {
+//     kernel_config: KernelConfig,
+//     encoding: *const Encoding,
+//     buffers: *const Buffers,
+//     debug_flags: *const DebugFlags,
+//     path_tags: []const PathTag,
+//     path_monoids: []const PathMonoid,
+//     segment_index: u32 = 0,
+
+//     pub fn calculate(self: *@This()) State {
+//         const line_allocator = kernel_module.LineAllocator;
+//         const offsets = self.buffers.offsets[2 .. 2 + self.path_tags.len * 2];
+//         line_allocator.flatten(
+//             self.kernel_config,
+//             self.path_tags,
+//             self.path_monoids,
+//             self.encoding.styles,
+//             self.encoding.transforms,
+//             self.encoding.segment_data,
+//             offsets,
+//         );
+
+//         var offset_sum: u32 = 0;
+//         for (offsets) |*offset| {
+//             offset_sum += offset.*;
+//             offset.* = offset_sum;
+//         }
+
+//         if (self.debug_flags.calculate_lines) {
+//             std.debug.print("============ Line Offsets ============\n", .{});
+//             for (self.path_monoids, 0..) |path_monoid, segment_index| {
+//                 std.debug.print("Path({})\n", .{path_monoid.path_index});
+//                 const fill_offset = offsets[segment_index];
+//                 const stroke_offset = offsets[self.path_tags.len + segment_index];
+//                 std.debug.print("FillOffset({}), StrokeOffset({})\n", .{
+//                     fill_offset,
+//                     stroke_offset,
+//                 });
+//                 std.debug.print("------------\n", .{});
+//             }
+//             std.debug.print("======================================\n", .{});
+//         }
+
+//         return State{
+//             .offsets = offsets,
+//         };
+//     }
+
+//     pub fn chunkSize(self: @This()) u32 {
+//         return self.buffers.sizes.offsetsSize() / 2;
+//     }
+
+//     pub const State = struct {
+//         offsets: []const u32,
+//     };
+// };
 
 // pub const Flattener = struct {
 //     kernel_config: KernelConfig,
@@ -317,8 +409,6 @@ pub const LineCalculator = struct {
 //         if (fill_lines == 0 and stroke_lines == 0) {
 //             return;
 //         }
-
-
 
 //         return null;
 //     }
