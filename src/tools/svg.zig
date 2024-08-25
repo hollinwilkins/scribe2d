@@ -76,10 +76,11 @@ pub fn main() !void {
         try path_encoder.finish();
     }
 
-        var half_planes = try draw.HalfPlanesU16.init(allocator);
+    var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
 
-    const config = draw.cpu.CpuRasterizer.Config{};
+    var config = draw.cpu.CpuRasterizer.Config{};
+    config.debug_flags.expand_monoids = true;
     var rasterizer = try draw.cpu.CpuRasterizer.init(allocator, &half_planes, config);
     defer rasterizer.deinit();
 
