@@ -52,14 +52,6 @@ const EulerParams = euler_module.EulerParams;
 const EulerSegment = euler_module.EulerSegment;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
-pub const Projections = struct {
-    paths: RangeU32 = RangeU32{},
-    segments: RangeU32 = RangeU32{},
-    offsets: u32 = 0,
-    bumps: u32 = 0,
-    lines: u32 = 0,
-};
-
 pub const KernelConfig = struct {
     pub const DEFAULT: @This() = init(@This(){});
     pub const SERIAL: @This() = init(@This(){
@@ -137,16 +129,17 @@ pub const PathMonoidExpander = struct {
         path_monoids: []PathMonoid,
     ) void {
         const projected_path_tags = path_tags[0 .. indices.size()];
-        const projected_path_monoids = path_monoids[1 .. 1 + indices.size()];
+        const projected_path_monoids = path_monoids[2 .. 2 + indices.size()];
 
-        var next_path_monoid = path_monoids[0];
+        var next_path_monoid = path_monoids[1];
+        path_monoids[0] = next_path_monoid;
         for (projected_path_tags, projected_path_monoids) |path_tag, *path_monoid| {
             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
             path_monoid.* = next_path_monoid.calculate(path_tag);
         }
 
         // set the result of the prefix sum for the next expansion operation
-        path_monoids[0] = next_path_monoid;
+        path_monoids[1] = next_path_monoid;
     }
 };
 
