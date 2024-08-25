@@ -7,6 +7,7 @@ const msaa = @import("./msaa.zig");
 const kernel = @import("./kernel.zig");
 const encoding = @import("./encoding.zig");
 const encoding_raster = @import("./encoding_raster.zig");
+pub const cpu = @import("./cpu/root.zig");
 
 pub const Colors = texture.Colors;
 pub const Color = texture.Color;
