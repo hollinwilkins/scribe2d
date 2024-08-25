@@ -67,15 +67,18 @@ pub const CpuRasterizer = struct {
                 .buffers = &self.buffers,
                 .debug_flags = &self.config.debug_flags,
                 .encoding = &encoding,
-                .expansion = &expansion,
+                .path_tags = expansion.path_tags,
+                .path_monoids = expansion.path_monoids,
             };
-            _ = line_calculator.calculate();
+            const line_offsets = line_calculator.calculate();
+            _ = line_offsets;
         }
     }
 };
 
 pub const DebugFlags = struct {
     expand_monoids: bool = false,
+    calculate_lines: bool = false,
 };
 
 pub const BufferSizes = struct {
@@ -178,21 +181,43 @@ pub const LineCalculator = struct {
     encoding: *const Encoding,
     buffers: *const Buffers,
     debug_flags: *const DebugFlags,
-    expansion: *const PathMonoidExpander.State,
+    path_tags: []const PathTag,
+    path_monoids: []const PathMonoid,
     segment_index: u32 = 0,
 
     pub fn calculate(self: *@This()) State {
         const line_allocator = kernel_module.LineAllocator;
-        const offsets = self.buffers.offsets[2 .. 2 + self.expansion.path_tags.len * 2];
+        const offsets = self.buffers.offsets[2 .. 2 + self.path_tags.len * 2];
         line_allocator.flatten(
             self.kernel_config,
-            self.expansion.path_tags,
-            self.expansion.path_monoids,
+            self.path_tags,
+            self.path_monoids,
             self.encoding.styles,
             self.encoding.transforms,
             self.encoding.segment_data,
             offsets,
         );
+
+        var offset_sum: u32 = 0;
+        for (offsets) |*offset| {
+            offset_sum += offset.*;
+            offset.* = offset_sum;
+        }
+
+        if (self.debug_flags.calculate_lines) {
+            std.debug.print("============ Line Offsets ============\n", .{});
+            for (self.path_monoids, 0..) |path_monoid, segment_index| {
+                std.debug.print("Path({})\n", .{path_monoid.path_index});
+                const fill_offset = offsets[segment_index];
+                const stroke_offset = offsets[self.path_tags.len + segment_index];
+                std.debug.print("FillOffset({}), StrokeOffset({})\n", .{
+                    fill_offset,
+                    stroke_offset,
+                });
+                std.debug.print("------------\n", .{});
+            }
+            std.debug.print("======================================\n", .{});
+        }
 
         return State{
             .offsets = offsets,
