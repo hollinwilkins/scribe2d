@@ -12,91 +12,120 @@ const KernelConfig = kernel_module.KernelConfig;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
-    pub const DebugFlags = struct {
-        expand_monoids: bool = false,
-    };
-
     pub const Config = struct {
-        pub const DEFAULT_PATH_MONOIDS_SIZE: u32 = 1024 * 1024;
-
         kernel_config: KernelConfig = KernelConfig.DEFAULT,
         debug_flags: DebugFlags = DebugFlags{},
-        path_monoids_size: u32 = DEFAULT_PATH_MONOIDS_SIZE,
+        buffer_sizes: BufferSizes = BufferSizes{},
     };
 
     allocator: Allocator,
     half_planes: *const HalfPlanesU16,
     config: Config,
-    path_monoids: []PathMonoid,
+    buffers: Buffers,
 
     pub fn init(
         allocator: Allocator,
         half_planes: *const HalfPlanesU16,
         config: Config,
     ) !@This() {
+        const buffers = Buffers{
+            .sizes = config.buffer_sizes,
+            .path_monoids = try allocator.alloc(
+                PathMonoid,
+                config.buffer_sizes.path_monoids_size + 1,
+            ),
+            .offsets = try allocator.alloc(
+                u32,
+                config.buffer_sizes.path_monoids_size * 2 + 2,
+            ),
+        };
+
         return @This(){
             .allocator = allocator,
             .half_planes = half_planes,
             .config = config,
-            .path_monoids = try allocator.alloc(PathMonoid, config.path_monoids_size + 1),
+            .buffers = buffers,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        self.allocator.free(self.path_monoids);
+        self.allocator.free(self.buffers.path_monoids);
+        self.allocator.free(self.buffers.offsets);
     }
 
     pub fn rasterize(self: *@This(), encoding: Encoding) void {
-        var state = EncodingState.create(encoding);
-        self.rasterizeState(&state);
-    }
+        var path_monoid_expander = PathMonoidExpander{
+            .encoding = &encoding,
+            .buffers = &self.buffers,
+            .debug_flags = self.config.debug_flags,
+        };
 
-    pub fn rasterizeState(self: *@This(), state: *EncodingState) void {
-        while (self.expandPathMonoids(state)) {
-            if (self.config.debug_flags.expand_monoids) {
-                std.debug.print("============ Path Monoids ============\n", .{});
-                for (state.path_tags, state.path_monoids) |path_tag, path_monoid| {
-                    std.debug.print("{}\n", .{path_monoid});
-                    const data = state.encoding.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
-                    const points = std.mem.bytesAsSlice(PointF32, data);
-                    std.debug.print("Points: {any}\n", .{points});
-                    std.debug.print("------------\n", .{});
-                }
-                std.debug.print("======================================\n", .{});
-            }
+        while (path_monoid_expander.next()) |path_monoid_state| {
+            _ = path_monoid_state;
         }
     }
+};
 
-    pub fn expandPathMonoids(self: *@This(), state: *EncodingState) bool {
-        const path_monoid_size = @min(self.config.path_monoids_size, state.encoding.path_tags.len - state.path_monoid_offset);
-        const path_tags = state.encoding.path_tags[state.path_monoid_offset .. state.path_monoid_offset + path_monoid_size];
-        const path_monoids = self.path_monoids[1 .. 1 + path_monoid_size];
+pub const DebugFlags = struct {
+    expand_monoids: bool = false,
+};
 
-        var next_path_monoid = if (state.path_monoid_offset == 0) PathMonoid{} else self.path_monoids[0];
+pub const BufferSizes = struct {
+    pub const DEFAULT_PATH_MONOIDS_SIZE: u32 = 1024 * 1024;
+
+    path_monoids_size: u32 = DEFAULT_PATH_MONOIDS_SIZE,
+};
+
+pub const Buffers = struct {
+    sizes: BufferSizes,
+    path_monoids: []PathMonoid,
+    offsets: []u32,
+};
+
+pub const PathMonoidExpander = struct {
+    encoding: *const Encoding,
+    buffers: *const Buffers,
+    debug_flags: DebugFlags,
+    offset: u32 = 0,
+
+    pub fn next(self: *@This()) ?State {
+        const path_monoid_size = @min(self.buffers.sizes.path_monoids_size, self.encoding.path_tags.len - self.offset);
+
+        if (path_monoid_size == 0) {
+            return null;
+        }
+
+        const path_tags = self.encoding.path_tags[self.offset .. self.offset + path_monoid_size];
+        const path_monoids = self.buffers.path_monoids[1 .. 1 + path_monoid_size];
+
+        var next_path_monoid = if (self.offset == 0) PathMonoid{} else self.buffers.path_monoids[0];
         for (path_tags, path_monoids) |path_tag, *path_monoid| {
             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
             path_monoid.* = next_path_monoid.calculate(path_tag);
         }
+        self.buffers.path_monoids[0] = path_monoids[path_monoids.len - 1];
+        self.offset += path_monoid_size;
 
-        state.path_monoid_offset += path_monoid_size;
+        if (self.debug_flags.expand_monoids) {
+            std.debug.print("============ Path Monoids ============\n", .{});
+            for (path_tags, path_monoids) |path_tag, path_monoid| {
+                std.debug.print("{}\n", .{path_monoid});
+                const data = self.encoding.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
+                const points = std.mem.bytesAsSlice(PointF32, data);
+                std.debug.print("Points: {any}\n", .{points});
+                std.debug.print("------------\n", .{});
+            }
+            std.debug.print("======================================\n", .{});
+        }
 
-        state.path_tags = path_tags;
-        state.path_monoids = path_monoids;
-        return path_monoids.len > 0;
-    }
-};
-
-pub const EncodingState = struct {
-    encoding: Encoding,
-
-    path_monoid_offset: u32 = 0,
-
-    path_tags: []const PathTag = &.{},
-    path_monoids: []const PathMonoid = &.{},
-
-    pub fn create(encoding: Encoding) @This() {
-        return @This(){
-            .encoding = encoding,
+        return State{
+            .path_tags = path_tags,
+            .path_monoids = path_monoids,
         };
     }
+
+    pub const State = struct {
+        path_tags: []const PathTag,
+        path_monoids: []const PathMonoid,
+    };
 };
