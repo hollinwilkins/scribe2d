@@ -541,7 +541,12 @@ pub const Encoder = struct {
     pub fn encodePathTag(self: *@This(), tag: PathTag) !void {
         const tag2 = self.encodeStaged(tag);
         if (tag2.index.path == 1) {
-            (try self.path_offsets.addOne(self.allocator)).* = 1;
+            var current: u32 = 0;
+            if (self.path_offsets.getLastOrNull()) |last| {
+                current = last + 1;
+            }
+
+            (try self.path_offsets.addOne(self.allocator)).* = current;
         } else {
             self.path_offsets.items[self.path_offsets.items.len - 1] += 1;
         }

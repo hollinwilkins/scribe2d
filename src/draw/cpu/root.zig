@@ -4,6 +4,7 @@ const encoding_module = @import("../encoding.zig");
 const kernel_module = @import("../kernel.zig");
 const msaa_module = @import("../msaa.zig");
 const Allocator = std.mem.Allocator;
+const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
 const Encoding = encoding_module.Encoding;
 const PathTag = encoding_module.PathTag;
@@ -86,25 +87,46 @@ pub const PathMonoidExpander = struct {
     encoding: *const Encoding,
     buffers: *const Buffers,
     debug_flags: DebugFlags,
-    offset: u32 = 0,
+    path_index: u32 = 0,
 
     pub fn next(self: *@This()) ?State {
-        const path_monoid_size = @min(self.buffers.sizes.path_monoids_size, self.encoding.path_tags.len - self.offset);
-
-        if (path_monoid_size == 0) {
+        if (self.path_index >= self.encoding.path_offsets.len) {
             return null;
         }
 
-        const path_tags = self.encoding.path_tags[self.offset .. self.offset + path_monoid_size];
-        const path_monoids = self.buffers.path_monoids[1 .. 1 + path_monoid_size];
+        const path_index = self.path_index;
+        const start_segment_offset = if (self.path_index > 0) self.encoding.path_offsets[self.path_index - 1] else 0;
+        var end_segment_offset = start_segment_offset;
 
-        var next_path_monoid = if (self.offset == 0) PathMonoid{} else self.buffers.path_monoids[0];
+        while (true) {
+            self.path_index += 1;
+            if (self.path_index >= self.encoding.path_offsets.len) {
+                break;
+            }
+
+            const next_end_segment_offset = self.encoding.path_offsets[self.path_index];
+            if (next_end_segment_offset - start_segment_offset > self.buffers.sizes.path_monoids_size) {
+                break;
+            }
+
+            end_segment_offset = next_end_segment_offset;
+        }
+
+        const segment_size = end_segment_offset - start_segment_offset;
+        if (segment_size == 0) {
+            self.path_index = @intCast(self.encoding.path_offsets.len);
+            return null;
+        }
+
+        const path_tags = self.encoding.path_tags[start_segment_offset..end_segment_offset];
+        const path_monoids = self.buffers.path_monoids[1 .. 1 + segment_size];
+
+        var next_path_monoid = if (path_index == 0) PathMonoid{} else self.buffers.path_monoids[0];
         for (path_tags, path_monoids) |path_tag, *path_monoid| {
             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
             path_monoid.* = next_path_monoid.calculate(path_tag);
         }
         self.buffers.path_monoids[0] = path_monoids[path_monoids.len - 1];
-        self.offset += path_monoid_size;
 
         if (self.debug_flags.expand_monoids) {
             std.debug.print("============ Path Monoids ============\n", .{});
@@ -119,12 +141,17 @@ pub const PathMonoidExpander = struct {
         }
 
         return State{
+            .segment_range = RangeU32.create(
+                start_segment_offset,
+                end_segment_offset,
+            ),
             .path_tags = path_tags,
             .path_monoids = path_monoids,
         };
     }
 
     pub const State = struct {
+        segment_range: RangeU32,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
     };
