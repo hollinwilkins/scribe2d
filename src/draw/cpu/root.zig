@@ -72,7 +72,7 @@ pub const DebugFlags = struct {
 };
 
 pub const BufferSizes = struct {
-    pub const DEFAULT_PATH_MONOIDS_SIZE: u32 = 1024 * 1024;
+    pub const DEFAULT_PATH_MONOIDS_SIZE: u32 = 6;
 
     path_monoids_size: u32 = DEFAULT_PATH_MONOIDS_SIZE,
 };
@@ -99,19 +99,20 @@ pub const PathMonoidExpander = struct {
         var end_segment_offset = start_segment_offset;
 
         while (true) {
-            self.path_index += 1;
             if (self.path_index >= self.encoding.path_offsets.len) {
                 break;
             }
 
             const next_end_segment_offset = self.encoding.path_offsets[self.path_index];
+
             if (next_end_segment_offset - start_segment_offset > self.buffers.sizes.path_monoids_size) {
                 break;
             }
 
             end_segment_offset = next_end_segment_offset;
+            self.path_index += 1;
         }
-
+ 
         const segment_size = end_segment_offset - start_segment_offset;
         if (segment_size == 0) {
             self.path_index = @intCast(self.encoding.path_offsets.len);
@@ -126,7 +127,7 @@ pub const PathMonoidExpander = struct {
             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
             path_monoid.* = next_path_monoid.calculate(path_tag);
         }
-        self.buffers.path_monoids[0] = path_monoids[path_monoids.len - 1];
+        self.buffers.path_monoids[0] = next_path_monoid;
 
         if (self.debug_flags.expand_monoids) {
             std.debug.print("============ Path Monoids ============\n", .{});
