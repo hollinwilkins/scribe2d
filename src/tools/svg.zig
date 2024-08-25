@@ -79,13 +79,16 @@ pub fn main() !void {
     var half_planes = try draw.HalfPlanesU16.init(allocator);
     defer half_planes.deinit();
 
-    var config = draw.cpu.CpuRasterizer.Config{};
+    const encoding = encoder.encode();
+    var config = draw.cpu.CpuRasterizer.Config{
+        .buffer_sizes = draw.cpu.BufferSizes.create(encoding),
+    };
     config.debug_flags.expand_monoids = true;
     config.debug_flags.calculate_lines = true;
     var rasterizer = try draw.cpu.CpuRasterizer.init(allocator, &half_planes, config);
     defer rasterizer.deinit();
 
-    rasterizer.rasterize(encoder.encode());
+    rasterizer.rasterize(encoding);
 }
 
 // pub fn main() !void {

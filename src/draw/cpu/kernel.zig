@@ -123,23 +123,20 @@ pub const KernelConfig = struct {
 
 pub const PathMonoidExpander = struct {
     pub fn expand(
-        indices: RangeU32,
         path_tags: []const PathTag,
         // outputs
+        path_offsets: []u32,
         path_monoids: []PathMonoid,
     ) void {
-        const projected_path_tags = path_tags[0 .. indices.size()];
-        const projected_path_monoids = path_monoids[2 .. 2 + indices.size()];
-
-        var next_path_monoid = path_monoids[1];
-        path_monoids[0] = next_path_monoid;
-        for (projected_path_tags, projected_path_monoids) |path_tag, *path_monoid| {
+        var next_path_monoid = PathMonoid{};
+        for (path_tags, path_monoids) |path_tag, *path_monoid| {
             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
             path_monoid.* = next_path_monoid.calculate(path_tag);
-        }
 
-        // set the result of the prefix sum for the next expansion operation
-        path_monoids[1] = next_path_monoid;
+            if (path_tag.index.path == 1) {
+                path_offsets[path_monoid.path_index] = path_monoid.segment_index;
+            }
+        }
     }
 };
 
