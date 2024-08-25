@@ -1,7 +1,7 @@
 const std = @import("std");
 const core = @import("../../core/root.zig");
 const encoding_module = @import("../encoding.zig");
-const kernel_module = @import("../kernel.zig");
+const kernel_module = @import("./kernel.zig");
 const msaa_module = @import("../msaa.zig");
 const Allocator = std.mem.Allocator;
 const RangeU32 = core.RangeU32;
@@ -33,11 +33,11 @@ pub const CpuRasterizer = struct {
             .sizes = config.buffer_sizes,
             .path_monoids = try allocator.alloc(
                 PathMonoid,
-                config.buffer_sizes.path_monoids_size + 1,
+                config.buffer_sizes.pathMonoidsSize() + 1,
             ),
             .offsets = try allocator.alloc(
                 u32,
-                config.buffer_sizes.path_monoids_size * 2 + 2,
+                config.buffer_sizes.offsetsSize() + 2,
             ),
         };
 
@@ -58,11 +58,18 @@ pub const CpuRasterizer = struct {
         var path_monoid_expander = PathMonoidExpander{
             .encoding = &encoding,
             .buffers = &self.buffers,
-            .debug_flags = self.config.debug_flags,
+            .debug_flags = &self.config.debug_flags,
         };
 
-        while (path_monoid_expander.next()) |path_monoid_state| {
-            _ = path_monoid_state;
+        while (path_monoid_expander.next()) |expansion| {
+            var line_calculator = LineCalculator{
+                .kernel_config = self.config.kernel_config,
+                .buffers = &self.buffers,
+                .debug_flags = &self.config.debug_flags,
+                .encoding = &encoding,
+                .expansion = &expansion,
+            };
+            _ = line_calculator.calculate();
         }
     }
 };
@@ -72,9 +79,17 @@ pub const DebugFlags = struct {
 };
 
 pub const BufferSizes = struct {
-    pub const DEFAULT_PATH_MONOIDS_SIZE: u32 = 6;
+    pub const DEFAULT_PATH_MONOIDS_SIZE: u32 = 60;
 
     path_monoids_size: u32 = DEFAULT_PATH_MONOIDS_SIZE,
+
+    pub fn pathMonoidsSize(self: @This()) u32 {
+        return self.path_monoids_size;
+    }
+
+    pub fn offsetsSize(self: @This()) u32 {
+        return self.pathMonoidsSize() * 2;
+    }
 };
 
 pub const Buffers = struct {
@@ -86,7 +101,7 @@ pub const Buffers = struct {
 pub const PathMonoidExpander = struct {
     encoding: *const Encoding,
     buffers: *const Buffers,
-    debug_flags: DebugFlags,
+    debug_flags: *const DebugFlags,
     path_index: u32 = 0,
 
     pub fn next(self: *@This()) ?State {
@@ -105,14 +120,14 @@ pub const PathMonoidExpander = struct {
 
             const next_end_segment_offset = self.encoding.path_offsets[self.path_index];
 
-            if (next_end_segment_offset - start_segment_offset > self.buffers.sizes.path_monoids_size) {
+            if (next_end_segment_offset - start_segment_offset > self.buffers.sizes.pathMonoidsSize()) {
                 break;
             }
 
             end_segment_offset = next_end_segment_offset;
             self.path_index += 1;
         }
- 
+
         const segment_size = end_segment_offset - start_segment_offset;
         if (segment_size == 0) {
             self.path_index = @intCast(self.encoding.path_offsets.len);
@@ -158,15 +173,37 @@ pub const PathMonoidExpander = struct {
     };
 };
 
-// pub const LineCalculator = struct {
-//     path_monoid_expander: *PathMonoidExpander,
-//     path_tags: []const PathTag,
-//     path_monoids: []const PathMonoid,
+pub const LineCalculator = struct {
+    kernel_config: KernelConfig,
+    encoding: *const Encoding,
+    buffers: *const Buffers,
+    debug_flags: *const DebugFlags,
+    expansion: *const PathMonoidExpander.State,
+    segment_index: u32 = 0,
 
-//     pub const State = struct {
-//         path_tags: []const PathTag,
-//         path_monoids: []const PathMonoid,
-//         fill_offsets: []const u32,
-//         stroke_offsets: []const u32,
-//     };
-// };
+    pub fn calculate(self: *@This()) State {
+        const line_allocator = kernel_module.LineAllocator;
+        const offsets = self.buffers.offsets[2 .. 2 + self.expansion.path_tags.len * 2];
+        line_allocator.flatten(
+            self.kernel_config,
+            self.expansion.path_tags,
+            self.expansion.path_monoids,
+            self.encoding.styles,
+            self.encoding.transforms,
+            self.encoding.segment_data,
+            offsets,
+        );
+
+        return State{
+            .offsets = offsets,
+        };
+    }
+
+    pub fn chunkSize(self: @This()) u32 {
+        return self.buffers.sizes.offsetsSize() / 2;
+    }
+
+    pub const State = struct {
+        offsets: []const u32,
+    };
+};
