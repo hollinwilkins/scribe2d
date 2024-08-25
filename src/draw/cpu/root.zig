@@ -129,3 +129,16 @@ pub const PathMonoidExpander = struct {
         path_monoids: []const PathMonoid,
     };
 };
+
+// pub const LineCalculator = struct {
+//     path_monoid_expander: *PathMonoidExpander,
+//     path_tags: []const PathTag,
+//     path_monoids: []const PathMonoid,
+
+//     pub const State = struct {
+//         path_tags: []const PathTag,
+//         path_monoids: []const PathMonoid,
+//         fill_offsets: []const u32,
+//         stroke_offsets: []const u32,
+//     };
+// };
