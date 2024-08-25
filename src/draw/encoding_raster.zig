@@ -130,7 +130,6 @@ pub const CpuRasterizer = struct {
     config: Config,
     encoding: Encoding,
     path_monoids: PathMonoidList = PathMonoidList{},
-    style_offsets: SegmentOffsetList = SegmentOffsetList{},
     paths: PathList = PathList{},
     segment_offsets: SegmentOffsetList = SegmentOffsetList{},
     intersection_offsets: IntersectionOffsetList = IntersectionOffsetList{},
@@ -153,7 +152,6 @@ pub const CpuRasterizer = struct {
 
     pub fn deinit(self: *@This()) void {
         self.path_monoids.deinit(self.allocator);
-        self.style_offsets.deinit(self.allocator);
         self.paths.deinit(self.allocator);
         self.segment_offsets.deinit(self.allocator);
         self.intersection_offsets.deinit(self.allocator);
@@ -163,9 +161,9 @@ pub const CpuRasterizer = struct {
 
     pub fn reset(self: *@This()) void {
         self.path_monoids.items.len = 0;
-        self.style_offsets.items.len = 0;
         self.paths.items.len = 0;
         self.segment_offsets.items.len = 0;
+        self.intersection_offsets.items.len = 0;
         self.lines.items.len = 0;
         self.boundary_fragments.items.len = 0;
     }
@@ -209,6 +207,7 @@ pub const CpuRasterizer = struct {
         }
 
         // write scanline encoding to texture
+        try self.calculateStyleOffsets();
         self.flushTexture(texture);
     }
 
@@ -227,16 +226,6 @@ pub const CpuRasterizer = struct {
                 };
             }
         }
-
-        const style_offsets = try self.style_offsets.addManyAsSlice(self.allocator, self.encoding.styles.len);
-        for (self.encoding.styles, style_offsets) |style, *style_offset| {
-            style_offset.* = SegmentOffset{
-                .fill_offset = style.fill.brush.offset(),
-                .stroke_offset = style.stroke.brush.offset(),
-            };
-        }
-
-        SegmentOffset.expand(style_offsets, style_offsets);
     }
 
     fn allocateLines(self: *@This()) !void {
@@ -442,6 +431,19 @@ pub const CpuRasterizer = struct {
         wg.wait();
     }
 
+    fn calculateStyleOffsets(self: *@This()) !void {
+        self.segment_offsets.items.len = 0;
+        const style_offsets = try self.segment_offsets.addManyAsSlice(self.allocator, self.encoding.styles.len);
+        for (self.encoding.styles, style_offsets) |style, *style_offset| {
+            style_offset.* = SegmentOffset{
+                .fill_offset = style.fill.brush.offset(),
+                .stroke_offset = style.stroke.brush.offset(),
+            };
+        }
+
+        SegmentOffset.expand(style_offsets, style_offsets);
+    }
+
     fn flushTexture(self: @This(), texture: *TextureUnmanaged) void {
         const blender = kernel_module.Blend;
 
@@ -452,7 +454,7 @@ pub const CpuRasterizer = struct {
             const style = self.encoding.getStyle(path_monoid.style_index);
             const style_offset = PathOffset.styleOffset(
                 @intCast(path_monoid.style_index),
-                self.style_offsets.items,
+                self.segment_offsets.items,
             );
 
             if (style.isFill()) {
@@ -548,7 +550,7 @@ pub const CpuRasterizer = struct {
             std.debug.print("============ Path Monoids ============\n", .{});
             for (self.encoding.path_tags, self.path_monoids.items) |path_tag, path_monoid| {
                 std.debug.print("{}\n", .{path_monoid});
-                const data = self.encoding.segment_data[path_monoid.segment_offset..path_monoid.segment_offset + path_tag.segment.size()];
+                const data = self.encoding.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
                 const points = std.mem.bytesAsSlice(PointF32, data);
                 std.debug.print("Points: {any}\n", .{points});
                 std.debug.print("------------\n", .{});
