@@ -48,42 +48,14 @@ pub const CpuRasterizer = struct {
     }
 
     pub fn rasterize(self: *@This(), encoding: Encoding) void {
-        // load path tags
-        std.mem.copyForwards(
-            PathTag,
-            self.buffers.path_tags,
-            encoding.path_tags,
-        );
+        var segment_iterator = SegmentIterator{
+            .path_offsets = encoding.path_offsets,
+            .chunk_size = self.config.buffer_sizes.pathTagsSize(),
+            .path_tags = @intCast(encoding.path_tags.len),
+        };
 
-        // load styles
-        std.mem.copyForwards(
-            Style,
-            self.buffers.styles,
-            encoding.styles,
-        );
-
-        // load transforms
-        std.mem.copyForwards(
-            TransformF32.Affine,
-            self.buffers.transforms,
-            encoding.transforms,
-        );
-
-        // load segment data
-        std.mem.copyForwards(
-            u8,
-            self.buffers.segment_data,
-            encoding.segment_data,
-        );
-
-        kernel_module.PathMonoidExpander.expand(
-            self.buffers.path_tags,
-            self.buffers.path_offsets,
-            self.buffers.path_monoids,
-        );
-
-        if (self.config.debug_flags.expand_monoids) {
-            self.debugExpandMonoids();
+        while (segment_iterator.next()) |segment_indices| {
+            std.debug.print("SegmentIndices({})\n", .{segment_indices});
         }
     }
 
@@ -162,8 +134,6 @@ pub const BufferSizes = struct {
 };
 
 pub const Buffers = struct {
-    sizes: BufferSizes,
-
     path_offsets: []u32,
     styles: []Style,
     transforms: []TransformF32.Affine,
@@ -185,7 +155,6 @@ pub const Buffers = struct {
         }
 
         return @This(){
-            .sizes = sizes,
             .path_offsets = try allocator.alloc(
                 u32,
                 sizes.pathsSize(),
@@ -232,5 +201,43 @@ pub const Buffers = struct {
         allocator.free(self.offsets);
         allocator.free(self.bumps);
         allocator.free(self.lines);
+    }
+};
+
+pub const SegmentIterator = struct {
+    path_offsets: []const u32,
+    chunk_size: u32,
+    path_tags: u32,
+    index: u32 = 0,
+
+    pub fn next(self: *@This()) ?RangeU32 {
+        if (self.index >= self.path_offsets.len) {
+            return null;
+        }
+
+        const start_segment_offset = self.path_offsets[self.index];
+        var end_segment_offset = start_segment_offset;
+
+        var end_index = self.index;
+        while (end_index < self.path_offsets.len) {
+            const next_index = end_index + 1;
+            const next_segment_offset = if (next_index >= self.path_offsets.len) self.path_tags else self.path_offsets[next_index];
+
+            if (next_segment_offset - start_segment_offset > self.chunk_size) {
+                break;
+            }
+
+            end_segment_offset = next_segment_offset;
+            end_index += 1;
+        }
+
+        if (self.index == end_index) {
+            self.index = @intCast(self.path_offsets.len);
+            return null;
+        }
+
+        self.index = end_index;
+
+        return RangeU32.create(start_segment_offset, end_segment_offset);
     }
 };

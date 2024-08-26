@@ -327,7 +327,7 @@ pub const SegmentData = struct {
 // Encodes all data needed for a single draw command to the GPU or CPU
 // This may need to be a single buffer with a Config
 pub const Encoding = struct {
-    paths: u32,
+    path_offsets: []const u32,
     path_tags: []const PathTag,
     transforms: []const TransformF32.Affine,
     styles: []const Style,
@@ -451,7 +451,7 @@ pub const Encoder = struct {
 
     allocator: Allocator,
     bounds: RectF32 = RectF32.NONE,
-    paths: u32 = 0,
+    path_offsets: OffsetList = OffsetList{},
     path_tags: PathTagList = PathTagList{},
     transforms: AffineList = AffineList{},
     styles: StyleList = StyleList{},
@@ -466,7 +466,7 @@ pub const Encoder = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        self.paths = 0;
+        self.path_offsets.deinit(self.allocator);
         self.path_tags.deinit(self.allocator);
         self.transforms.deinit(self.allocator);
         self.styles.deinit(self.allocator);
@@ -475,7 +475,7 @@ pub const Encoder = struct {
     }
 
     pub fn reset(self: *@This()) void {
-        self.paths = 0;
+        self.path_offsets.items.len = 0;
         self.path_tags.items.len = 0;
         self.transforms.items.len = 0;
         self.styles.items.len = 0;
@@ -485,7 +485,7 @@ pub const Encoder = struct {
 
     pub fn encode(self: @This()) Encoding {
         return Encoding{
-            .paths = self.paths,
+            .path_offsets = self.path_offsets.items,
             .path_tags = self.path_tags.items,
             .transforms = self.transforms.items,
             .styles = self.styles.items,
@@ -540,7 +540,9 @@ pub const Encoder = struct {
 
     pub fn encodePathTag(self: *@This(), tag: PathTag) !void {
         const tag2 = self.encodeStaged(tag);
-        self.paths += @as(u32, tag2.index.path);
+        if (tag2.index.path == 1) {
+            (try self.path_offsets.addOne(self.allocator)).* = @intCast(self.path_tags.items.len);
+        }
         (try self.path_tags.addOne(self.allocator)).* = tag2;
     }
 

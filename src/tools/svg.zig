@@ -81,7 +81,9 @@ pub fn main() !void {
 
     const encoding = encoder.encode();
     var config = draw.cpu.CpuRasterizer.Config{
-        .buffer_sizes = draw.cpu.BufferSizes.create(encoding),
+        .buffer_sizes = draw.cpu.BufferSizes{
+            .path_tags_size = 10,
+        },
     };
     config.debug_flags.expand_monoids = true;
     config.debug_flags.calculate_lines = true;
