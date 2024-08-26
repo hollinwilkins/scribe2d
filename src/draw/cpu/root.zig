@@ -50,35 +50,43 @@ pub const CpuRasterizer = struct {
         self.buffers.path_monoids[self.config.buffer_sizes.pathTagsSize()] = PathMonoid{};
         self.buffers.path_monoids[self.config.buffer_sizes.pathTagsSize() + 1] = PathMonoid{};
 
-        var segment_iterator = SegmentIterator{
-            .path_offsets = encoding.path_offsets,
-            .chunk_size = self.config.buffer_sizes.pathTagsSize(),
-            .path_tags = @intCast(encoding.path_tags.len),
-        };
+        var path_iterator = RangeU32.create(
+            0,
+            @intCast(encoding.path_offsets.len),
+        ).chunkIterator(self.config.buffer_sizes.pathsSize());
 
-        while (segment_iterator.next()) |segment_indices| {
-            var pipeline_state = PipelineState{
-                .segment_indices = segment_indices,
+        while (path_iterator.next()) |path_indices| {
+            var segment_iterator = SegmentIterator{
+                .path_indices = path_indices,
+                .path_offsets = encoding.path_offsets,
+                .chunk_size = self.config.buffer_sizes.pathTagsSize(),
+                .path_tags = @intCast(encoding.path_tags.len),
             };
-            std.debug.print("SegmentIndices({})\n", .{segment_indices});
 
-            // load path tags
-            std.mem.copyForwards(
-                PathTag,
-                self.buffers.path_tags,
-                encoding.path_tags[segment_indices.start..segment_indices.end],
-            );
+            while (segment_iterator.next()) |segment_indices| {
+                var pipeline_state = PipelineState{
+                    .segment_indices = segment_indices,
+                };
+                std.debug.print("SegmentIndices({})\n", .{segment_indices});
 
-            // expand path monoids
-            kernel_module.PathMonoidExpander.expand(
-                self.config,
-                self.buffers.path_tags,
-                &pipeline_state,
-                self.buffers.path_monoids,
-            );
+                // load path tags
+                std.mem.copyForwards(
+                    PathTag,
+                    self.buffers.path_tags,
+                    encoding.path_tags[segment_indices.start..segment_indices.end],
+                );
 
-            if (self.config.debug_flags.expand_monoids) {
-                self.debugExpandMonoids(pipeline_state);
+                // expand path monoids
+                kernel_module.PathMonoidExpander.expand(
+                    self.config,
+                    self.buffers.path_tags,
+                    &pipeline_state,
+                    self.buffers.path_monoids,
+                );
+
+                if (self.config.debug_flags.expand_monoids) {
+                    self.debugExpandMonoids(pipeline_state);
+                }
             }
         }
     }
@@ -98,22 +106,24 @@ pub const CpuRasterizer = struct {
 };
 
 pub const SegmentIterator = struct {
+    path_indices: RangeU32,
     path_offsets: []const u32,
     chunk_size: u32,
     path_tags: u32,
     index: u32 = 0,
 
     pub fn next(self: *@This()) ?RangeU32 {
-        if (self.index >= self.path_offsets.len) {
+        const path_index = self.index + self.path_indices.start;
+        if (path_index >= self.path_offsets.len) {
             return null;
         }
 
-        const start_segment_offset = self.path_offsets[self.index];
+        const start_segment_offset = self.path_offsets[path_index];
         var end_segment_offset = start_segment_offset;
 
-        var end_index = self.index;
-        while (end_index < self.path_offsets.len) {
-            const next_index = end_index + 1;
+        var index_offset: u32 = 0;
+        while (self.index + index_offset < self.path_indices.end) {
+            const next_index = path_index + index_offset + 1;
             const next_segment_offset = if (next_index >= self.path_offsets.len) self.path_tags else self.path_offsets[next_index];
 
             if (next_segment_offset - start_segment_offset > self.chunk_size) {
@@ -121,15 +131,15 @@ pub const SegmentIterator = struct {
             }
 
             end_segment_offset = next_segment_offset;
-            end_index += 1;
+            index_offset += 1;
         }
 
-        if (self.index == end_index) {
-            self.index = @intCast(self.path_offsets.len);
+        if (index_offset == 0) {
+            self.index = @intCast(self.path_indices.end);
             return null;
         }
 
-        self.index = end_index;
+        self.index += index_offset;
 
         return RangeU32.create(start_segment_offset, end_segment_offset);
     }

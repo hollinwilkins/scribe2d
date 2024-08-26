@@ -134,7 +134,7 @@ pub const DebugFlags = struct {
 };
 
 pub const BufferSizes = struct {
-    pub const DEFAULT_PATHS_SIZE: u32 = 10;
+    pub const DEFAULT_PATHS_SIZE: u32 = 1;
     pub const DEFAULT_LINES_SIZE: u32 = 60;
     pub const DEFAULT_SEGMENTS_SIZE: u32 = 10;
     pub const DEFAULT_SEGMENT_DATA_SIZE: u32 = DEFAULT_SEGMENTS_SIZE * @sizeOf(CubicBezierF32);
@@ -271,13 +271,13 @@ pub const PathMonoidExpander = struct {
             path_monoid.* = next_path_monoid.calculate(path_tag);
         }
 
-        const start_path_monoid = path_monoids[config.buffer_sizes.pathTagsSize() + 1];
-        const end_path_monoid = path_monoids[segment_size - 1];
+        // const start_path_monoid = path_monoids[config.buffer_sizes.pathTagsSize() + 1];
+        // const end_path_monoid = path_monoids[segment_size - 1];
         path_monoids[config.buffer_sizes.pathTagsSize()] = next_path_monoid;
         path_monoids[config.buffer_sizes.pathTagsSize() + 1] = path_monoids[0];
 
-        pipeline_state.style_indices = RangeU32.create(start_path_monoid.style_index, end_path_monoid.style_index);
-        pipeline_state.transform_indices = RangeU32.create(start_path_monoid.style_index, end_path_monoid.style_index);
+        // pipeline_state.style_indices = RangeU32.create(start_path_monoid.style_index, end_path_monoid.style_index);
+        // pipeline_state.transform_indices = RangeU32.create(start_path_monoid.style_index, end_path_monoid.style_index);
     }
 };
 
