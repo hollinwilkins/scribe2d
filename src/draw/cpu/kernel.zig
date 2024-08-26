@@ -254,6 +254,7 @@ pub const PipelineState = struct {
     style_indices: RangeI32 = RangeI32{},
     transform_indices: RangeI32 = RangeI32{},
     segment_data_indices: RangeU32 = RangeU32{},
+    run_line_path_indices: RangeU32 = RangeU32{},
 
     pub fn segmentIndex(self: @This(), segment_index: u32) u32 {
         return segment_index - self.segment_indices.start;
@@ -356,11 +357,11 @@ pub const LineAllocator = struct {
             }
         }
 
-        var sum_offset: u32 = 0;
-        for (line_offsets[0..segment_size * 2]) |*offset| {
-            sum_offset += offset.*;
-            offset.* = sum_offset;
-        }
+        // var sum_offset: u32 = 0;
+        // for (line_offsets[0..segment_size * 2]) |*offset| {
+        //     sum_offset += offset.*;
+        //     offset.* = sum_offset;
+        // }
     }
 
     pub fn flattenFill(

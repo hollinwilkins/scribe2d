@@ -56,6 +56,13 @@ pub const CpuRasterizer = struct {
         ).chunkIterator(self.config.buffer_sizes.pathsSize());
 
         while (path_iterator.next()) |path_indices| {
+            // load path offsets
+            // std.mem.copyForwards(
+            //     u32,
+            //     self.buffers.path_offsets,
+            //     encoding.path_offsets[path_indices.start..path_indices.end],
+            // );
+
             var segment_iterator = SegmentIterator{
                 .path_indices = path_indices,
                 .path_offsets = encoding.path_offsets,
@@ -81,6 +88,7 @@ pub const CpuRasterizer = struct {
                     self.config,
                     self.buffers.path_tags,
                     &pipeline_state,
+                    self.buffers.path_offsets,
                     self.buffers.path_monoids,
                 );
 
@@ -128,7 +136,7 @@ pub const CpuRasterizer = struct {
                     self.buffers.offsets,
                 );
 
-                 if (self.config.debug_flags.calculate_lines) {
+                if (self.config.debug_flags.calculate_lines) {
                     self.debugCalculateLines(pipeline_state, encoding);
                 }
             }
