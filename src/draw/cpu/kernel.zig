@@ -302,6 +302,7 @@ pub const PathMonoidExpander = struct {
 pub const LineAllocator = struct {
     pub fn flatten(
         config: Config,
+        path_offsets: []const u32,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         styles: []const Style,
@@ -357,11 +358,13 @@ pub const LineAllocator = struct {
             }
         }
 
-        // var sum_offset: u32 = 0;
-        // for (line_offsets[0..segment_size * 2]) |*offset| {
-        //     sum_offset += offset.*;
-        //     offset.* = sum_offset;
-        // }
+        var sum_offset: u32 = 0;
+        for (line_offsets[0 .. segment_size * 2]) |*offset| {
+            sum_offset += offset.*;
+            offset.* = sum_offset;
+        }
+
+        calculateRunLinePaths(pipeline_state, path_offsets, line_offsets);
     }
 
     pub fn flattenFill(
@@ -1674,6 +1677,25 @@ pub const Flatten = struct {
         line_writer.write(LineF32.create(p0, p1));
     }
 };
+
+pub fn calculateRunLinePaths(
+    pipeline_state: *PipelineState,
+    path_offsets: []const u32,
+    line_offsets: []const u32,
+) void {
+    const start_path_offset = pipeline_state.path_indices.start;
+    const start_line_offset = line_offsets[path_offsets[0] - pipeline_state.path_indices.start];
+    var end_path_offset = start_path_offset;
+    var end_line_offset = start_line_offset;
+
+    while (end_path_offset < pipeline_state.path_indices.end) {
+        const next_path_offset = end_path_offset + 1;
+        var next_line_offset: u32 = undefined;
+        if (next_path_offset < pipeline_state.path_indices.end) {
+        } else {
+        }
+    }
+}
 
 pub fn getArcPoints(config: KernelConfig, path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) ArcF32 {
     const sd = SegmentData{

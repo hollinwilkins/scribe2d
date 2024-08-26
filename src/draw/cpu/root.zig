@@ -57,11 +57,11 @@ pub const CpuRasterizer = struct {
 
         while (path_iterator.next()) |path_indices| {
             // load path offsets
-            // std.mem.copyForwards(
-            //     u32,
-            //     self.buffers.path_offsets,
-            //     encoding.path_offsets[path_indices.start..path_indices.end],
-            // );
+            std.mem.copyForwards(
+                u32,
+                self.buffers.path_offsets,
+                encoding.path_offsets[path_indices.start..path_indices.end],
+            );
 
             var segment_iterator = SegmentIterator{
                 .path_indices = path_indices,
@@ -127,6 +127,7 @@ pub const CpuRasterizer = struct {
 
                 kernel_module.LineAllocator.flatten(
                     self.config,
+                    self.buffers.path_offsets,
                     self.buffers.path_tags,
                     self.buffers.path_monoids,
                     self.buffers.styles,
