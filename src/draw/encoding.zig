@@ -294,6 +294,7 @@ pub const PathMonoid = extern struct {
     pub fn calculate(self: @This(), path_tag: PathTag) @This() {
         var path_monoid = self;
         path_monoid.path_index -= 1;
+        path_monoid.subpath_index -= @as(u32, @intFromBool(path_tag.segment.subpath_end));
         path_monoid.segment_index -= 1;
         path_monoid.style_index -= 1;
         path_monoid.transform_index -= 1;

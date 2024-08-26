@@ -67,7 +67,6 @@ pub const CpuRasterizer = struct {
                 var pipeline_state = PipelineState{
                     .segment_indices = segment_indices,
                 };
-                std.debug.print("SegmentIndices({})\n", .{segment_indices});
 
                 // load path tags
                 std.mem.copyForwards(
@@ -84,9 +83,40 @@ pub const CpuRasterizer = struct {
                     self.buffers.path_monoids,
                 );
 
+                // load styles
+                if (pipeline_state.style_indices.start >= 0) {
+                    const start: u32 = @intCast(pipeline_state.style_indices.start);
+                    const end: u32 = @intCast(pipeline_state.style_indices.end);
+                    std.mem.copyForwards(
+                        Style,
+                        self.buffers.styles,
+                        encoding.styles[start..end],
+                    );
+                }
+
+                // load transforms
+                if (pipeline_state.transform_indices.start >= 0) {
+                    const start: u32 = @intCast(pipeline_state.transform_indices.start);
+                    const end: u32 = @intCast(pipeline_state.transform_indices.end);
+                    std.mem.copyForwards(
+                        TransformF32.Affine,
+                        self.buffers.transforms,
+                        encoding.transforms[start..end],
+                    );
+                }
+
+                // load segment data
+                std.mem.copyForwards(
+                    u8,
+                    self.buffers.segment_data,
+                    encoding.segment_data[pipeline_state.segment_data_indices.start..pipeline_state.segment_data_indices.end],
+                );
+
                 if (self.config.debug_flags.expand_monoids) {
                     self.debugExpandMonoids(pipeline_state);
                 }
+
+                std.debug.assert(true);
             }
         }
     }
@@ -96,7 +126,8 @@ pub const CpuRasterizer = struct {
         std.debug.print("============ Path Monoids ============\n", .{});
         for (self.buffers.path_tags[0..segments_size], self.buffers.path_monoids[0..segments_size]) |path_tag, path_monoid| {
             std.debug.print("{}\n", .{path_monoid});
-            const data = self.buffers.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
+            const segment_offset = path_monoid.segment_offset - pipeline_state.segment_data_indices.start;
+            const data = self.buffers.segment_data[segment_offset .. segment_offset + path_tag.segment.size()];
             const points = std.mem.bytesAsSlice(PointF32, data);
             std.debug.print("Points: {any}\n", .{points});
             std.debug.print("------------\n", .{});
