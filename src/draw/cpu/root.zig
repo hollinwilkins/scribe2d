@@ -14,6 +14,7 @@ const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const Style = encoding_module.Style;
 const KernelConfig = kernel_module.KernelConfig;
+const PipelineState = kernel_module.PipelineState;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
@@ -48,6 +49,10 @@ pub const CpuRasterizer = struct {
     }
 
     pub fn rasterize(self: *@This(), encoding: Encoding) void {
+        // initialize data
+        self.buffers.path_monoids[0] = PathMonoid{};
+        self.buffers.path_monoids[1] = PathMonoid{};
+
         var segment_iterator = SegmentIterator{
             .path_offsets = encoding.path_offsets,
             .chunk_size = self.config.buffer_sizes.pathTagsSize(),
@@ -55,13 +60,35 @@ pub const CpuRasterizer = struct {
         };
 
         while (segment_iterator.next()) |segment_indices| {
+            var pipeline_state = PipelineState{
+                .segment_indices = segment_indices,
+            };
             std.debug.print("SegmentIndices({})\n", .{segment_indices});
+
+            // load path tags
+            std.mem.copyForwards(
+                PathTag,
+                self.buffers.path_tags,
+                encoding.path_tags[segment_indices.start..segment_indices.end],
+            );
+
+            // expand path monoids
+            kernel_module.PathMonoidExpander.expand(
+                self.buffers.path_tags,
+                &pipeline_state,
+                self.buffers.path_monoids,
+            );
+
+            if (self.config.debug_flags.expand_monoids) {
+                self.debugExpandMonoids(pipeline_state);
+            }
         }
     }
 
-    pub fn debugExpandMonoids(self: @This()) void {
+    pub fn debugExpandMonoids(self: @This(), pipeline_state: PipelineState) void {
+        const segments_size = pipeline_state.segment_indices.size();
         std.debug.print("============ Path Monoids ============\n", .{});
-        for (self.buffers.path_tags, self.buffers.path_monoids) |path_tag, path_monoid| {
+        for (self.buffers.path_tags[0..segments_size], self.buffers.path_monoids[2 .. 2 + segments_size]) |path_tag, path_monoid| {
             std.debug.print("{}\n", .{path_monoid});
             const data = self.buffers.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
             const points = std.mem.bytesAsSlice(PointF32, data);
@@ -173,7 +200,7 @@ pub const Buffers = struct {
             ),
             .path_monoids = try allocator.alloc(
                 PathMonoid,
-                sizes.pathTagsSize(),
+                sizes.pathTagsSize() + 2,
             ),
             .segment_data = try allocator.alloc(
                 u8,

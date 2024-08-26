@@ -121,21 +121,22 @@ pub const KernelConfig = struct {
     }
 };
 
+pub const PipelineState = struct {
+    segment_indices: RangeU32 = RangeU32{},
+};
+
 pub const PathMonoidExpander = struct {
     pub fn expand(
         path_tags: []const PathTag,
         // outputs
-        path_offsets: []u32,
+        pipeline_state: *PipelineState,
         path_monoids: []PathMonoid,
     ) void {
-        var next_path_monoid = PathMonoid{};
-        for (path_tags, path_monoids) |path_tag, *path_monoid| {
+        const segment_size = pipeline_state.segment_indices.size();
+        var next_path_monoid = path_monoids[0];
+        for (path_tags[0..segment_size], path_monoids[2..2 + segment_size]) |path_tag, *path_monoid| {
             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
             path_monoid.* = next_path_monoid.calculate(path_tag);
-
-            if (path_tag.index.path == 1) {
-                path_offsets[path_monoid.path_index] = path_monoid.segment_index;
-            }
         }
     }
 };
