@@ -145,7 +145,7 @@ pub const SegmentIterator = struct {
 
     pub fn next(self: *@This()) ?RangeU32 {
         const path_index = self.index + self.path_indices.start;
-        if (path_index >= self.path_offsets.len) {
+        if (path_index >= self.path_indices.end) {
             return null;
         }
 
@@ -153,7 +153,7 @@ pub const SegmentIterator = struct {
         var end_segment_offset = start_segment_offset;
 
         var index_offset: u32 = 0;
-        while (self.index + index_offset < self.path_indices.end) {
+        while (path_index + index_offset < self.path_indices.end) {
             const next_index = path_index + index_offset + 1;
             const next_segment_offset = if (next_index >= self.path_offsets.len) self.path_tags else self.path_offsets[next_index];
 
