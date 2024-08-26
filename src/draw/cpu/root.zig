@@ -6,11 +6,13 @@ const msaa_module = @import("../msaa.zig");
 const Allocator = std.mem.Allocator;
 const RangeU32 = core.RangeU32;
 const PointF32 = core.PointF32;
+const TransformF32 = core.TransformF32;
 const CubicBezierF32 = core.CubicBezierF32;
 const LineF32 = core.LineF32;
 const Encoding = encoding_module.Encoding;
 const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
+const Style = encoding_module.Style;
 const KernelConfig = kernel_module.KernelConfig;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
@@ -51,6 +53,20 @@ pub const CpuRasterizer = struct {
             PathTag,
             self.buffers.path_tags,
             encoding.path_tags,
+        );
+
+        // load styles
+        std.mem.copyForwards(
+            Style,
+            self.buffers.styles,
+            encoding.styles,
+        );
+
+        // load transforms
+        std.mem.copyForwards(
+            TransformF32.Affine,
+            self.buffers.transforms,
+            encoding.transforms,
         );
 
         // load segment data
@@ -96,6 +112,8 @@ pub const BufferSizes = struct {
     pub const DEFAULT_SEGMENT_DATA_SIZE: u32 = DEFAULT_SEGMENTS_SIZE * @sizeOf(CubicBezierF32);
 
     paths_size: u32 = DEFAULT_PATHS_SIZE,
+    styles_size: u32 = DEFAULT_PATHS_SIZE,
+    transforms_size: u32 = DEFAULT_PATHS_SIZE,
     path_tags_size: u32 = DEFAULT_SEGMENTS_SIZE,
     segment_data_size: u32 = DEFAULT_SEGMENT_DATA_SIZE,
     lines_size: u32 = DEFAULT_LINES_SIZE,
@@ -103,6 +121,8 @@ pub const BufferSizes = struct {
     pub fn create(encoding: Encoding) @This() {
         return @This(){
             .paths_size = encoding.paths,
+            .styles_size = @intCast(encoding.styles.len),
+            .transforms_size = @intCast(encoding.transforms.len),
             .path_tags_size = @intCast(encoding.path_tags.len),
             .segment_data_size = @intCast(encoding.segment_data.len),
         };
@@ -110,6 +130,14 @@ pub const BufferSizes = struct {
 
     pub fn pathsSize(self: @This()) u32 {
         return self.paths_size;
+    }
+
+    pub fn stylesSize(self: @This()) u32 {
+        return self.styles_size;
+    }
+
+    pub fn transformsSize(self: @This()) u32 {
+        return self.transforms_size;
     }
 
     pub fn bumpsSize(self: @This()) u32 {
@@ -125,7 +153,7 @@ pub const BufferSizes = struct {
     }
 
     pub fn offsetsSize(self: @This()) u32 {
-        return self.pathTagsSize() * 8;
+        return self.pathTagsSize() * 2;
     }
 
     pub fn linesSize(self: @This()) u32 {
@@ -137,6 +165,8 @@ pub const Buffers = struct {
     sizes: BufferSizes,
 
     path_offsets: []u32,
+    styles: []Style,
+    transforms: []TransformF32.Affine,
     path_tags: []PathTag,
     path_monoids: []PathMonoid,
     segment_data: []u8,
@@ -159,6 +189,14 @@ pub const Buffers = struct {
             .path_offsets = try allocator.alloc(
                 u32,
                 sizes.pathsSize(),
+            ),
+            .styles = try allocator.alloc(
+                Style,
+                sizes.stylesSize(),
+            ),
+            .transforms = try allocator.alloc(
+                TransformF32.Affine,
+                sizes.transformsSize(),
             ),
             .path_tags = try allocator.alloc(
                 PathTag,
@@ -186,6 +224,8 @@ pub const Buffers = struct {
 
     pub fn deinit(self: *@This(), allocator: Allocator) void {
         allocator.free(self.path_offsets);
+        allocator.free(self.styles);
+        allocator.free(self.transforms);
         allocator.free(self.path_tags);
         allocator.free(self.path_monoids);
         allocator.free(self.segment_data);
