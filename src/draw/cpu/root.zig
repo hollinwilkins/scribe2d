@@ -48,6 +48,7 @@ pub const CpuRasterizer = struct {
     pub fn rasterize(self: *@This(), encoding: Encoding) void {
         // initialize data
         self.buffers.path_monoids[self.config.buffer_sizes.pathTagsSize()] = PathMonoid{};
+        self.buffers.path_monoids[self.config.buffer_sizes.pathTagsSize() + 1] = PathMonoid{};
 
         var segment_iterator = SegmentIterator{
             .path_offsets = encoding.path_offsets,

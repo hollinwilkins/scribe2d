@@ -219,7 +219,7 @@ pub const Buffers = struct {
             ),
             .path_monoids = try allocator.alloc(
                 PathMonoid,
-                sizes.pathTagsSize() + 1,
+                sizes.pathTagsSize() + 2,
             ),
             .segment_data = try allocator.alloc(
                 u8,
@@ -252,7 +252,8 @@ pub const Buffers = struct {
 
 pub const PipelineState = struct {
     segment_indices: RangeU32 = RangeU32{},
-    line_segment_indices: RangeU32 = RangeU32{},
+    style_indices: RangeU32 = RangeU32{},
+    transform_indices: RangeU32 = RangeU32{},
 };
 
 pub const PathMonoidExpander = struct {
@@ -270,7 +271,13 @@ pub const PathMonoidExpander = struct {
             path_monoid.* = next_path_monoid.calculate(path_tag);
         }
 
+        const start_path_monoid = path_monoids[config.buffer_sizes.pathTagsSize() + 1];
+        const end_path_monoid = path_monoids[segment_size - 1];
         path_monoids[config.buffer_sizes.pathTagsSize()] = next_path_monoid;
+        path_monoids[config.buffer_sizes.pathTagsSize() + 1] = path_monoids[0];
+
+        pipeline_state.style_indices = RangeU32.create(start_path_monoid.style_index, end_path_monoid.style_index);
+        pipeline_state.transform_indices = RangeU32.create(start_path_monoid.style_index, end_path_monoid.style_index);
     }
 };
 
