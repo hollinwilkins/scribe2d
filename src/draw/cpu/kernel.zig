@@ -355,6 +355,12 @@ pub const LineAllocator = struct {
                 );
             }
         }
+
+        var sum_offset: u32 = 0;
+        for (line_offsets[0..segment_size * 2]) |*offset| {
+            sum_offset += offset.*;
+            offset.* = sum_offset;
+        }
     }
 
     pub fn flattenFill(
