@@ -253,6 +253,18 @@ pub const PipelineState = struct {
     style_indices: RangeI32 = RangeI32{},
     transform_indices: RangeI32 = RangeI32{},
     segment_data_indices: RangeU32 = RangeU32{},
+
+    pub fn segmentIndex(self: @This(), segment_index: u32) u32 {
+        return segment_index - self.segment_indices.start;
+    }
+
+    pub fn styleIndex(self: @This(), style_index: i32) i32 {
+        return style_index - self.style_indices.start;
+    }
+
+    pub fn transformIndex(self: @This(), transform_index: i32) i32 {
+        return transform_index - self.transform_indices.start;
+    }
 };
 
 pub const PathMonoidExpander = struct {
@@ -287,7 +299,7 @@ pub const PathMonoidExpander = struct {
 
 pub const LineAllocator = struct {
     pub fn flatten(
-        config: KernelConfig,
+        config: Config,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         styles: []const Style,
@@ -295,23 +307,34 @@ pub const LineAllocator = struct {
         segment_data: []const u8,
         // outputs
         pipeline_state: *PipelineState,
-        offsets: []u32,
+        line_offsets: []u32,
     ) void {
-        _ = pipeline_state;
-        for (0..path_tags.len) |segment_index| {
-            const segment_metadata = getSegmentMeta(@intCast(segment_index), path_tags, path_monoids);
-            const style = getStyle(styles, segment_metadata.path_monoid.style_index);
-            const fill_offset = &offsets[segment_index];
+        for (pipeline_state.segment_indices.start..pipeline_state.segment_indices.end) |segment_index| {
+            const projected_segment_index = pipeline_state.segmentIndex(@intCast(segment_index));
+            const segment_metadata = getSegmentMeta(
+                projected_segment_index,
+                path_tags,
+                path_monoids,
+            );
+            const style = getStyle(
+                styles,
+                pipeline_state.styleIndex(segment_metadata.path_monoid.style_index),
+            );
+            const transform = getTransform(
+                transforms,
+                pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
+            );
+            const fill_offset = &line_offsets[projected_segment_index];
             fill_offset.* = 0;
-            const stroke_offset = &offsets[path_tags.len + segment_index];
+            const stroke_offset = &line_offsets[path_tags.len + projected_segment_index];
             stroke_offset.* = 0;
 
             if (style.isFill()) {
                 flattenFill(
                     config,
                     segment_metadata,
+                    transform,
                     path_tags,
-                    transforms,
                     segment_data,
                     fill_offset,
                 );
@@ -322,9 +345,9 @@ pub const LineAllocator = struct {
                     config,
                     style.stroke,
                     segment_metadata,
+                    transform,
                     path_tags,
                     path_monoids,
-                    transforms,
                     segment_data,
                     stroke_offset,
                 );
@@ -333,15 +356,13 @@ pub const LineAllocator = struct {
     }
 
     pub fn flattenFill(
-        config: KernelConfig,
+        config: Config,
         segment_metadata: SegmentMeta,
+        transform: TransformF32.Affine,
         path_tags: []const PathTag,
-        transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
-        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
-
         if (segment_metadata.path_tag.isArc()) {
             @panic("Arc is not yet supported.");
             // const arc_points = getArcPoints(
@@ -397,12 +418,12 @@ pub const LineAllocator = struct {
     }
 
     pub fn flattenStroke(
-        config: KernelConfig,
+        config: Config,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
+        transform: TransformF32.Affine,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
@@ -430,9 +451,9 @@ pub const LineAllocator = struct {
                     config,
                     stroke,
                     segment_metadata,
+                    transform,
                     path_tags,
                     path_monoids,
-                    transforms,
                     segment_data,
                     line_offset,
                 );
@@ -582,9 +603,9 @@ pub const LineAllocator = struct {
         config: KernelConfig,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
+        transform: TransformF32.Affine,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         line_offset: *u32,
     ) void {
@@ -593,7 +614,6 @@ pub const LineAllocator = struct {
             path_tags,
             path_monoids,
         );
-        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
         if (segment_metadata.path_tag.segment.subpath_end) {
             // marker segment, do nothing
@@ -619,7 +639,7 @@ pub const LineAllocator = struct {
         var tan_next = readNeighborSegment(
             config,
             next_segment_metadata,
-            transforms,
+            transform,
             segment_data,
         );
         var tan_start = cubicStartTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
@@ -1870,11 +1890,9 @@ pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: Point
 fn readNeighborSegment(
     config: KernelConfig,
     segment_metadata: SegmentMeta,
-    transforms: []const TransformF32.Affine,
+    transform: TransformF32.Affine,
     segment_data: []const u8,
 ) PointF32 {
-    const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
-
     if (segment_metadata.path_tag.isArc()) {
         @panic("Arc not yet supported.");
     } else {

@@ -115,8 +115,6 @@ pub const CpuRasterizer = struct {
                 if (self.config.debug_flags.expand_monoids) {
                     self.debugExpandMonoids(pipeline_state);
                 }
-
-                std.debug.assert(true);
             }
         }
     }
