@@ -80,7 +80,7 @@ pub fn main() !void {
     defer half_planes.deinit();
 
     const encoding = encoder.encode();
-    var config = draw.cpu.CpuRasterizer.Config{
+    var config = draw.cpu.Config{
         .buffer_sizes = draw.cpu.BufferSizes{
             .path_tags_size = 10,
         },

@@ -14,16 +14,13 @@ const PathTag = encoding_module.PathTag;
 const PathMonoid = encoding_module.PathMonoid;
 const Style = encoding_module.Style;
 const KernelConfig = kernel_module.KernelConfig;
+pub const Config = kernel_module.Config;
+pub const BufferSizes = kernel_module.BufferSizes;
+const Buffers = kernel_module.Buffers;
 const PipelineState = kernel_module.PipelineState;
 const HalfPlanesU16 = msaa_module.HalfPlanesU16;
 
 pub const CpuRasterizer = struct {
-    pub const Config = struct {
-        kernel_config: KernelConfig = KernelConfig.DEFAULT,
-        debug_flags: DebugFlags = DebugFlags{},
-        buffer_sizes: BufferSizes = BufferSizes{},
-    };
-
     allocator: Allocator,
     half_planes: *const HalfPlanesU16,
     config: Config,
@@ -50,8 +47,7 @@ pub const CpuRasterizer = struct {
 
     pub fn rasterize(self: *@This(), encoding: Encoding) void {
         // initialize data
-        self.buffers.path_monoids[0] = PathMonoid{};
-        self.buffers.path_monoids[1] = PathMonoid{};
+        self.buffers.path_monoids[self.config.buffer_sizes.pathTagsSize()] = PathMonoid{};
 
         var segment_iterator = SegmentIterator{
             .path_offsets = encoding.path_offsets,
@@ -74,6 +70,7 @@ pub const CpuRasterizer = struct {
 
             // expand path monoids
             kernel_module.PathMonoidExpander.expand(
+                self.config,
                 self.buffers.path_tags,
                 &pipeline_state,
                 self.buffers.path_monoids,
@@ -88,7 +85,7 @@ pub const CpuRasterizer = struct {
     pub fn debugExpandMonoids(self: @This(), pipeline_state: PipelineState) void {
         const segments_size = pipeline_state.segment_indices.size();
         std.debug.print("============ Path Monoids ============\n", .{});
-        for (self.buffers.path_tags[0..segments_size], self.buffers.path_monoids[2 .. 2 + segments_size]) |path_tag, path_monoid| {
+        for (self.buffers.path_tags[0..segments_size], self.buffers.path_monoids[0..segments_size]) |path_tag, path_monoid| {
             std.debug.print("{}\n", .{path_monoid});
             const data = self.buffers.segment_data[path_monoid.segment_offset .. path_monoid.segment_offset + path_tag.segment.size()];
             const points = std.mem.bytesAsSlice(PointF32, data);
@@ -96,138 +93,6 @@ pub const CpuRasterizer = struct {
             std.debug.print("------------\n", .{});
         }
         std.debug.print("======================================\n", .{});
-    }
-};
-
-pub const DebugFlags = struct {
-    expand_monoids: bool = false,
-    calculate_lines: bool = false,
-};
-
-pub const BufferSizes = struct {
-    pub const DEFAULT_PATHS_SIZE: u32 = 10;
-    pub const DEFAULT_LINES_SIZE: u32 = 60;
-    pub const DEFAULT_SEGMENTS_SIZE: u32 = 10;
-    pub const DEFAULT_SEGMENT_DATA_SIZE: u32 = DEFAULT_SEGMENTS_SIZE * @sizeOf(CubicBezierF32);
-
-    paths_size: u32 = DEFAULT_PATHS_SIZE,
-    styles_size: u32 = DEFAULT_PATHS_SIZE,
-    transforms_size: u32 = DEFAULT_PATHS_SIZE,
-    path_tags_size: u32 = DEFAULT_SEGMENTS_SIZE,
-    segment_data_size: u32 = DEFAULT_SEGMENT_DATA_SIZE,
-    lines_size: u32 = DEFAULT_LINES_SIZE,
-
-    pub fn create(encoding: Encoding) @This() {
-        return @This(){
-            .paths_size = encoding.paths,
-            .styles_size = @intCast(encoding.styles.len),
-            .transforms_size = @intCast(encoding.transforms.len),
-            .path_tags_size = @intCast(encoding.path_tags.len),
-            .segment_data_size = @intCast(encoding.segment_data.len),
-        };
-    }
-
-    pub fn pathsSize(self: @This()) u32 {
-        return self.paths_size;
-    }
-
-    pub fn stylesSize(self: @This()) u32 {
-        return self.styles_size;
-    }
-
-    pub fn transformsSize(self: @This()) u32 {
-        return self.transforms_size;
-    }
-
-    pub fn bumpsSize(self: @This()) u32 {
-        return self.pathsSize() * 2;
-    }
-
-    pub fn pathTagsSize(self: @This()) u32 {
-        return self.path_tags_size;
-    }
-
-    pub fn segmentDataSize(self: @This()) u32 {
-        return self.segment_data_size;
-    }
-
-    pub fn offsetsSize(self: @This()) u32 {
-        return self.pathTagsSize() * 2;
-    }
-
-    pub fn linesSize(self: @This()) u32 {
-        return self.lines_size;
-    }
-};
-
-pub const Buffers = struct {
-    path_offsets: []u32,
-    styles: []Style,
-    transforms: []TransformF32.Affine,
-    path_tags: []PathTag,
-    path_monoids: []PathMonoid,
-    segment_data: []u8,
-    offsets: []u32,
-    bumps: []std.atomic.Value(u32),
-    lines: []LineF32,
-
-    pub fn create(allocator: Allocator, sizes: BufferSizes) !@This() {
-        const bumps = try allocator.alloc(
-            std.atomic.Value(u32),
-            sizes.bumpsSize(),
-        );
-
-        for (bumps) |*bump| {
-            bump.raw = 0;
-        }
-
-        return @This(){
-            .path_offsets = try allocator.alloc(
-                u32,
-                sizes.pathsSize(),
-            ),
-            .styles = try allocator.alloc(
-                Style,
-                sizes.stylesSize(),
-            ),
-            .transforms = try allocator.alloc(
-                TransformF32.Affine,
-                sizes.transformsSize(),
-            ),
-            .path_tags = try allocator.alloc(
-                PathTag,
-                sizes.pathTagsSize(),
-            ),
-            .path_monoids = try allocator.alloc(
-                PathMonoid,
-                sizes.pathTagsSize() + 2,
-            ),
-            .segment_data = try allocator.alloc(
-                u8,
-                sizes.segmentDataSize(),
-            ),
-            .offsets = try allocator.alloc(
-                u32,
-                sizes.offsetsSize() + 2,
-            ),
-            .bumps = bumps,
-            .lines = try allocator.alloc(
-                LineF32,
-                sizes.linesSize(),
-            ),
-        };
-    }
-
-    pub fn deinit(self: *@This(), allocator: Allocator) void {
-        allocator.free(self.path_offsets);
-        allocator.free(self.styles);
-        allocator.free(self.transforms);
-        allocator.free(self.path_tags);
-        allocator.free(self.path_monoids);
-        allocator.free(self.segment_data);
-        allocator.free(self.offsets);
-        allocator.free(self.bumps);
-        allocator.free(self.lines);
     }
 };
 

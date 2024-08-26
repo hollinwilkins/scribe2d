@@ -4,6 +4,7 @@ const encoding_module = @import("../encoding.zig");
 const texture_module = @import("../texture.zig");
 const euler_module = @import("../euler.zig");
 const msaa_module = @import("../msaa.zig");
+const Allocator = std.mem.Allocator;
 const RangeF32 = core.RangeF32;
 const RangeI32 = core.RangeI32;
 const RangeU32 = core.RangeU32;
@@ -121,23 +122,155 @@ pub const KernelConfig = struct {
     }
 };
 
+pub const Config = struct {
+    kernel_config: KernelConfig = KernelConfig.DEFAULT,
+    debug_flags: DebugFlags = DebugFlags{},
+    buffer_sizes: BufferSizes = BufferSizes{},
+};
+
+pub const DebugFlags = struct {
+    expand_monoids: bool = false,
+    calculate_lines: bool = false,
+};
+
+pub const BufferSizes = struct {
+    pub const DEFAULT_PATHS_SIZE: u32 = 10;
+    pub const DEFAULT_LINES_SIZE: u32 = 60;
+    pub const DEFAULT_SEGMENTS_SIZE: u32 = 10;
+    pub const DEFAULT_SEGMENT_DATA_SIZE: u32 = DEFAULT_SEGMENTS_SIZE * @sizeOf(CubicBezierF32);
+
+    paths_size: u32 = DEFAULT_PATHS_SIZE,
+    styles_size: u32 = DEFAULT_PATHS_SIZE,
+    transforms_size: u32 = DEFAULT_PATHS_SIZE,
+    path_tags_size: u32 = DEFAULT_SEGMENTS_SIZE,
+    segment_data_size: u32 = DEFAULT_SEGMENT_DATA_SIZE,
+    lines_size: u32 = DEFAULT_LINES_SIZE,
+
+    pub fn pathsSize(self: @This()) u32 {
+        return self.paths_size;
+    }
+
+    pub fn stylesSize(self: @This()) u32 {
+        return self.styles_size;
+    }
+
+    pub fn transformsSize(self: @This()) u32 {
+        return self.transforms_size;
+    }
+
+    pub fn bumpsSize(self: @This()) u32 {
+        return self.pathsSize() * 2;
+    }
+
+    pub fn pathTagsSize(self: @This()) u32 {
+        return self.path_tags_size;
+    }
+
+    pub fn segmentDataSize(self: @This()) u32 {
+        return self.segment_data_size;
+    }
+
+    pub fn offsetsSize(self: @This()) u32 {
+        return self.pathTagsSize() * 2;
+    }
+
+    pub fn linesSize(self: @This()) u32 {
+        return self.lines_size;
+    }
+};
+
+pub const Buffers = struct {
+    path_offsets: []u32,
+    styles: []Style,
+    transforms: []TransformF32.Affine,
+    path_tags: []PathTag,
+    path_monoids: []PathMonoid,
+    segment_data: []u8,
+    offsets: []u32,
+    bumps: []std.atomic.Value(u32),
+    lines: []LineF32,
+
+    pub fn create(allocator: Allocator, sizes: BufferSizes) !@This() {
+        const bumps = try allocator.alloc(
+            std.atomic.Value(u32),
+            sizes.bumpsSize(),
+        );
+
+        for (bumps) |*bump| {
+            bump.raw = 0;
+        }
+
+        return @This(){
+            .path_offsets = try allocator.alloc(
+                u32,
+                sizes.pathsSize(),
+            ),
+            .styles = try allocator.alloc(
+                Style,
+                sizes.stylesSize(),
+            ),
+            .transforms = try allocator.alloc(
+                TransformF32.Affine,
+                sizes.transformsSize(),
+            ),
+            .path_tags = try allocator.alloc(
+                PathTag,
+                sizes.pathTagsSize(),
+            ),
+            .path_monoids = try allocator.alloc(
+                PathMonoid,
+                sizes.pathTagsSize() + 1,
+            ),
+            .segment_data = try allocator.alloc(
+                u8,
+                sizes.segmentDataSize(),
+            ),
+            .offsets = try allocator.alloc(
+                u32,
+                sizes.offsetsSize() * 2,
+            ),
+            .bumps = bumps,
+            .lines = try allocator.alloc(
+                LineF32,
+                sizes.linesSize(),
+            ),
+        };
+    }
+
+    pub fn deinit(self: *@This(), allocator: Allocator) void {
+        allocator.free(self.path_offsets);
+        allocator.free(self.styles);
+        allocator.free(self.transforms);
+        allocator.free(self.path_tags);
+        allocator.free(self.path_monoids);
+        allocator.free(self.segment_data);
+        allocator.free(self.offsets);
+        allocator.free(self.bumps);
+        allocator.free(self.lines);
+    }
+};
+
 pub const PipelineState = struct {
     segment_indices: RangeU32 = RangeU32{},
+    line_segment_indices: RangeU32 = RangeU32{},
 };
 
 pub const PathMonoidExpander = struct {
     pub fn expand(
+        config: Config,
         path_tags: []const PathTag,
         // outputs
         pipeline_state: *PipelineState,
         path_monoids: []PathMonoid,
     ) void {
         const segment_size = pipeline_state.segment_indices.size();
-        var next_path_monoid = path_monoids[0];
-        for (path_tags[0..segment_size], path_monoids[2..2 + segment_size]) |path_tag, *path_monoid| {
+        var next_path_monoid = path_monoids[config.buffer_sizes.pathTagsSize()];
+        for (path_tags[0..segment_size], path_monoids[0..segment_size]) |path_tag, *path_monoid| {
             next_path_monoid = next_path_monoid.combine(PathMonoid.createTag(path_tag));
             path_monoid.* = next_path_monoid.calculate(path_tag);
         }
+
+        path_monoids[config.buffer_sizes.pathTagsSize()] = next_path_monoid;
     }
 };
 
@@ -150,8 +283,10 @@ pub const LineAllocator = struct {
         transforms: []const TransformF32.Affine,
         segment_data: []const u8,
         // outputs
+        pipeline_state: *PipelineState,
         offsets: []u32,
     ) void {
+        _ = pipeline_state;
         for (0..path_tags.len) |segment_index| {
             const segment_metadata = getSegmentMeta(@intCast(segment_index), path_tags, path_monoids);
             const style = getStyle(styles, segment_metadata.path_monoid.style_index);
