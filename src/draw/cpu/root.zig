@@ -65,6 +65,7 @@ pub const CpuRasterizer = struct {
 
             while (segment_iterator.next()) |segment_indices| {
                 var pipeline_state = PipelineState{
+                    .path_indices = path_indices,
                     .segment_indices = segment_indices,
                 };
 
@@ -115,6 +116,21 @@ pub const CpuRasterizer = struct {
                 if (self.config.debug_flags.expand_monoids) {
                     self.debugExpandMonoids(pipeline_state);
                 }
+
+                kernel_module.LineAllocator.flatten(
+                    self.config,
+                    self.buffers.path_tags,
+                    self.buffers.path_monoids,
+                    self.buffers.styles,
+                    self.buffers.transforms,
+                    self.buffers.segment_data,
+                    &pipeline_state,
+                    self.buffers.offsets,
+                );
+
+                 if (self.config.debug_flags.calculate_lines) {
+                    self.debugCalculateLines(pipeline_state, encoding);
+                }
             }
         }
     }
@@ -129,6 +145,31 @@ pub const CpuRasterizer = struct {
             const points = std.mem.bytesAsSlice(PointF32, data);
             std.debug.print("Points: {any}\n", .{points});
             std.debug.print("------------\n", .{});
+        }
+        std.debug.print("======================================\n", .{});
+    }
+
+    pub fn debugCalculateLines(self: @This(), pipeline_state: PipelineState, encoding: Encoding) void {
+        std.debug.print("============ Line Offsets ============\n", .{});
+        for (pipeline_state.path_indices.start..pipeline_state.path_indices.end) |path_index| {
+            std.debug.print("Path({})\n", .{path_index});
+            const start_segment_offset = encoding.path_offsets[path_index] - pipeline_state.segment_indices.start;
+            const end_segment_offset = if (path_index + 1 < encoding.path_offsets.len) encoding.path_offsets[path_index + 1] - pipeline_state.segment_indices.start else pipeline_state.segment_indices.size();
+
+            std.debug.print("LineOffsetSegments({},{})\n", .{
+                start_segment_offset,
+                end_segment_offset,
+            });
+
+            for (start_segment_offset..end_segment_offset) |segment_index| {
+                const fill_offset = self.buffers.offsets[segment_index];
+                const stroke_offset = self.buffers.offsets[pipeline_state.segment_indices.size() + segment_index];
+
+                std.debug.print("FillOffset({}), StrokeOffset({})\n", .{
+                    fill_offset,
+                    stroke_offset,
+                });
+            }
         }
         std.debug.print("======================================\n", .{});
     }

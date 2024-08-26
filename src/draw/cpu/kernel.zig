@@ -249,6 +249,7 @@ pub const Buffers = struct {
 };
 
 pub const PipelineState = struct {
+    path_indices: RangeU32 = RangeU32{},
     segment_indices: RangeU32 = RangeU32{},
     style_indices: RangeI32 = RangeI32{},
     transform_indices: RangeI32 = RangeI32{},
@@ -309,6 +310,7 @@ pub const LineAllocator = struct {
         pipeline_state: *PipelineState,
         line_offsets: []u32,
     ) void {
+        const segment_size = pipeline_state.segment_indices.size();
         for (pipeline_state.segment_indices.start..pipeline_state.segment_indices.end) |segment_index| {
             const projected_segment_index = pipeline_state.segmentIndex(@intCast(segment_index));
             const segment_metadata = getSegmentMeta(
@@ -326,7 +328,7 @@ pub const LineAllocator = struct {
             );
             const fill_offset = &line_offsets[projected_segment_index];
             fill_offset.* = 0;
-            const stroke_offset = &line_offsets[path_tags.len + projected_segment_index];
+            const stroke_offset = &line_offsets[segment_size + projected_segment_index];
             stroke_offset.* = 0;
 
             if (style.isFill()) {
@@ -405,7 +407,7 @@ pub const LineAllocator = struct {
                 cubic_points = cubic_points.affineTransform(transform);
 
                 flattenEuler(
-                    config,
+                    config.kernel_config,
                     cubic_points,
                     0.5 * transform.getScale(),
                     0.0,
@@ -448,7 +450,7 @@ pub const LineAllocator = struct {
                 }
 
                 flattenStrokeEuler(
-                    config,
+                    config.kernel_config,
                     stroke,
                     segment_metadata,
                     transform,
