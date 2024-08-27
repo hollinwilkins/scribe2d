@@ -132,11 +132,12 @@ pub const DebugFlags = struct {
     expand_monoids: bool = false,
     calculate_lines: bool = false,
     flatten: bool = false,
+    tile: bool = false,
 };
 
 pub const BufferSizes = struct {
     pub const DEFAULT_PATHS_SIZE: u32 = 1;
-    pub const DEFAULT_LINES_SIZE: u32 = 60;
+    pub const DEFAULT_LINES_SIZE: u32 = 4096 * 4096;
     pub const DEFAULT_BOUNDARIES_SIZE: u32 = 4096 * 4096;
     pub const DEFAULT_SEGMENTS_SIZE: u32 = 10;
     pub const DEFAULT_SEGMENT_DATA_SIZE: u32 = DEFAULT_SEGMENTS_SIZE * @sizeOf(CubicBezierF32);
@@ -275,11 +276,19 @@ pub const PipelineState = struct {
     }
 
     pub fn styleIndex(self: @This(), style_index: i32) i32 {
-        return style_index - self.style_indices.start;
+        if (self.style_indices.start >= 0) {
+            return style_index - self.style_indices.start;
+        } else {
+            return -1;
+        }
     }
 
     pub fn transformIndex(self: @This(), transform_index: i32) i32 {
-        return transform_index - self.transform_indices.start;
+        if (self.transform_indices.start >= 0) {
+            return transform_index - self.transform_indices.start;
+        } else {
+            return -1;
+        }
     }
 
     pub fn nextRunLinePathIndices(self: @This()) ?RangeU32 {
@@ -316,8 +325,8 @@ pub const PathMonoidExpander = struct {
         path_monoids[config.buffer_sizes.pathTagsSize()] = next_path_monoid;
         path_monoids[config.buffer_sizes.pathTagsSize() + 1] = path_monoids[0];
 
-        pipeline_state.style_indices = RangeI32.create(start_path_monoid.style_index, end_path_monoid.style_index);
-        pipeline_state.transform_indices = RangeI32.create(start_path_monoid.transform_index, end_path_monoid.transform_index);
+        pipeline_state.style_indices = RangeI32.create(start_path_monoid.style_index, end_path_monoid.style_index + 1);
+        pipeline_state.transform_indices = RangeI32.create(start_path_monoid.transform_index, end_path_monoid.transform_index + 1);
         pipeline_state.segment_data_indices = RangeU32.create(
             start_path_monoid.segment_offset,
             end_path_monoid.segment_offset + end_path_tag.segment.size(),
