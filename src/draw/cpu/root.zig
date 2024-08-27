@@ -140,6 +140,8 @@ pub const CpuRasterizer = struct {
                     debugPipelineState(pipeline_state);
                     self.debugCalculateLines(pipeline_state, encoding);
                 }
+
+
             }
         }
     }
@@ -166,6 +168,7 @@ pub const CpuRasterizer = struct {
 
     pub fn debugCalculateLines(self: @This(), pipeline_state: PipelineState, encoding: Encoding) void {
         std.debug.print("============ Line Offsets ============\n", .{});
+        const segment_size = pipeline_state.segment_indices.size();
         for (pipeline_state.path_indices.start..pipeline_state.path_indices.end) |path_index| {
             std.debug.print("Path({})\n", .{path_index});
             const start_segment_offset = encoding.path_offsets[path_index] - pipeline_state.segment_indices.start;
@@ -177,8 +180,8 @@ pub const CpuRasterizer = struct {
             });
 
             for (start_segment_offset..end_segment_offset) |segment_index| {
-                const fill_offset = self.buffers.offsets[segment_index * 2];
-                const stroke_offset = self.buffers.offsets[segment_index * 2 + 1];
+                const fill_offset = self.buffers.offsets[segment_index];
+                const stroke_offset = self.buffers.offsets[segment_size + segment_index];
 
                 std.debug.print("FillOffset({}), StrokeOffset({})\n", .{
                     fill_offset,

@@ -267,6 +267,18 @@ pub const PipelineState = struct {
     pub fn transformIndex(self: @This(), transform_index: i32) i32 {
         return transform_index - self.transform_indices.start;
     }
+
+    pub fn nextRunLinePathIndices(self: @This()) ?RangeU32 {
+        if (self.run_line_path_indices.size() == 0) {
+            if (self.run_line_path_indices.start == 0) {
+                return null;
+            } else {
+                @panic("line buffer not large enough");
+            }
+        }
+
+        return self.run_line_path_indices;
+    }
 };
 
 pub const PathMonoidExpander = struct {
@@ -328,9 +340,9 @@ pub const LineAllocator = struct {
                 transforms,
                 pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
             );
-            const fill_offset = &line_offsets[projected_segment_index * 2];
+            const fill_offset = &line_offsets[projected_segment_index];
             fill_offset.* = 0;
-            const stroke_offset = &line_offsets[projected_segment_index * 2 + 1];
+            const stroke_offset = &line_offsets[segment_size + projected_segment_index];
             stroke_offset.* = 0;
 
             if (style.isFill()) {
@@ -359,12 +371,23 @@ pub const LineAllocator = struct {
         }
 
         var sum_offset: u32 = 0;
-        for (line_offsets[0 .. segment_size * 2]) |*offset| {
+        for (line_offsets[0..segment_size]) |*offset| {
             sum_offset += offset.*;
             offset.* = sum_offset;
         }
 
-        calculateRunLinePaths(config, pipeline_state, path_offsets, line_offsets);
+        sum_offset = 0;
+        for (line_offsets[segment_size .. segment_size * 2]) |*offset| {
+            sum_offset += offset.*;
+            offset.* = sum_offset;
+        }
+
+        calculateRunLinePaths(
+            config,
+            pipeline_state,
+            path_offsets,
+            line_offsets,
+        );
     }
 
     pub fn flattenFill(
@@ -868,85 +891,118 @@ pub const BoundaryAllocator = struct {
 
 pub const Flatten = struct {
     pub fn flatten(
-        config: KernelConfig,
+        config: Config,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
         styles: []const Style,
         transforms: []const TransformF32.Affine,
+        path_offsets: []const PathOffset,
+        line_offsets: []const u32,
         segment_data: []const u8,
-        range: RangeU32,
         // outputs
-        paths: []Path,
+        pipeline_state: *PipelineState,
         lines: []LineF32,
     ) void {
-        for (range.start..range.end) |segment_index| {
-            const segment_metadata = getSegmentMeta(
-                @intCast(segment_index),
-                path_tags,
-                path_monoids,
-            );
-            const style = getStyle(styles, segment_metadata.path_monoid.style_index);
-            const path = &paths[segment_metadata.path_monoid.path_index];
-
-            if (style.isFill()) {
-                var fill_bump = BumpAllocator{
-                    .start = path.line_offset.start_fill_offset,
-                    .end = path.line_offset.end_fill_offset,
-                    .offset = &path.fill_bump,
-                };
-                var line_writer = LineWriter{
-                    .lines = lines,
-                    .reverse = false,
-                    .bump = &fill_bump,
-                };
-
-                flattenFill(
-                    config,
-                    segment_metadata,
-                    path_tags,
-                    transforms,
-                    segment_data,
-                    &line_writer,
-                );
-
-                var atomic_fill_bounds = AtomicBounds.createRect(&path.bounds);
-                atomic_fill_bounds.extendBy(line_writer.bounds);
-            }
-
-            if (style.isStroke()) {
-                var stroke_bump = BumpAllocator{
-                    .start = path.line_offset.start_stroke_offset,
-                    .end = path.line_offset.end_stroke_offset,
-                    .offset = &path.stroke_bump,
-                };
-                var front_line_writer = LineWriter{
-                    .lines = lines,
-                    .reverse = false,
-                    .bump = &stroke_bump,
-                };
-                var back_line_writer = LineWriter{
-                    .lines = lines,
-                    .reverse = true,
-                    .bump = &stroke_bump,
-                };
-
-                flattenStroke(
-                    config,
-                    style.stroke,
-                    segment_metadata,
-                    path_tags,
-                    path_monoids,
-                    transforms,
-                    segment_data,
-                    &front_line_writer,
-                    &back_line_writer,
-                );
-
-                var atomic_stroke_bounds = AtomicBounds.createRect(&path.bounds);
-                atomic_stroke_bounds.extendBy(front_line_writer.bounds);
-                atomic_stroke_bounds.extendBy(back_line_writer.bounds);
+        _ = config;
+        _ = path_tags;
+        _ = path_monoids;
+        _ = styles;
+        _ = transforms;
+        _ = line_offsets;
+        _ = segment_data;
+        _ = lines;
+        for (pipeline_state.run_line_path_indices.start..pipeline_state.run_line_path_indices.end) |path_index| {
+            const projected_path_index = path_index - pipeline_state.path_indices.start;
+            const start_segment_index = path_offsets[projected_path_index] - pipeline_state.segment_indices.start;
+            _ = start_segment_index;
+            var end_segment_index: u32 = undefined;
+            if (path_index + 1 < pipeline_state.path_indices.end) {
+                end_segment_index = path_offsets[projected_path_index + 1] - pipeline_state.segment_indices.start;
+            } else {
+                end_segment_index = pipeline_state.segment_indices.size() - 1;
             }
         }
+
+        // const segment_size = pipeline_state.segment_indices.size();
+        // for (pipeline_state.segment_indices.start..pipeline_state.segment_indices.end) |segment_index| {
+        //     const projected_segment_index = pipeline_state.segmentIndex(@intCast(segment_index));
+        //     const segment_metadata = getSegmentMeta(
+        //         projected_segment_index,
+        //         path_tags,
+        //         path_monoids,
+        //     );
+        //     const style = getStyle(
+        //         styles,
+        //         pipeline_state.styleIndex(segment_metadata.path_monoid.style_index),
+        //     );
+        //     const transform = getTransform(
+        //         transforms,
+        //         pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
+        //     );
+        //     const fill_offset = &line_offsets[projected_segment_index * 2];
+        //     fill_offset.* = 0;
+        //     const stroke_offset = &line_offsets[projected_segment_index * 2 + 1];
+        //     stroke_offset.* = 0;
+
+        //     if (style.isFill()) {
+        //         var fill_bump = BumpAllocator{
+        //             .start = path.line_offset.start_fill_offset,
+        //             .end = path.line_offset.end_fill_offset,
+        //             .offset = &path.fill_bump,
+        //         };
+        //         var line_writer = LineWriter{
+        //             .lines = lines,
+        //             .reverse = false,
+        //             .bump = &fill_bump,
+        //         };
+
+        //         flattenFill(
+        //             config,
+        //             segment_metadata,
+        //             path_tags,
+        //             transforms,
+        //             segment_data,
+        //             &line_writer,
+        //         );
+
+        //         var atomic_fill_bounds = AtomicBounds.createRect(&path.bounds);
+        //         atomic_fill_bounds.extendBy(line_writer.bounds);
+        //     }
+
+        //     if (style.isStroke()) {
+        //         var stroke_bump = BumpAllocator{
+        //             .start = path.line_offset.start_stroke_offset,
+        //             .end = path.line_offset.end_stroke_offset,
+        //             .offset = &path.stroke_bump,
+        //         };
+        //         var front_line_writer = LineWriter{
+        //             .lines = lines,
+        //             .reverse = false,
+        //             .bump = &stroke_bump,
+        //         };
+        //         var back_line_writer = LineWriter{
+        //             .lines = lines,
+        //             .reverse = true,
+        //             .bump = &stroke_bump,
+        //         };
+
+        //         flattenStroke(
+        //             config,
+        //             style.stroke,
+        //             segment_metadata,
+        //             path_tags,
+        //             path_monoids,
+        //             transforms,
+        //             segment_data,
+        //             &front_line_writer,
+        //             &back_line_writer,
+        //         );
+
+        //         var atomic_stroke_bounds = AtomicBounds.createRect(&path.bounds);
+        //         atomic_stroke_bounds.extendBy(front_line_writer.bounds);
+        //         atomic_stroke_bounds.extendBy(back_line_writer.bounds);
+        //     }
+        // }
     }
 
     pub fn flattenFill(
