@@ -185,6 +185,13 @@ pub const CpuRasterizer = struct {
                     self.buffers.boundary_fragments,
                 );
 
+                kernel_module.Rasterize.windMainRay(
+                    &pipeline_state,
+                    self.buffers.path_boundary_offsets,
+                    self.buffers.path_bumps,
+                    self.buffers.boundary_fragments,
+                );
+
                 if (self.config.debug_flags.tile) {
                     debugPipelineState(pipeline_state);
                     self.debugTile(pipeline_state);
