@@ -906,30 +906,25 @@ pub const Flatten = struct {
         styles: []const Style,
         transforms: []const TransformF32.Affine,
         path_offsets: []const u32,
-        line_offsets: []const u32,
+        path_line_offsets: []const u32,
         segment_data: []const u8,
         // outputs
         pipeline_state: *PipelineState,
         path_bumps: []std.atomic.Value(u32),
         lines: []LineF32,
     ) void {
-        const segment_size: u32 = @intCast(pipeline_state.segment_indices.size());
-        const path_size: u32 = @intCast(pipeline_state.path_indices.size());
-        for (pipeline_state.run_line_path_indices.start..pipeline_state.run_line_path_indices.end) |path_index| {
-            const projected_path_index = path_index - pipeline_state.path_indices.start;
-            const start_segment_index = path_offsets[projected_path_index] - pipeline_state.segment_indices.start;
-            var end_segment_index: u32 = undefined;
-            if (path_index + 1 < pipeline_state.path_indices.end) {
-                end_segment_index = path_offsets[projected_path_index + 1] - pipeline_state.segment_indices.start;
-            } else {
-                end_segment_index = segment_size - 1;
-            }
+        const path_size: u32 = @intCast(pipeline_state.run_line_path_indices.size());
+        for (0..path_size) |path_index| {
+            const projected_path_index = path_index + pipeline_state.run_line_path_indices.start;
+            const start_segment_index = path_offsets[projected_path_index];
+            const end_segment_index = if (projected_path_index + 1 < pipeline_state.path_indices.size()) path_offsets[projected_path_index + 1] else pipeline_state.segment_indices.end;
+            const segment_size = end_segment_index - start_segment_index;
 
-            const start_fill_offset = if (start_segment_index > 0) line_offsets[start_segment_index - 1] else 0;
-            const start_stroke_offset = if (start_segment_index > 0) line_offsets[segment_size + start_segment_index - 1] else 0;
+            const start_fill_offset = if (path_index > 0) path_line_offsets[path_index - 1] else 0;
+            const start_stroke_offset = if (path_index > 0) path_line_offsets[path_size + path_index - 1] else path_line_offsets[path_size - 1];
 
-            const end_fill_offset = line_offsets[end_segment_index];
-            const end_stroke_offset = line_offsets[segment_size + end_segment_index];
+            const end_fill_offset = path_line_offsets[path_index];
+            const end_stroke_offset = path_line_offsets[path_size + path_index];
 
             var fill_bump = BumpAllocator{
                 .start = start_fill_offset,
@@ -958,7 +953,7 @@ pub const Flatten = struct {
                 .bump = &stroke_bump,
             };
 
-            for (start_segment_index..end_segment_index) |segment_index| {
+            for (0..segment_size) |segment_index| {
                 const segment_metadata = getSegmentMeta(
                     @intCast(segment_index),
                     path_tags,
@@ -1019,8 +1014,7 @@ pub const Flatten = struct {
         calculateRunLinePaths(
             config,
             pipeline_state,
-            path_offsets,
-            line_offsets,
+            path_line_offsets,
         );
     }
 
