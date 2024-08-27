@@ -188,7 +188,7 @@ pub const Buffers = struct {
     path_offsets: []u32,
     path_line_offsets: []u32,
     path_boundary_offsets: []u32,
-    path_bumps: []std.atomic.Value(u32),
+    path_bumps: []u32,
     styles: []Style,
     transforms: []TransformF32.Affine,
     path_tags: []PathTag,
@@ -198,22 +198,6 @@ pub const Buffers = struct {
     boundary_fragments: []BoundaryFragment,
 
     pub fn create(allocator: Allocator, sizes: BufferSizes) !@This() {
-        const path_bumps = try allocator.alloc(
-            std.atomic.Value(u32),
-            sizes.bumpsSize() * 2,
-        );
-        const path_boundary_offsets = try allocator.alloc(
-            u32,
-            sizes.pathsSize() * 2,
-        );
-
-        for (path_bumps) |*bump| {
-            bump.raw = 0;
-        }
-        for (path_boundary_offsets) |*offset| {
-            offset.* = 0;
-        }
-
         return @This(){
             .path_offsets = try allocator.alloc(
                 u32,
@@ -223,8 +207,14 @@ pub const Buffers = struct {
                 u32,
                 sizes.pathsSize() * 2,
             ),
-            .path_boundary_offsets = path_boundary_offsets,
-            .path_bumps = path_bumps,
+            .path_boundary_offsets = try allocator.alloc(
+                u32,
+                sizes.pathsSize() * 2,
+            ),
+            .path_bumps = try allocator.alloc(
+                u32,
+                sizes.bumpsSize() * 2,
+            ),
             .styles = try allocator.alloc(
                 Style,
                 sizes.stylesSize(),
@@ -890,10 +880,11 @@ pub const Flatten = struct {
         segment_data: []const u8,
         // outputs
         pipeline_state: *PipelineState,
-        path_bumps: []std.atomic.Value(u32),
+        path_bumps: []u32,
         path_boundary_offsets: []u32,
         lines: []LineF32,
     ) void {
+        const path_bumps_atomic: []std.atomic.Value(u32) = @as([*]std.atomic.Value(u32), @ptrCast(path_bumps.ptr))[0..path_bumps.len];
         const path_boundary_offsets_atomic: []std.atomic.Value(u32) = @as([*]std.atomic.Value(u32), @ptrCast(path_boundary_offsets.ptr))[0..path_boundary_offsets.len];
         const path_size: u32 = @intCast(pipeline_state.run_line_path_indices.size());
         const projected_path_size: u32 = @intCast(pipeline_state.path_indices.size());
@@ -909,17 +900,20 @@ pub const Flatten = struct {
             const end_fill_offset = path_line_offsets[path_index];
             const end_stroke_offset = path_line_offsets[path_size + path_index];
 
-            path_bumps[projected_path_index].raw = 0;
-            path_bumps[projected_path_size + projected_path_index].raw = 0;
+            path_bumps[projected_path_index] = 0;
+            path_bumps[projected_path_size + projected_path_index] = 0;
+            path_boundary_offsets[projected_path_index] = 0;
+            path_boundary_offsets[projected_path_size + projected_path_index] = 0;
+
             var fill_bump = BumpAllocator{
                 .start = start_fill_offset,
                 .end = end_fill_offset,
-                .offset = &path_bumps[projected_path_index],
+                .offset = &path_bumps_atomic[projected_path_index],
             };
             var stroke_bump = BumpAllocator{
                 .start = start_stroke_offset,
                 .end = end_stroke_offset,
-                .offset = &path_bumps[projected_path_size + projected_path_index],
+                .offset = &path_bumps_atomic[projected_path_size + projected_path_index],
             };
 
             var fill_line_writer = LineWriter{
@@ -2128,9 +2122,10 @@ pub const TileGenerator = struct {
         lines: []const LineF32,
         // output
         pipeline_state: *PipelineState,
-        path_bumps: []std.atomic.Value(u32),
+        path_bumps: []u32,
         boundary_fragments: []BoundaryFragment,
     ) void {
+        const path_bumps_atomic: []std.atomic.Value(u32) = @as([*]std.atomic.Value(u32), @ptrCast(path_bumps.ptr))[0..path_bumps.len];
         const path_size: u32 = @intCast(pipeline_state.run_line_path_indices.size());
         const projected_path_size: u32 = @intCast(pipeline_state.path_indices.size());
         for (0..path_size) |path_index| {
@@ -2146,17 +2141,17 @@ pub const TileGenerator = struct {
             const end_fill_boundary_offset = path_boundary_offsets[path_index];
             const end_stroke_boundary_offset = path_boundary_offsets[path_size + path_index];
 
-            path_bumps[projected_path_index].raw = 0;
-            path_bumps[projected_path_size + projected_path_index].raw = 0;
+            path_bumps[projected_path_index] = 0;
+            path_bumps[projected_path_size + projected_path_index] = 0;
             const fill_bump = BumpAllocator{
                 .start = start_fill_boundary_offset,
                 .end = end_fill_boundary_offset,
-                .offset = &path_bumps[projected_path_index],
+                .offset = &path_bumps_atomic[projected_path_index],
             };
             const stroke_bump = BumpAllocator{
                 .start = start_stroke_boundary_offset,
                 .end = end_stroke_boundary_offset,
-                .offset = &path_bumps[projected_path_size + projected_path_index],
+                .offset = &path_bumps_atomic[projected_path_size + projected_path_index],
             };
 
             for (start_fill_line_offset..end_fill_line_offset) |line_index| {
