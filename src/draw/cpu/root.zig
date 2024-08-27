@@ -220,19 +220,26 @@ pub const CpuRasterizer = struct {
     }
 
     pub fn debugFlatten(self: @This(), pipeline_state: PipelineState) void {
+        const path_line_offsets = self.buffers.path_line_offsets;
+        const path_boundary_offsets = self.buffers.path_boundary_offsets;
+
         std.debug.print("============ Boundary Offsets ============\n", .{});
         const path_size = pipeline_state.run_line_path_indices.size();
+        const projected_path_size = pipeline_state.path_indices.size();
         for (0..path_size) |path_index| {
             const projected_path_index = path_index + pipeline_state.run_boundary_path_indices.start;
-            const start_fill_line_offset = if (path_index > 0) self.buffers.path_line_offsets[projected_path_index - 1] else 0;
-            const start_stroke_line_offset = if (path_index > 0) self.buffers.path_line_offsets[path_size + projected_path_index - 1] else 0;
-            const end_fill_line_offset = self.buffers.path_line_offsets[projected_path_index];
-            const end_stroke_line_offset = self.buffers.path_line_offsets[path_size + projected_path_index];
+            
+            const last_fill_line_offset = path_line_offsets[pipeline_state.run_line_path_indices.end - 1];
+            const start_fill_line_offset = if (path_index > 0) path_line_offsets[projected_path_index - 1] else 0;
+            const start_stroke_line_offset = if (path_index > 0) last_fill_line_offset + path_line_offsets[projected_path_size + projected_path_index - 1] else last_fill_line_offset;
+            const end_fill_line_offset = path_line_offsets[projected_path_index];
+            const end_stroke_line_offset = last_fill_line_offset + path_line_offsets[projected_path_size + projected_path_index];
 
-            const start_fill_boundary_offset = if (path_index > 0) self.buffers.path_boundary_offsets[projected_path_index - 1] else 0;
-            const start_stroke_boundary_offset = if (path_index > 0) self.buffers.path_boundary_offsets[path_size + projected_path_index - 1] else 0;
-            const end_fill_boundary_offset = self.buffers.path_boundary_offsets[projected_path_index];
-            const end_stroke_boundary_offset = self.buffers.path_boundary_offsets[path_size + projected_path_index];
+            const last_fill_boundary_offset = path_boundary_offsets[pipeline_state.run_boundary_path_indices.end - 1];
+            const start_fill_boundary_offset = if (path_index > 0) path_boundary_offsets[projected_path_index - 1] else 0;
+            const start_stroke_boundary_offset = if (path_index > 0) last_fill_boundary_offset + path_boundary_offsets[projected_path_size + projected_path_index - 1] else last_fill_boundary_offset;
+            const end_fill_boundary_offset = path_boundary_offsets[projected_path_index];
+            const end_stroke_boundary_offset = last_fill_boundary_offset + path_boundary_offsets[projected_path_size + projected_path_index];
 
             std.debug.print("Path({}), FillLine({},{}), StrokeLine({},{}), FillBoundary({},{}), StrokeBoundary({},{})\n", .{
                 path_index,
@@ -288,16 +295,16 @@ pub const CpuRasterizer = struct {
                 end_stroke_offset,
             });
 
-            // std.debug.print("-------------------- Fill Boundary Fragments ----------------\n", .{});
-            // const fill_boundary_fragments = self.buffers.boundary_fragments[start_fill_offset..end_fill_offset];
-            // for (fill_boundary_fragments) |boundary_fragment| {
-            //     boundary_fragment.debugPrint();
-            // }
-            // std.debug.print("------------------- Stroke Boundary Fragments ---------------\n", .{});
-            // const stroke_boundary_fragments = self.buffers.boundary_fragments[start_stroke_offset..end_stroke_offset];
-            // for (stroke_boundary_fragments) |boundary_fragment| {
-            //     boundary_fragment.debugPrint();
-            // }
+            std.debug.print("-------------------- Fill Boundary Fragments ----------------\n", .{});
+            const fill_boundary_fragments = self.buffers.boundary_fragments[start_fill_offset..end_fill_offset];
+            for (fill_boundary_fragments) |boundary_fragment| {
+                boundary_fragment.debugPrint();
+            }
+            std.debug.print("------------------- Stroke Boundary Fragments ---------------\n", .{});
+            const stroke_boundary_fragments = self.buffers.boundary_fragments[start_stroke_offset..end_stroke_offset];
+            for (stroke_boundary_fragments) |boundary_fragment| {
+                boundary_fragment.debugPrint();
+            }
             std.debug.print("------------------------------------------------\n", .{});
         }
         std.debug.print("======================================\n", .{});

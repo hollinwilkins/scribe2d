@@ -916,7 +916,6 @@ pub const Flatten = struct {
             const last_fill_offset = path_line_offsets[pipeline_state.run_line_path_indices.end - 1];
             const start_fill_offset = if (path_index > 0) path_line_offsets[projected_path_index - 1] else 0;
             const start_stroke_offset = if (path_index > 0) last_fill_offset + path_line_offsets[projected_path_size + projected_path_index - 1] else last_fill_offset;
-
             const end_fill_offset = path_line_offsets[projected_path_index];
             const end_stroke_offset = last_fill_offset + path_line_offsets[projected_path_size + projected_path_index];
 
@@ -2174,15 +2173,17 @@ pub const TileGenerator = struct {
         for (0..path_size) |path_index| {
             const projected_path_index = path_index + pipeline_state.run_line_path_indices.start;
 
-            const start_fill_line_offset = if (path_index > 0) path_line_offsets[path_index - 1] else 0;
-            const start_stroke_line_offset = if (path_index > 0) path_line_offsets[path_size + path_index - 1] else path_line_offsets[path_size - 1];
-            const end_fill_line_offset = path_line_offsets[path_index];
-            const end_stroke_line_offset = path_line_offsets[path_size + path_index];
+            const last_fill_line_offset = path_line_offsets[pipeline_state.run_line_path_indices.end - 1];
+            const start_fill_line_offset = if (path_index > 0) path_line_offsets[projected_path_index - 1] else 0;
+            const start_stroke_line_offset = if (path_index > 0) last_fill_line_offset + path_line_offsets[projected_path_size + projected_path_index - 1] else last_fill_line_offset;
+            const end_fill_line_offset = path_line_offsets[projected_path_index];
+            const end_stroke_line_offset = last_fill_line_offset + path_line_offsets[projected_path_size + projected_path_index];
 
-            const start_fill_boundary_offset = if (path_index > 0) path_boundary_offsets[path_index - 1] else 0;
-            const start_stroke_boundary_offset = if (path_index > 0) path_boundary_offsets[path_size + path_index - 1] else path_boundary_offsets[path_size - 1];
-            const end_fill_boundary_offset = path_boundary_offsets[path_index];
-            const end_stroke_boundary_offset = path_boundary_offsets[path_size + path_index];
+            const last_fill_boundary_offset = path_boundary_offsets[pipeline_state.run_boundary_path_indices.end - 1];
+            const start_fill_boundary_offset = if (path_index > 0) path_boundary_offsets[projected_path_index - 1] else 0;
+            const start_stroke_boundary_offset = if (path_index > 0) last_fill_boundary_offset + path_boundary_offsets[projected_path_size + projected_path_index - 1] else last_fill_boundary_offset;
+            const end_fill_boundary_offset = path_boundary_offsets[projected_path_index];
+            const end_stroke_boundary_offset = last_fill_boundary_offset + path_boundary_offsets[projected_path_size + projected_path_index];
 
             path_bumps[projected_path_index] = 0;
             path_bumps[projected_path_size + projected_path_index] = 0;
