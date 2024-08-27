@@ -2641,55 +2641,45 @@ pub const Rasterize = struct {
     }
 
     pub fn mask(
-        config: KernelConfig,
+        pipeline_state: *const PipelineState,
+        path_offsets: []const u32,
+        path_boundary_offsets: []const u32,
+        path_bumps: []const u32,
         path_monoids: []const PathMonoid,
-        paths: []const Path,
         styles: []const Style,
-        range: RangeU32,
         boundary_fragments: []BoundaryFragment,
     ) void {
-        for (range.start..range.end) |path_index| {
-            const path = paths[path_index];
-            const path_monoid = path_monoids[path.segment_index];
-            const style = getStyle(styles, path_monoid.style_index);
+        const path_size = pipeline_state.run_boundary_path_indices.size();
+        const projected_path_size = pipeline_state.path_indices.size();
 
-            const fill_merge_range = RangeU32{
-                .start = 0,
-                .end = path.boundary_offset.end_fill_offset - path.boundary_offset.start_fill_offset,
-            };
-            const stroke_merge_range = RangeU32{
-                .start = 0,
-                .end = path.boundary_offset.end_stroke_offset - path.boundary_offset.start_stroke_offset,
-            };
-            const fill_boundary_fragments = boundary_fragments[path.boundary_offset.start_fill_offset..path.boundary_offset.end_fill_offset];
-            const stroke_boundary_fragments = boundary_fragments[path.boundary_offset.start_stroke_offset..path.boundary_offset.end_stroke_offset];
+        for (0..path_size) |path_index| {
+            const projected_path_index = path_index + pipeline_state.run_boundary_path_indices.start;
+            const path_monoid = path_monoids[path_offsets[projected_path_index]];
+            const style = getStyle(styles, pipeline_state.styleIndex(path_monoid.style_index));
 
-            var chunk_iter = fill_merge_range.chunkIterator(config.chunk_size);
-            while (chunk_iter.next()) |chunk| {
-                maskPath(
-                    style.fill.rule,
-                    chunk,
-                    fill_boundary_fragments,
-                );
-            }
+            const last_fill_boundary_offset = path_boundary_offsets[pipeline_state.run_boundary_path_indices.end - 1];
+            const start_fill_boundary_offset = if (path_index > 0) path_boundary_offsets[projected_path_index - 1] else 0;
+            const start_stroke_boundary_offset = if (path_index > 0) last_fill_boundary_offset + path_boundary_offsets[projected_path_size + projected_path_index - 1] else last_fill_boundary_offset;
+            const end_fill_boundary_offset = start_fill_boundary_offset + path_bumps[projected_path_index];
+            const end_stroke_boundary_offset = start_stroke_boundary_offset + path_bumps[projected_path_size + projected_path_index];
 
-            chunk_iter = stroke_merge_range.chunkIterator(config.chunk_size);
-            while (chunk_iter.next()) |chunk| {
-                maskPath(
-                    .non_zero,
-                    chunk,
-                    stroke_boundary_fragments,
-                );
-            }
+            maskPath(
+                style.fill.rule,
+                boundary_fragments[start_fill_boundary_offset..end_fill_boundary_offset],
+            );
+
+            maskPath(
+                .non_zero,
+                boundary_fragments[start_stroke_boundary_offset..end_stroke_boundary_offset],
+            );
         }
     }
 
     pub fn maskPath(
         fill_rule: Style.FillRule,
-        range: RangeU32,
         boundary_fragments: []BoundaryFragment,
     ) void {
-        for (range.start..range.end) |boundary_fragment_index| {
+        for (0..boundary_fragments.len) |boundary_fragment_index| {
             maskFragment(
                 fill_rule,
                 @intCast(boundary_fragment_index),

@@ -192,6 +192,16 @@ pub const CpuRasterizer = struct {
                     self.buffers.boundary_fragments,
                 );
 
+                kernel_module.Rasterize.mask(
+                    &pipeline_state,
+                    self.buffers.path_offsets,
+                    self.buffers.path_boundary_offsets,
+                    self.buffers.path_bumps,
+                    self.buffers.path_monoids,
+                    self.buffers.styles,
+                    self.buffers.boundary_fragments,
+                );
+
                 if (self.config.debug_flags.tile) {
                     debugPipelineState(pipeline_state);
                     self.debugTile(pipeline_state);
