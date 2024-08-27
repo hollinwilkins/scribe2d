@@ -155,6 +155,11 @@ pub const CpuRasterizer = struct {
                     self.buffers.path_boundary_offsets,
                     self.buffers.lines,
                 );
+
+                if (self.config.debug_flags.calculate_lines) {
+                    debugPipelineState(pipeline_state);
+                    self.debugFlatten(pipeline_state);
+                }
             }
         }
     }
@@ -185,6 +190,21 @@ pub const CpuRasterizer = struct {
         for (0..path_size) |path_index| {
             const fill_offset = self.buffers.path_line_offsets[path_index];
             const stroke_offset = self.buffers.path_line_offsets[path_size + path_index];
+            std.debug.print("Path({}), Fill({}), Stroke({})\n", .{
+                path_index,
+                fill_offset,
+                stroke_offset,
+            });
+        }
+        std.debug.print("======================================\n", .{});
+    }
+
+    pub fn debugFlatten(self: @This(), pipeline_state: PipelineState) void {
+        std.debug.print("============ Boundary Offsets ============\n", .{});
+        const path_size = pipeline_state.path_indices.size();
+        for (0..path_size) |path_index| {
+            const fill_offset = self.buffers.path_boundary_offsets[path_index];
+            const stroke_offset = self.buffers.path_boundary_offsets[path_size + path_index];
             std.debug.print("Path({}), Fill({}), Stroke({})\n", .{
                 path_index,
                 fill_offset,

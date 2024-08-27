@@ -131,6 +131,7 @@ pub const Config = struct {
 pub const DebugFlags = struct {
     expand_monoids: bool = false,
     calculate_lines: bool = false,
+    flatten: bool = false,
 };
 
 pub const BufferSizes = struct {
@@ -932,6 +933,7 @@ pub const Flatten = struct {
     ) void {
         const path_boundary_offsets_atomic: []std.atomic.Value(u32) = @as([*]std.atomic.Value(u32), @ptrCast(path_boundary_offsets.ptr))[0..path_boundary_offsets.len];
         const path_size: u32 = @intCast(pipeline_state.run_line_path_indices.size());
+        const projected_path_size: u32 = @intCast(pipeline_state.path_indices.size());
         for (0..path_size) |path_index| {
             const projected_path_index = path_index + pipeline_state.run_line_path_indices.start;
             const start_segment_index = path_offsets[projected_path_index];
@@ -944,34 +946,36 @@ pub const Flatten = struct {
             const end_fill_offset = path_line_offsets[path_index];
             const end_stroke_offset = path_line_offsets[path_size + path_index];
 
+            path_bumps[projected_path_index].raw = 0;
+            path_bumps[projected_path_size + projected_path_index].raw = 0;
             var fill_bump = BumpAllocator{
                 .start = start_fill_offset,
                 .end = end_fill_offset,
-                .offset = &path_bumps[path_index],
+                .offset = &path_bumps[projected_path_index],
             };
             var stroke_bump = BumpAllocator{
                 .start = start_stroke_offset,
                 .end = end_stroke_offset,
-                .offset = &path_bumps[path_size + path_index],
+                .offset = &path_bumps[projected_path_size + projected_path_index],
             };
 
             var fill_line_writer = LineWriter{
                 .lines = lines,
                 .reverse = false,
                 .bump = &fill_bump,
-                .boundary_offset = &path_boundary_offsets_atomic[path_index],
+                .boundary_offset = &path_boundary_offsets_atomic[projected_path_index],
             };
             var front_stroke_line_writer = LineWriter{
                 .lines = lines,
                 .reverse = false,
                 .bump = &stroke_bump,
-                .boundary_offset = &path_boundary_offsets_atomic[path_size + path_index],
+                .boundary_offset = &path_boundary_offsets_atomic[projected_path_size + projected_path_index],
             };
             var back_stroke_line_writer = LineWriter{
                 .lines = lines,
                 .reverse = true,
                 .bump = &stroke_bump,
-                .boundary_offset = &path_boundary_offsets_atomic[path_size + path_index],
+                .boundary_offset = &path_boundary_offsets_atomic[projected_path_size + projected_path_index],
             };
 
             for (0..segment_size) |segment_index| {
@@ -1772,14 +1776,14 @@ pub fn calculateRunLinePaths(
 ) void {
     const path_size = pipeline_state.path_indices.size();
     const start_path_offset = 0;
-    const start_fill_line_offset = path_line_offsets[start_path_offset];
-    const start_stroke_line_offset = path_line_offsets[path_size + start_path_offset];
+    const start_fill_line_offset = if (start_path_offset > 0) path_line_offsets[start_path_offset - 1] else 0;
+    const start_stroke_line_offset = if (start_path_offset > 0) path_line_offsets[path_size + start_path_offset - 1] else path_line_offsets[path_size + start_path_offset];
     var end_path_offset: u32 = start_path_offset;
 
     var next_path_offset = end_path_offset + 1;
-    while (next_path_offset < path_size) {
-        const next_fill_line_offset = path_line_offsets[next_path_offset];
-        const next_stroke_line_offset = path_line_offsets[next_path_offset - pipeline_state.path_indices.start];
+    while (next_path_offset <= path_size) {
+        const next_fill_line_offset = path_line_offsets[next_path_offset - 1];
+        const next_stroke_line_offset = path_line_offsets[path_size + next_path_offset - 1];
         const lines = (next_fill_line_offset - start_fill_line_offset) + (next_stroke_line_offset - start_stroke_line_offset);
 
         if (lines > config.buffer_sizes.linesSize()) {

@@ -87,6 +87,7 @@ pub fn main() !void {
     };
     config.debug_flags.expand_monoids = true;
     config.debug_flags.calculate_lines = true;
+    config.debug_flags.flatten = true;
     var rasterizer = try draw.cpu.CpuRasterizer.init(allocator, &half_planes, config);
     defer rasterizer.deinit();
 
