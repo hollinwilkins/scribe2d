@@ -160,6 +160,16 @@ pub const CpuRasterizer = struct {
                     debugPipelineState(pipeline_state);
                     self.debugFlatten(pipeline_state);
                 }
+
+                kernel_module.TileGenerator.tile(
+                    self.half_planes,
+                    self.buffers.path_line_offsets,
+                    self.buffers.path_boundary_offsets,
+                    self.buffers.lines,
+                    &pipeline_state,
+                    self.buffers.path_bumps,
+                    self.buffers.boundary_fragments,
+                );
             }
         }
     }

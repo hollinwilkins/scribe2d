@@ -278,6 +278,7 @@ pub const PipelineState = struct {
     transform_indices: RangeI32 = RangeI32{},
     segment_data_indices: RangeU32 = RangeU32{},
     run_line_path_indices: RangeU32 = RangeU32{},
+    run_boundary_path_indices: RangeU32 = RangeU32{},
 
     pub fn segmentIndex(self: @This(), segment_index: u32) u32 {
         return segment_index - self.segment_indices.start;
@@ -877,44 +878,6 @@ pub const LineAllocator = struct {
     }
 };
 
-pub const BoundaryAllocator = struct {
-    pub fn intersect(
-        lines: []const LineF32,
-        range: RangeU32,
-        // outputs
-        intersection_offsets: []IntersectionOffset,
-    ) void {
-        for (range.start..range.end) |line_index| {
-            const line = &lines[line_index];
-            const intersection_offset = &intersection_offsets[line_index];
-            intersection_offset.* = IntersectionOffset{};
-
-            allocatorBoundaryFragments(line, intersection_offset);
-        }
-    }
-
-    pub fn allocatorBoundaryFragments(
-        line: *const LineF32,
-        intersection_offset: *IntersectionOffset,
-    ) void {
-        var intersections: u32 = 0;
-        const start_point: PointF32 = line.p0;
-        const end_point: PointF32 = line.p1;
-
-        const min_x = start_point.x < end_point.x;
-        const min_y = start_point.y < end_point.y;
-        const start_x: f32 = if (min_x) @floor(start_point.x) else @ceil(start_point.x);
-        const end_x: f32 = if (min_x) @ceil(end_point.x) else @floor(end_point.x);
-        const start_y: f32 = if (min_y) @floor(start_point.y) else @ceil(start_point.y);
-        const end_y: f32 = if (min_y) @ceil(end_point.y) else @floor(end_point.y);
-
-        intersections += @abs(@as(i32, @intFromFloat(start_x - end_x)));
-        intersections += @abs(@as(i32, @intFromFloat(start_y - end_y)));
-
-        intersection_offset.offset += intersections + 2;
-    }
-};
-
 pub const Flatten = struct {
     pub fn flatten(
         config: Config,
@@ -1040,6 +1003,12 @@ pub const Flatten = struct {
             config,
             pipeline_state,
             path_line_offsets,
+        );
+
+        calculateRunBoundaryPaths(
+            config,
+            pipeline_state,
+            path_boundary_offsets,
         );
     }
 
@@ -1797,6 +1766,34 @@ pub fn calculateRunLinePaths(
     pipeline_state.run_line_path_indices = RangeU32.create(start_path_offset, end_path_offset);
 }
 
+pub fn calculateRunBoundaryPaths(
+    config: Config,
+    pipeline_state: *PipelineState,
+    path_boundary_offsets: []const u32,
+) void {
+    const path_size = pipeline_state.path_indices.size();
+    const start_path_offset = 0;
+    const start_fill_line_offset = if (start_path_offset > 0) path_boundary_offsets[start_path_offset - 1] else 0;
+    const start_stroke_line_offset = if (start_path_offset > 0) path_boundary_offsets[path_size + start_path_offset - 1] else path_boundary_offsets[path_size + start_path_offset];
+    var end_path_offset: u32 = start_path_offset;
+
+    var next_path_offset = end_path_offset + 1;
+    while (next_path_offset <= path_size) {
+        const next_fill_line_offset = path_boundary_offsets[next_path_offset - 1];
+        const next_stroke_line_offset = path_boundary_offsets[path_size + next_path_offset - 1];
+        const lines = (next_fill_line_offset - start_fill_line_offset) + (next_stroke_line_offset - start_stroke_line_offset);
+
+        if (lines > config.buffer_sizes.boundariesSize()) {
+            break;
+        }
+
+        end_path_offset = next_path_offset;
+        next_path_offset += 1;
+    }
+
+    pipeline_state.run_boundary_path_indices = RangeU32.create(start_path_offset, end_path_offset);
+}
+
 pub fn getArcPoints(config: KernelConfig, path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) ArcF32 {
     const sd = SegmentData{
         .segment_data = segment_data,
@@ -2126,20 +2123,61 @@ pub const LineWriter = struct {
 pub const TileGenerator = struct {
     pub fn tile(
         half_planes: *const HalfPlanesU16,
+        path_line_offsets: []const u32,
+        path_boundary_offsets: []const u32,
         lines: []const LineF32,
-        range: RangeU32,
         // output
-        bump: BumpAllocator,
+        pipeline_state: *PipelineState,
+        path_bumps: []std.atomic.Value(u32),
         boundary_fragments: []BoundaryFragment,
     ) void {
-        for (range.start..range.end) |line_index| {
-            tileLine(
-                half_planes,
-                @intCast(line_index),
-                lines,
-                bump,
-                boundary_fragments,
-            );
+        const path_size: u32 = @intCast(pipeline_state.run_line_path_indices.size());
+        const projected_path_size: u32 = @intCast(pipeline_state.path_indices.size());
+        for (0..path_size) |path_index| {
+            const projected_path_index = path_index + pipeline_state.run_line_path_indices.start;
+
+            const start_fill_line_offset = if (path_index > 0) path_line_offsets[path_index - 1] else 0;
+            const start_stroke_line_offset = if (path_index > 0) path_line_offsets[path_size + path_index - 1] else path_line_offsets[path_size - 1];
+            const end_fill_line_offset = path_line_offsets[path_index];
+            const end_stroke_line_offset = path_line_offsets[path_size + path_index];
+
+            const start_fill_boundary_offset = if (path_index > 0) path_boundary_offsets[path_index - 1] else 0;
+            const start_stroke_boundary_offset = if (path_index > 0) path_boundary_offsets[path_size + path_index - 1] else path_boundary_offsets[path_size - 1];
+            const end_fill_boundary_offset = path_boundary_offsets[path_index];
+            const end_stroke_boundary_offset = path_boundary_offsets[path_size + path_index];
+
+            path_bumps[projected_path_index].raw = 0;
+            path_bumps[projected_path_size + projected_path_index].raw = 0;
+            const fill_bump = BumpAllocator{
+                .start = start_fill_boundary_offset,
+                .end = end_fill_boundary_offset,
+                .offset = &path_bumps[projected_path_index],
+            };
+            const stroke_bump = BumpAllocator{
+                .start = start_stroke_boundary_offset,
+                .end = end_stroke_boundary_offset,
+                .offset = &path_bumps[projected_path_size + projected_path_index],
+            };
+
+            for (start_fill_line_offset..end_fill_line_offset) |line_index| {
+                tileLine(
+                    half_planes,
+                    @intCast(line_index),
+                    lines,
+                    fill_bump,
+                    boundary_fragments,
+                );
+            }
+
+            for (start_stroke_line_offset..end_stroke_line_offset) |line_index| {
+                tileLine(
+                    half_planes,
+                    @intCast(line_index),
+                    lines,
+                    stroke_bump,
+                    boundary_fragments,
+                );
+            }
         }
     }
 
