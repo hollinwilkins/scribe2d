@@ -1007,68 +1007,12 @@ pub const Flatten = struct {
             }
         }
 
-        // const segment_size = pipeline_state.segment_indices.size();
-        // for (pipeline_state.segment_indices.start..pipeline_state.segment_indices.end) |segment_index| {
-
-        //     if (style.isFill()) {
-        //         var fill_bump = BumpAllocator{
-        //             .start = path.line_offset.start_fill_offset,
-        //             .end = path.line_offset.end_fill_offset,
-        //             .offset = &path.fill_bump,
-        //         };
-        //         var line_writer = LineWriter{
-        //             .lines = lines,
-        //             .reverse = false,
-        //             .bump = &fill_bump,
-        //         };
-
-        //         flattenFill(
-        //             config,
-        //             segment_metadata,
-        //             path_tags,
-        //             transforms,
-        //             segment_data,
-        //             &line_writer,
-        //         );
-
-        //         var atomic_fill_bounds = AtomicBounds.createRect(&path.bounds);
-        //         atomic_fill_bounds.extendBy(line_writer.bounds);
-        //     }
-
-        //     if (style.isStroke()) {
-        //         var stroke_bump = BumpAllocator{
-        //             .start = path.line_offset.start_stroke_offset,
-        //             .end = path.line_offset.end_stroke_offset,
-        //             .offset = &path.stroke_bump,
-        //         };
-        //         var front_line_writer = LineWriter{
-        //             .lines = lines,
-        //             .reverse = false,
-        //             .bump = &stroke_bump,
-        //         };
-        //         var back_line_writer = LineWriter{
-        //             .lines = lines,
-        //             .reverse = true,
-        //             .bump = &stroke_bump,
-        //         };
-
-        //         flattenStroke(
-        //             config,
-        //             style.stroke,
-        //             segment_metadata,
-        //             path_tags,
-        //             path_monoids,
-        //             transforms,
-        //             segment_data,
-        //             &front_line_writer,
-        //             &back_line_writer,
-        //         );
-
-        //         var atomic_stroke_bounds = AtomicBounds.createRect(&path.bounds);
-        //         atomic_stroke_bounds.extendBy(front_line_writer.bounds);
-        //         atomic_stroke_bounds.extendBy(back_line_writer.bounds);
-        //     }
-        // }
+        calculateRunLinePaths(
+            config,
+            pipeline_state,
+            path_offsets,
+            line_offsets,
+        );
     }
 
     pub fn flattenFill(
