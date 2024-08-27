@@ -2474,23 +2474,33 @@ pub const Rasterize = struct {
     const GRID_POINT_TOLERANCE: f32 = 1e-6;
 
     pub fn boundaryFinish(
-        range: RangeU32,
-        paths: []Path,
+        pipeline_state: *const PipelineState,
+        path_boundary_offsets: []const u32,
+        path_bumps: []const u32,
         boundary_fragments: []BoundaryFragment,
     ) void {
-        for (range.start..range.end) |path_index| {
-            const path = paths[path_index];
+        const path_size = pipeline_state.run_boundary_path_indices.size();
+        const projected_path_size = pipeline_state.path_indices.size();
+
+        for (0..path_size) |path_index| {
+            const projected_path_index = path_index + pipeline_state.run_boundary_path_indices.start;
+
+            const last_fill_boundary_offset = path_boundary_offsets[pipeline_state.run_boundary_path_indices.end - 1];
+            const start_fill_boundary_offset = if (path_index > 0) path_boundary_offsets[projected_path_index - 1] else 0;
+            const start_stroke_boundary_offset = if (path_index > 0) last_fill_boundary_offset + path_boundary_offsets[projected_path_size + projected_path_index - 1] else last_fill_boundary_offset;
+            const end_fill_boundary_offset = start_fill_boundary_offset + path_bumps[projected_path_index];
+            const end_stroke_boundary_offset = start_stroke_boundary_offset + path_bumps[projected_path_size + projected_path_index];
 
             std.mem.sort(
                 BoundaryFragment,
-                boundary_fragments[path.boundary_offset.start_fill_offset..path.boundary_offset.end_fill_offset],
+                boundary_fragments[start_fill_boundary_offset..end_fill_boundary_offset],
                 @as(u32, 0),
                 boundaryFragmentLessThan,
             );
 
             std.mem.sort(
                 BoundaryFragment,
-                boundary_fragments[path.boundary_offset.start_stroke_offset..path.boundary_offset.end_stroke_offset],
+                boundary_fragments[start_stroke_boundary_offset..end_stroke_boundary_offset],
                 @as(u32, 0),
                 boundaryFragmentLessThan,
             );
