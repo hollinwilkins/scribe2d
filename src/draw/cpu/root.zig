@@ -141,7 +141,18 @@ pub const CpuRasterizer = struct {
                     self.debugCalculateLines(pipeline_state, encoding);
                 }
 
-
+                kernel_module.Flatten.flatten(
+                    self.config,
+                    self.buffers.path_tags,
+                    self.buffers.path_monoids,
+                    self.buffers.styles,
+                    self.buffers.transforms,
+                    self.buffers.path_offsets,
+                    self.buffers.offsets,
+                    self.buffers.segment_data,
+                    &pipeline_state,
+                    self.buffers.lines,
+                );
             }
         }
     }

@@ -896,7 +896,7 @@ pub const Flatten = struct {
         path_monoids: []const PathMonoid,
         styles: []const Style,
         transforms: []const TransformF32.Affine,
-        path_offsets: []const PathOffset,
+        path_offsets: []const u32,
         line_offsets: []const u32,
         segment_data: []const u8,
         // outputs
@@ -904,45 +904,57 @@ pub const Flatten = struct {
         lines: []LineF32,
     ) void {
         _ = config;
-        _ = path_tags;
-        _ = path_monoids;
-        _ = styles;
-        _ = transforms;
-        _ = line_offsets;
         _ = segment_data;
         _ = lines;
+
+        const segment_size: u32 = @intCast(pipeline_state.segment_indices.size());
         for (pipeline_state.run_line_path_indices.start..pipeline_state.run_line_path_indices.end) |path_index| {
             const projected_path_index = path_index - pipeline_state.path_indices.start;
             const start_segment_index = path_offsets[projected_path_index] - pipeline_state.segment_indices.start;
-            _ = start_segment_index;
             var end_segment_index: u32 = undefined;
             if (path_index + 1 < pipeline_state.path_indices.end) {
                 end_segment_index = path_offsets[projected_path_index + 1] - pipeline_state.segment_indices.start;
             } else {
-                end_segment_index = pipeline_state.segment_indices.size() - 1;
+                end_segment_index = segment_size - 1;
+            }
+
+            const start_fill_offset = if (start_segment_index > 0) line_offsets[start_segment_index - 1] else 0;
+            const start_stroke_offset = if (start_segment_index > 0) line_offsets[segment_size + start_segment_index - 1] else 0;
+
+            const end_fill_offset = line_offsets[end_segment_index];
+            const end_stroke_offset = line_offsets[segment_size + end_segment_index];
+
+            for (start_segment_index..end_segment_index) |segment_index| {
+                const segment_metadata = getSegmentMeta(
+                    @intCast(segment_index),
+                    path_tags,
+                    path_monoids,
+                );
+                const style = getStyle(
+                    styles,
+                    pipeline_state.styleIndex(segment_metadata.path_monoid.style_index),
+                );
+                const transform = getTransform(
+                    transforms,
+                    pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
+                );
+
+                _ = style;
+                _ = transform;
+
+                std.debug.print("Flatten: Path({}), Segment({}), Fill({},{}), Stroke({},{})\n", .{
+                    path_index,
+                    segment_index,
+                    start_fill_offset,
+                    end_fill_offset,
+                    start_stroke_offset,
+                    end_stroke_offset,
+                });
             }
         }
 
         // const segment_size = pipeline_state.segment_indices.size();
         // for (pipeline_state.segment_indices.start..pipeline_state.segment_indices.end) |segment_index| {
-        //     const projected_segment_index = pipeline_state.segmentIndex(@intCast(segment_index));
-        //     const segment_metadata = getSegmentMeta(
-        //         projected_segment_index,
-        //         path_tags,
-        //         path_monoids,
-        //     );
-        //     const style = getStyle(
-        //         styles,
-        //         pipeline_state.styleIndex(segment_metadata.path_monoid.style_index),
-        //     );
-        //     const transform = getTransform(
-        //         transforms,
-        //         pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
-        //     );
-        //     const fill_offset = &line_offsets[projected_segment_index * 2];
-        //     fill_offset.* = 0;
-        //     const stroke_offset = &line_offsets[projected_segment_index * 2 + 1];
-        //     stroke_offset.* = 0;
 
         //     if (style.isFill()) {
         //         var fill_bump = BumpAllocator{
