@@ -203,16 +203,17 @@ pub const CpuRasterizer = struct {
         std.debug.print("============ Line Offsets ============\n", .{});
         const path_size = pipeline_state.path_indices.size();
         for (0..path_size) |path_index| {
-            const start_fill_offset = if (path_index > 0) self.buffers.path_line_offsets[path_index - 1] else 0;
-            const start_stroke_offset = if (path_index > 0) self.buffers.path_line_offsets[path_size + path_index - 1] else 0;
-            const end_fill_offset = self.buffers.path_line_offsets[path_index];
-            const end_stroke_offset = self.buffers.path_line_offsets[path_size + path_index];
+            const start_fill_line_offset = if (path_index > 0) self.buffers.path_line_offsets[path_index - 1] else 0;
+            const start_stroke_line_offset = if (path_index > 0) self.buffers.path_line_offsets[path_size + path_index - 1] else self.buffers.path_line_offsets[path_size - 1];
+            const end_fill_line_offset = self.buffers.path_line_offsets[path_index];
+            const end_stroke_line_offset = self.buffers.path_line_offsets[path_size + path_index];
+
             std.debug.print("Path({}), Fill({},{}), Stroke({},{})\n", .{
                 path_index,
-                start_fill_offset,
-                end_fill_offset,
-                start_stroke_offset,
-                end_stroke_offset,
+                start_fill_line_offset,
+                end_fill_line_offset,
+                start_stroke_line_offset,
+                end_stroke_line_offset,
             });
         }
         std.debug.print("======================================\n", .{});

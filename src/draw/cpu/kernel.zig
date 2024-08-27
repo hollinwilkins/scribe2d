@@ -374,6 +374,7 @@ pub const LineAllocator = struct {
                 if (style.isFill()) {
                     flattenFill(
                         config,
+                        pipeline_state,
                         segment_metadata,
                         transform,
                         path_tags,
@@ -385,6 +386,7 @@ pub const LineAllocator = struct {
                 if (style.isStroke()) {
                     flattenStroke(
                         config,
+                        pipeline_state,
                         style.stroke,
                         segment_metadata,
                         transform,
@@ -418,6 +420,7 @@ pub const LineAllocator = struct {
 
     pub fn flattenFill(
         config: Config,
+        pipeline_state: *const PipelineState,
         segment_metadata: SegmentMeta,
         transform: TransformF32.Affine,
         path_tags: []const PathTag,
@@ -450,6 +453,7 @@ pub const LineAllocator = struct {
                         // we need to draw the final fill line
                         // TODO: should be LineF32 or LineI16
                         cubic_points = getCubicPointsRaw(
+                            pipeline_state,
                             .line_f32,
                             segment_metadata.path_monoid.segment_offset - @sizeOf(PointF32),
                             segment_data,
@@ -459,6 +463,7 @@ pub const LineAllocator = struct {
                     }
                 } else {
                     cubic_points = getCubicPoints(
+                        pipeline_state,
                         segment_metadata,
                         segment_data,
                     );
@@ -480,6 +485,7 @@ pub const LineAllocator = struct {
 
     pub fn flattenStroke(
         config: Config,
+        pipeline_state: *const PipelineState,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
         transform: TransformF32.Affine,
@@ -510,6 +516,7 @@ pub const LineAllocator = struct {
 
                 flattenStrokeEuler(
                     config.kernel_config,
+                    pipeline_state,
                     stroke,
                     segment_metadata,
                     transform,
@@ -662,6 +669,7 @@ pub const LineAllocator = struct {
 
     fn flattenStrokeEuler(
         config: KernelConfig,
+        pipeline_state: *const PipelineState,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
         transform: TransformF32.Affine,
@@ -682,6 +690,7 @@ pub const LineAllocator = struct {
         }
 
         const cubic_points = getCubicPoints(
+            pipeline_state,
             segment_metadata,
             segment_data,
         ).affineTransform(transform);
@@ -699,6 +708,7 @@ pub const LineAllocator = struct {
         var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = readNeighborSegment(
             config,
+            pipeline_state,
             next_segment_metadata,
             transform,
             segment_data,
@@ -903,11 +913,12 @@ pub const Flatten = struct {
             const end_segment_index = if (projected_path_index + 1 < pipeline_state.path_indices.size()) path_offsets[projected_path_index + 1] else pipeline_state.segment_indices.end;
             const segment_size = end_segment_index - start_segment_index;
 
-            const start_fill_offset = if (path_index > 0) path_line_offsets[path_index - 1] else 0;
-            const start_stroke_offset = if (path_index > 0) path_line_offsets[path_size + path_index - 1] else path_line_offsets[path_size - 1];
+            const last_fill_offset = path_line_offsets[pipeline_state.run_line_path_indices.end - 1];
+            const start_fill_offset = if (path_index > 0) path_line_offsets[projected_path_index - 1] else 0;
+            const start_stroke_offset = if (path_index > 0) last_fill_offset + path_line_offsets[projected_path_size + projected_path_index - 1] else last_fill_offset;
 
-            const end_fill_offset = path_line_offsets[path_index];
-            const end_stroke_offset = path_line_offsets[path_size + path_index];
+            const end_fill_offset = path_line_offsets[projected_path_index];
+            const end_stroke_offset = last_fill_offset + path_line_offsets[projected_path_size + projected_path_index];
 
             path_bumps[projected_path_index] = 0;
             path_bumps[projected_path_size + projected_path_index] = 0;
@@ -962,6 +973,7 @@ pub const Flatten = struct {
                 if (style.isFill()) {
                     flattenFill(
                         config.kernel_config,
+                        pipeline_state,
                         segment_metadata,
                         path_tags,
                         transform,
@@ -976,6 +988,7 @@ pub const Flatten = struct {
                 if (style.isStroke()) {
                     flattenStroke(
                         config.kernel_config,
+                        pipeline_state,
                         style.stroke,
                         segment_metadata,
                         path_tags,
@@ -1017,6 +1030,7 @@ pub const Flatten = struct {
 
     pub fn flattenFill(
         config: KernelConfig,
+        pipeline_state: *const PipelineState,
         segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
         transform: TransformF32.Affine,
@@ -1031,6 +1045,7 @@ pub const Flatten = struct {
                     // we need to draw the final fill line
                     // TODO: should be LineF32 or LineI16
                     cubic_points = getCubicPointsRaw(
+                        pipeline_state,
                         .line_f32,
                         segment_metadata.path_monoid.segment_offset - @sizeOf(PointF32),
                         segment_data,
@@ -1040,6 +1055,7 @@ pub const Flatten = struct {
                 }
             } else {
                 cubic_points = getCubicPoints(
+                    pipeline_state,
                     segment_metadata,
                     segment_data,
                 );
@@ -1060,6 +1076,7 @@ pub const Flatten = struct {
 
     pub fn flattenStroke(
         config: KernelConfig,
+        pipeline_state: *const PipelineState,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
@@ -1092,6 +1109,7 @@ pub const Flatten = struct {
 
                 flattenStrokeEuler(
                     config,
+                    pipeline_state,
                     stroke,
                     segment_metadata,
                     path_tags,
@@ -1242,6 +1260,7 @@ pub const Flatten = struct {
 
     fn flattenStrokeEuler(
         config: KernelConfig,
+        pipeline_state: *const PipelineState,
         stroke: Style.Stroke,
         segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
@@ -1258,6 +1277,7 @@ pub const Flatten = struct {
         );
 
         const cubic_points = getCubicPoints(
+            pipeline_state,
             segment_metadata,
             segment_data,
         ).affineTransform(transform);
@@ -1275,6 +1295,7 @@ pub const Flatten = struct {
         var tan_prev = cubicEndTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);
         var tan_next = readNeighborSegment(
             config,
+            pipeline_state,
             next_segment_metadata,
             transform,
             segment_data,
@@ -1863,23 +1884,34 @@ pub fn getArcPoints(config: KernelConfig, path_tag: PathTag, path_monoid: PathMo
     return arc_points;
 }
 
-pub fn getCubicPoints(segment_metadata: SegmentMeta, segment_data: []const u8) CubicBezierF32 {
+pub fn getCubicPoints(
+    pipeline_state: *const PipelineState,
+    segment_metadata: SegmentMeta,
+    segment_data: []const u8,
+) CubicBezierF32 {
     return getCubicPointsRaw(
+        pipeline_state,
         segment_metadata.path_tag.segment.kind,
         segment_metadata.path_monoid.segment_offset,
         segment_data,
     );
 }
 
-pub fn getCubicPointsRaw(kind: PathTag.Kind, offset: u32, segment_data: []const u8) CubicBezierF32 {
+pub fn getCubicPointsRaw(
+    pipeline_state: *const PipelineState,
+    kind: PathTag.Kind,
+    offset: u32,
+    segment_data: []const u8,
+) CubicBezierF32 {
     var cubic_points: CubicBezierF32 = undefined;
     const sd = SegmentData{
         .segment_data = segment_data,
     };
+    const offset2 = offset - pipeline_state.segment_data_indices.start;
 
     switch (kind) {
         .line_f32 => {
-            const line = sd.getSegmentOffset(LineF32, offset);
+            const line = sd.getSegmentOffset(LineF32, offset2);
             cubic_points.p0 = line.p0;
             cubic_points.p1 = line.p1;
             cubic_points.p3 = cubic_points.p1;
@@ -1887,7 +1919,7 @@ pub fn getCubicPointsRaw(kind: PathTag.Kind, offset: u32, segment_data: []const 
             cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
         },
         .line_i16 => {
-            const line = sd.getSegmentOffset(LineI16, offset).cast(f32);
+            const line = sd.getSegmentOffset(LineI16, offset2).cast(f32);
             cubic_points.p0 = line.p0;
             cubic_points.p1 = line.p1;
             cubic_points.p3 = cubic_points.p1;
@@ -1895,7 +1927,7 @@ pub fn getCubicPointsRaw(kind: PathTag.Kind, offset: u32, segment_data: []const 
             cubic_points.p1 = cubic_points.p0.lerp(cubic_points.p3, 1.0 / 3.0);
         },
         .quadratic_bezier_f32 => {
-            const qb = sd.getSegmentOffset(QuadraticBezierF32, offset);
+            const qb = sd.getSegmentOffset(QuadraticBezierF32, offset2);
             cubic_points.p0 = qb.p0;
             cubic_points.p1 = qb.p1;
             cubic_points.p2 = qb.p2;
@@ -1904,7 +1936,7 @@ pub fn getCubicPointsRaw(kind: PathTag.Kind, offset: u32, segment_data: []const 
             cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
         },
         .quadratic_bezier_i16 => {
-            const qb = sd.getSegmentOffset(QuadraticBezierI16, offset).cast(f32);
+            const qb = sd.getSegmentOffset(QuadraticBezierI16, offset2).cast(f32);
             cubic_points.p0 = qb.p0;
             cubic_points.p1 = qb.p1;
             cubic_points.p2 = qb.p2;
@@ -1913,10 +1945,10 @@ pub fn getCubicPointsRaw(kind: PathTag.Kind, offset: u32, segment_data: []const 
             cubic_points.p1 = cubic_points.p1.lerp(cubic_points.p0, 1.0 / 3.0);
         },
         .cubic_bezier_f32 => {
-            cubic_points = sd.getSegmentOffset(CubicBezierF32, offset);
+            cubic_points = sd.getSegmentOffset(CubicBezierF32, offset2);
         },
         .cubic_bezier_i16 => {
-            cubic_points = sd.getSegmentOffset(CubicBezierI16, offset).cast(f32);
+            cubic_points = sd.getSegmentOffset(CubicBezierI16, offset2).cast(f32);
         },
         else => @panic("Cannot get cubic points for Arc"),
     }
@@ -2020,6 +2052,7 @@ pub fn evaluateCubicAndDeriv(p0: PointF32, p1: PointF32, p2: PointF32, p3: Point
 
 fn readNeighborSegment(
     config: KernelConfig,
+    pipeline_state: *const PipelineState,
     segment_metadata: SegmentMeta,
     transform: TransformF32.Affine,
     segment_data: []const u8,
@@ -2028,6 +2061,7 @@ fn readNeighborSegment(
         @panic("Arc not yet supported.");
     } else {
         const cubic_points = getCubicPoints(
+            pipeline_state,
             segment_metadata,
             segment_data,
         ).affineTransform(transform);
