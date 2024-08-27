@@ -136,6 +136,7 @@ pub const DebugFlags = struct {
 pub const BufferSizes = struct {
     pub const DEFAULT_PATHS_SIZE: u32 = 1;
     pub const DEFAULT_LINES_SIZE: u32 = 60;
+    pub const DEFAULT_BOUNDARIES_SIZE: u32 = 4096 * 4096;
     pub const DEFAULT_SEGMENTS_SIZE: u32 = 10;
     pub const DEFAULT_SEGMENT_DATA_SIZE: u32 = DEFAULT_SEGMENTS_SIZE * @sizeOf(CubicBezierF32);
 
@@ -143,6 +144,7 @@ pub const BufferSizes = struct {
     path_tags_size: u32 = DEFAULT_SEGMENTS_SIZE,
     segment_data_size: u32 = DEFAULT_SEGMENT_DATA_SIZE,
     lines_size: u32 = DEFAULT_LINES_SIZE,
+    boundaries_size: u32 = DEFAULT_BOUNDARIES_SIZE,
 
     pub fn pathsSize(self: @This()) u32 {
         return self.paths_size;
@@ -175,6 +177,10 @@ pub const BufferSizes = struct {
     pub fn linesSize(self: @This()) u32 {
         return self.lines_size;
     }
+
+    pub fn boundariesSize(self: @This()) u32 {
+        return self.boundaries_size;
+    }
 };
 
 pub const Buffers = struct {
@@ -188,15 +194,23 @@ pub const Buffers = struct {
     path_monoids: []PathMonoid,
     segment_data: []u8,
     lines: []LineF32,
+    boundary_fragments: []BoundaryFragment,
 
     pub fn create(allocator: Allocator, sizes: BufferSizes) !@This() {
         const path_bumps = try allocator.alloc(
             std.atomic.Value(u32),
             sizes.bumpsSize() * 2,
         );
+        const path_boundary_offsets = try allocator.alloc(
+            u32,
+            sizes.pathsSize() * 2,
+        );
 
         for (path_bumps) |*bump| {
             bump.raw = 0;
+        }
+        for (path_boundary_offsets) |*offset| {
+            offset.* = 0;
         }
 
         return @This(){
@@ -208,10 +222,7 @@ pub const Buffers = struct {
                 u32,
                 sizes.pathsSize() * 2,
             ),
-            .path_boundary_offsets = try allocator.alloc(
-                u32,
-                sizes.pathsSize() * 2,
-            ),
+            .path_boundary_offsets = path_boundary_offsets,
             .path_bumps = path_bumps,
             .styles = try allocator.alloc(
                 Style,
@@ -237,6 +248,10 @@ pub const Buffers = struct {
                 LineF32,
                 sizes.linesSize(),
             ),
+            .boundary_fragments = try allocator.alloc(
+                BoundaryFragment,
+                sizes.boundariesSize(),
+            ),
         };
     }
 
@@ -251,6 +266,7 @@ pub const Buffers = struct {
         allocator.free(self.path_monoids);
         allocator.free(self.segment_data);
         allocator.free(self.lines);
+        allocator.free(self.boundary_fragments);
     }
 };
 
@@ -911,8 +927,10 @@ pub const Flatten = struct {
         // outputs
         pipeline_state: *PipelineState,
         path_bumps: []std.atomic.Value(u32),
+        path_boundary_offsets: []u32,
         lines: []LineF32,
     ) void {
+        const path_boundary_offsets_atomic: []std.atomic.Value(u32) = @as([*]std.atomic.Value(u32), @ptrCast(path_boundary_offsets.ptr))[0..path_boundary_offsets.len];
         const path_size: u32 = @intCast(pipeline_state.run_line_path_indices.size());
         for (0..path_size) |path_index| {
             const projected_path_index = path_index + pipeline_state.run_line_path_indices.start;
@@ -941,16 +959,19 @@ pub const Flatten = struct {
                 .lines = lines,
                 .reverse = false,
                 .bump = &fill_bump,
+                .boundary_offset = &path_boundary_offsets_atomic[path_index],
             };
             var front_stroke_line_writer = LineWriter{
                 .lines = lines,
                 .reverse = false,
                 .bump = &stroke_bump,
+                .boundary_offset = &path_boundary_offsets_atomic[path_size + path_index],
             };
             var back_stroke_line_writer = LineWriter{
                 .lines = lines,
                 .reverse = true,
                 .bump = &stroke_bump,
+                .boundary_offset = &path_boundary_offsets_atomic[path_size + path_index],
             };
 
             for (0..segment_size) |segment_index| {
@@ -2059,6 +2080,7 @@ pub const LineSum = struct {
 pub const LineWriter = struct {
     lines: []LineF32,
     bump: *BumpAllocator,
+    boundary_offset: *std.atomic.Value(u32),
     reverse: bool,
     bounds: RectF32 = RectF32.NONE,
 
@@ -2069,8 +2091,31 @@ pub const LineWriter = struct {
             self.lines[self.bump.bump(1)] = line;
         }
 
+        self.allocatorBoundaryFragments(line);
         self.bounds.extendByInPlace(line.p0);
         self.bounds.extendByInPlace(line.p1);
+    }
+
+    pub fn allocatorBoundaryFragments(
+        self: *@This(),
+        line: LineF32,
+    ) void {
+        var intersections: u32 = 0;
+        const start_point: PointF32 = line.p0;
+        const end_point: PointF32 = line.p1;
+
+        const min_x = start_point.x < end_point.x;
+        const min_y = start_point.y < end_point.y;
+        const start_x: f32 = if (min_x) @floor(start_point.x) else @ceil(start_point.x);
+        const end_x: f32 = if (min_x) @ceil(end_point.x) else @floor(end_point.x);
+        const start_y: f32 = if (min_y) @floor(start_point.y) else @ceil(start_point.y);
+        const end_y: f32 = if (min_y) @ceil(end_point.y) else @floor(end_point.y);
+
+        intersections += @intFromFloat(@abs(start_x - end_x));
+        intersections += @intFromFloat(@abs(start_y - end_y));
+        intersections += 2;
+
+        _ = self.boundary_offset.fetchAdd(intersections, .acq_rel);
     }
 };
 
