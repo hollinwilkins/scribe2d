@@ -179,13 +179,14 @@ pub const BufferSizes = struct {
 
 pub const Buffers = struct {
     path_offsets: []u32,
+    path_line_offsets: []u32,
+    path_boundary_offsets: []u32,
     path_bumps: []std.atomic.Value(u32),
     styles: []Style,
     transforms: []TransformF32.Affine,
     path_tags: []PathTag,
     path_monoids: []PathMonoid,
     segment_data: []u8,
-    offsets: []u32,
     lines: []LineF32,
 
     pub fn create(allocator: Allocator, sizes: BufferSizes) !@This() {
@@ -202,6 +203,14 @@ pub const Buffers = struct {
             .path_offsets = try allocator.alloc(
                 u32,
                 sizes.pathsSize(),
+            ),
+            .path_line_offsets = try allocator.alloc(
+                u32,
+                sizes.pathsSize() * 2,
+            ),
+            .path_boundary_offsets = try allocator.alloc(
+                u32,
+                sizes.pathsSize() * 2,
             ),
             .path_bumps = path_bumps,
             .styles = try allocator.alloc(
@@ -224,10 +233,6 @@ pub const Buffers = struct {
                 u8,
                 sizes.segmentDataSize(),
             ),
-            .offsets = try allocator.alloc(
-                u32,
-                sizes.offsetsSize() * 2,
-            ),
             .lines = try allocator.alloc(
                 LineF32,
                 sizes.linesSize(),
@@ -237,13 +242,14 @@ pub const Buffers = struct {
 
     pub fn deinit(self: *@This(), allocator: Allocator) void {
         allocator.free(self.path_offsets);
+        allocator.free(self.path_line_offsets);
+        allocator.free(self.path_boundary_offsets);
         allocator.free(self.path_bumps);
         allocator.free(self.styles);
         allocator.free(self.transforms);
         allocator.free(self.path_tags);
         allocator.free(self.path_monoids);
         allocator.free(self.segment_data);
-        allocator.free(self.offsets);
         allocator.free(self.lines);
     }
 };
@@ -322,62 +328,66 @@ pub const LineAllocator = struct {
         segment_data: []const u8,
         // outputs
         pipeline_state: *PipelineState,
-        line_offsets: []u32,
+        path_line_offsets: []u32,
     ) void {
-        const segment_size = pipeline_state.segment_indices.size();
-        for (pipeline_state.segment_indices.start..pipeline_state.segment_indices.end) |segment_index| {
-            const projected_segment_index = pipeline_state.segmentIndex(@intCast(segment_index));
-            const segment_metadata = getSegmentMeta(
-                projected_segment_index,
-                path_tags,
-                path_monoids,
-            );
-            const style = getStyle(
-                styles,
-                pipeline_state.styleIndex(segment_metadata.path_monoid.style_index),
-            );
-            const transform = getTransform(
-                transforms,
-                pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
-            );
-            const fill_offset = &line_offsets[projected_segment_index];
+        const path_size = pipeline_state.path_indices.size();
+        for (0..path_size) |path_index| {
+            const start_segment_offset = path_offsets[path_index] - pipeline_state.segment_indices.start;
+            const end_segment_offset = if (path_index + 1 < path_size) path_offsets[path_index + 1] - pipeline_state.segment_indices.start else pipeline_state.segment_indices.end - pipeline_state.segment_indices.start;
+            const fill_offset = &path_line_offsets[path_index];
             fill_offset.* = 0;
-            const stroke_offset = &line_offsets[segment_size + projected_segment_index];
+            const stroke_offset = &path_line_offsets[path_size + path_index];
             stroke_offset.* = 0;
 
-            if (style.isFill()) {
-                flattenFill(
-                    config,
-                    segment_metadata,
-                    transform,
-                    path_tags,
-                    segment_data,
-                    fill_offset,
-                );
-            }
-
-            if (style.isStroke()) {
-                flattenStroke(
-                    config,
-                    style.stroke,
-                    segment_metadata,
-                    transform,
+            for (start_segment_offset..end_segment_offset) |segment_index| {
+                const segment_metadata = getSegmentMeta(
+                    @intCast(segment_index),
                     path_tags,
                     path_monoids,
-                    segment_data,
-                    stroke_offset,
                 );
+                const style = getStyle(
+                    styles,
+                    pipeline_state.styleIndex(segment_metadata.path_monoid.style_index),
+                );
+                const transform = getTransform(
+                    transforms,
+                    pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
+                );
+
+                if (style.isFill()) {
+                    flattenFill(
+                        config,
+                        segment_metadata,
+                        transform,
+                        path_tags,
+                        segment_data,
+                        fill_offset,
+                    );
+                }
+
+                if (style.isStroke()) {
+                    flattenStroke(
+                        config,
+                        style.stroke,
+                        segment_metadata,
+                        transform,
+                        path_tags,
+                        path_monoids,
+                        segment_data,
+                        stroke_offset,
+                    );
+                }
             }
         }
 
         var sum_offset: u32 = 0;
-        for (line_offsets[0..segment_size]) |*offset| {
+        for (path_line_offsets[0..path_size]) |*offset| {
             sum_offset += offset.*;
             offset.* = sum_offset;
         }
 
         sum_offset = 0;
-        for (line_offsets[segment_size .. segment_size * 2]) |*offset| {
+        for (path_line_offsets[path_size .. path_size * 2]) |*offset| {
             sum_offset += offset.*;
             offset.* = sum_offset;
         }
@@ -385,8 +395,7 @@ pub const LineAllocator = struct {
         calculateRunLinePaths(
             config,
             pipeline_state,
-            path_offsets,
-            line_offsets,
+            path_line_offsets,
         );
     }
 
@@ -1744,27 +1753,18 @@ pub const Flatten = struct {
 pub fn calculateRunLinePaths(
     config: Config,
     pipeline_state: *PipelineState,
-    path_offsets: []const u32,
-    line_offsets: []const u32,
+    path_line_offsets: []const u32,
 ) void {
-    const segment_size = pipeline_state.segment_indices.size();
-    const start_path_offset = pipeline_state.path_indices.start;
-    const start_segment_index = path_offsets[0] - pipeline_state.segment_indices.start;
-    const start_fill_line_offset = line_offsets[start_segment_index];
-    const start_stroke_line_offset = line_offsets[segment_size + start_segment_index];
-    var end_path_offset = start_path_offset;
+    const path_size = pipeline_state.path_indices.size();
+    const start_path_offset = 0;
+    const start_fill_line_offset = path_line_offsets[start_path_offset];
+    const start_stroke_line_offset = path_line_offsets[path_size + start_path_offset];
+    var end_path_offset: u32 = start_path_offset;
 
-    var next_path_offset = end_path_offset;
-    while (end_path_offset < pipeline_state.path_indices.end) {
-        next_path_offset += 1;
-        var next_segment_index: u32 = undefined;
-        if (next_path_offset < pipeline_state.path_indices.end) {
-            next_segment_index = path_offsets[next_path_offset - pipeline_state.path_indices.start] - pipeline_state.segment_indices.start;
-        } else {
-            next_segment_index = @intCast(pipeline_state.segment_indices.size() - 1);
-        }
-        const next_fill_line_offset = line_offsets[next_segment_index];
-        const next_stroke_line_offset = line_offsets[segment_size + next_segment_index];
+    var next_path_offset = end_path_offset + 1;
+    while (next_path_offset < path_size) {
+        const next_fill_line_offset = path_line_offsets[next_path_offset];
+        const next_stroke_line_offset = path_line_offsets[next_path_offset - pipeline_state.path_indices.start];
         const lines = (next_fill_line_offset - start_fill_line_offset) + (next_stroke_line_offset - start_stroke_line_offset);
 
         if (lines > config.buffer_sizes.linesSize()) {
@@ -1772,6 +1772,7 @@ pub fn calculateRunLinePaths(
         }
 
         end_path_offset = next_path_offset;
+        next_path_offset += 1;
     }
 
     pipeline_state.run_line_path_indices = RangeU32.create(start_path_offset, end_path_offset);

@@ -133,27 +133,27 @@ pub const CpuRasterizer = struct {
                     self.buffers.transforms,
                     self.buffers.segment_data,
                     &pipeline_state,
-                    self.buffers.offsets,
+                    self.buffers.path_line_offsets,
                 );
 
                 if (self.config.debug_flags.calculate_lines) {
                     debugPipelineState(pipeline_state);
-                    self.debugCalculateLines(pipeline_state, encoding);
+                    self.debugCalculateLines(pipeline_state);
                 }
 
-                kernel_module.Flatten.flatten(
-                    self.config,
-                    self.buffers.path_tags,
-                    self.buffers.path_monoids,
-                    self.buffers.styles,
-                    self.buffers.transforms,
-                    self.buffers.path_offsets,
-                    self.buffers.offsets,
-                    self.buffers.segment_data,
-                    &pipeline_state,
-                    self.buffers.path_bumps,
-                    self.buffers.lines,
-                );
+                // kernel_module.Flatten.flatten(
+                //     self.config,
+                //     self.buffers.path_tags,
+                //     self.buffers.path_monoids,
+                //     self.buffers.styles,
+                //     self.buffers.transforms,
+                //     self.buffers.path_offsets,
+                //     self.buffers.offsets,
+                //     self.buffers.segment_data,
+                //     &pipeline_state,
+                //     self.buffers.path_bumps,
+                //     self.buffers.lines,
+                // );
             }
         }
     }
@@ -178,28 +178,17 @@ pub const CpuRasterizer = struct {
         std.debug.print("======================================\n", .{});
     }
 
-    pub fn debugCalculateLines(self: @This(), pipeline_state: PipelineState, encoding: Encoding) void {
+    pub fn debugCalculateLines(self: @This(), pipeline_state: PipelineState) void {
         std.debug.print("============ Line Offsets ============\n", .{});
-        const segment_size = pipeline_state.segment_indices.size();
-        for (pipeline_state.path_indices.start..pipeline_state.path_indices.end) |path_index| {
-            std.debug.print("Path({})\n", .{path_index});
-            const start_segment_offset = encoding.path_offsets[path_index] - pipeline_state.segment_indices.start;
-            const end_segment_offset = if (path_index + 1 < encoding.path_offsets.len) encoding.path_offsets[path_index + 1] - pipeline_state.segment_indices.start else pipeline_state.segment_indices.size();
-
-            std.debug.print("LineOffsetSegments({},{})\n", .{
-                start_segment_offset,
-                end_segment_offset,
+        const path_size = pipeline_state.path_indices.size();
+        for (0..path_size) |path_index| {
+            const fill_offset = self.buffers.path_line_offsets[path_index];
+            const stroke_offset = self.buffers.path_line_offsets[path_size + path_index];
+            std.debug.print("Path({}), Fill({}), Stroke({})\n", .{
+                path_index,
+                fill_offset,
+                stroke_offset,
             });
-
-            for (start_segment_offset..end_segment_offset) |segment_index| {
-                const fill_offset = self.buffers.offsets[segment_index];
-                const stroke_offset = self.buffers.offsets[segment_size + segment_index];
-
-                std.debug.print("FillOffset({}), StrokeOffset({})\n", .{
-                    fill_offset,
-                    stroke_offset,
-                });
-            }
         }
         std.debug.print("======================================\n", .{});
     }
