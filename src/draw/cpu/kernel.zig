@@ -179,22 +179,22 @@ pub const BufferSizes = struct {
 
 pub const Buffers = struct {
     path_offsets: []u32,
+    path_bumps: []std.atomic.Value(u32),
     styles: []Style,
     transforms: []TransformF32.Affine,
     path_tags: []PathTag,
     path_monoids: []PathMonoid,
     segment_data: []u8,
     offsets: []u32,
-    bumps: []std.atomic.Value(u32),
     lines: []LineF32,
 
     pub fn create(allocator: Allocator, sizes: BufferSizes) !@This() {
-        const bumps = try allocator.alloc(
+        const path_bumps = try allocator.alloc(
             std.atomic.Value(u32),
-            sizes.bumpsSize(),
+            sizes.bumpsSize() * 2,
         );
 
-        for (bumps) |*bump| {
+        for (path_bumps) |*bump| {
             bump.raw = 0;
         }
 
@@ -203,6 +203,7 @@ pub const Buffers = struct {
                 u32,
                 sizes.pathsSize(),
             ),
+            .path_bumps = path_bumps,
             .styles = try allocator.alloc(
                 Style,
                 sizes.stylesSize(),
@@ -227,7 +228,6 @@ pub const Buffers = struct {
                 u32,
                 sizes.offsetsSize() * 2,
             ),
-            .bumps = bumps,
             .lines = try allocator.alloc(
                 LineF32,
                 sizes.linesSize(),
@@ -237,13 +237,13 @@ pub const Buffers = struct {
 
     pub fn deinit(self: *@This(), allocator: Allocator) void {
         allocator.free(self.path_offsets);
+        allocator.free(self.path_bumps);
         allocator.free(self.styles);
         allocator.free(self.transforms);
         allocator.free(self.path_tags);
         allocator.free(self.path_monoids);
         allocator.free(self.segment_data);
         allocator.free(self.offsets);
-        allocator.free(self.bumps);
         allocator.free(self.lines);
     }
 };
@@ -901,13 +901,11 @@ pub const Flatten = struct {
         segment_data: []const u8,
         // outputs
         pipeline_state: *PipelineState,
+        path_bumps: []std.atomic.Value(u32),
         lines: []LineF32,
     ) void {
-        _ = config;
-        _ = segment_data;
-        _ = lines;
-
         const segment_size: u32 = @intCast(pipeline_state.segment_indices.size());
+        const path_size: u32 = @intCast(pipeline_state.path_indices.size());
         for (pipeline_state.run_line_path_indices.start..pipeline_state.run_line_path_indices.end) |path_index| {
             const projected_path_index = path_index - pipeline_state.path_indices.start;
             const start_segment_index = path_offsets[projected_path_index] - pipeline_state.segment_indices.start;
@@ -924,6 +922,33 @@ pub const Flatten = struct {
             const end_fill_offset = line_offsets[end_segment_index];
             const end_stroke_offset = line_offsets[segment_size + end_segment_index];
 
+            var fill_bump = BumpAllocator{
+                .start = start_fill_offset,
+                .end = end_fill_offset,
+                .offset = &path_bumps[path_index],
+            };
+            var stroke_bump = BumpAllocator{
+                .start = start_stroke_offset,
+                .end = end_stroke_offset,
+                .offset = &path_bumps[path_size + path_index],
+            };
+
+            var fill_line_writer = LineWriter{
+                .lines = lines,
+                .reverse = false,
+                .bump = &fill_bump,
+            };
+            var front_stroke_line_writer = LineWriter{
+                .lines = lines,
+                .reverse = false,
+                .bump = &stroke_bump,
+            };
+            var back_stroke_line_writer = LineWriter{
+                .lines = lines,
+                .reverse = true,
+                .bump = &stroke_bump,
+            };
+
             for (start_segment_index..end_segment_index) |segment_index| {
                 const segment_metadata = getSegmentMeta(
                     @intCast(segment_index),
@@ -939,17 +964,46 @@ pub const Flatten = struct {
                     pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
                 );
 
-                _ = style;
-                _ = transform;
+                if (style.isFill()) {
+                    flattenFill(
+                        config.kernel_config,
+                        segment_metadata,
+                        path_tags,
+                        transform,
+                        segment_data,
+                        &fill_line_writer,
+                    );
 
-                std.debug.print("Flatten: Path({}), Segment({}), Fill({},{}), Stroke({},{})\n", .{
-                    path_index,
-                    segment_index,
-                    start_fill_offset,
-                    end_fill_offset,
-                    start_stroke_offset,
-                    end_stroke_offset,
-                });
+                    // var atomic_fill_bounds = AtomicBounds.createRect(&path.bounds);
+                    // atomic_fill_bounds.extendBy(line_writer.bounds);
+                }
+
+                if (style.isStroke()) {
+                    flattenStroke(
+                        config.kernel_config,
+                        style.stroke,
+                        segment_metadata,
+                        path_tags,
+                        path_monoids,
+                        transform,
+                        segment_data,
+                        &front_stroke_line_writer,
+                        &back_stroke_line_writer,
+                    );
+
+                    // var atomic_stroke_bounds = AtomicBounds.createRect(&path.bounds);
+                    // atomic_stroke_bounds.extendBy(front_line_writer.bounds);
+                    // atomic_stroke_bounds.extendBy(back_line_writer.bounds);
+                }
+
+                // std.debug.print("Flatten: Path({}), Segment({}), Fill({},{}), Stroke({},{})\n", .{
+                //     path_index,
+                //     segment_index,
+                //     start_fill_offset,
+                //     end_fill_offset,
+                //     start_stroke_offset,
+                //     end_stroke_offset,
+                // });
             }
         }
 
@@ -1021,12 +1075,10 @@ pub const Flatten = struct {
         config: KernelConfig,
         segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
-        transforms: []const TransformF32.Affine,
+        transform: TransformF32.Affine,
         segment_data: []const u8,
         line_writer: *LineWriter,
     ) void {
-        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
-
         flatten: {
             var cubic_points: CubicBezierF32 = undefined;
             if (segment_metadata.path_tag.segment.subpath_end) {
@@ -1068,7 +1120,7 @@ pub const Flatten = struct {
         segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        transforms: []const TransformF32.Affine,
+        transform: TransformF32.Affine,
         segment_data: []const u8,
         front_line_writer: *LineWriter,
         back_line_writer: *LineWriter,
@@ -1100,7 +1152,7 @@ pub const Flatten = struct {
                     segment_metadata,
                     path_tags,
                     path_monoids,
-                    transforms,
+                    transform,
                     segment_data,
                     front_line_writer,
                     back_line_writer,
@@ -1250,7 +1302,7 @@ pub const Flatten = struct {
         segment_metadata: SegmentMeta,
         path_tags: []const PathTag,
         path_monoids: []const PathMonoid,
-        transforms: []const TransformF32.Affine,
+        transform: TransformF32.Affine,
         segment_data: []const u8,
         front_line_writer: *LineWriter,
         back_line_writer: *LineWriter,
@@ -1260,7 +1312,6 @@ pub const Flatten = struct {
             path_tags,
             path_monoids,
         );
-        const transform = getTransform(transforms, segment_metadata.path_monoid.transform_index);
 
         const cubic_points = getCubicPoints(
             segment_metadata,
@@ -1281,7 +1332,7 @@ pub const Flatten = struct {
         var tan_next = readNeighborSegment(
             config,
             next_segment_metadata,
-            transforms,
+            transform,
             segment_data,
         );
         var tan_start = cubicStartTangent(config, cubic_points.p0, cubic_points.p1, cubic_points.p2, cubic_points.p3);

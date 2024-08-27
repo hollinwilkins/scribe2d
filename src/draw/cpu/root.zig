@@ -151,6 +151,7 @@ pub const CpuRasterizer = struct {
                     self.buffers.offsets,
                     self.buffers.segment_data,
                     &pipeline_state,
+                    self.buffers.path_bumps,
                     self.buffers.lines,
                 );
             }
