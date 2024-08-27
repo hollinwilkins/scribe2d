@@ -328,9 +328,9 @@ pub const LineAllocator = struct {
                 transforms,
                 pipeline_state.transformIndex(segment_metadata.path_monoid.transform_index),
             );
-            const fill_offset = &line_offsets[projected_segment_index];
+            const fill_offset = &line_offsets[projected_segment_index * 2];
             fill_offset.* = 0;
-            const stroke_offset = &line_offsets[segment_size + projected_segment_index];
+            const stroke_offset = &line_offsets[projected_segment_index * 2 + 1];
             stroke_offset.* = 0;
 
             if (style.isFill()) {
@@ -364,7 +364,7 @@ pub const LineAllocator = struct {
             offset.* = sum_offset;
         }
 
-        calculateRunLinePaths(pipeline_state, path_offsets, line_offsets);
+        calculateRunLinePaths(config, pipeline_state, path_offsets, line_offsets);
     }
 
     pub fn flattenFill(
@@ -1679,22 +1679,37 @@ pub const Flatten = struct {
 };
 
 pub fn calculateRunLinePaths(
+    config: Config,
     pipeline_state: *PipelineState,
     path_offsets: []const u32,
     line_offsets: []const u32,
 ) void {
     const start_path_offset = pipeline_state.path_indices.start;
-    const start_line_offset = line_offsets[path_offsets[0] - pipeline_state.path_indices.start];
+    const start_segment_index = path_offsets[0] - pipeline_state.segment_indices.start;
+    const start_line_offset = line_offsets[start_segment_index * 2 + 1];
     var end_path_offset = start_path_offset;
     var end_line_offset = start_line_offset;
 
+    var next_path_offset = end_path_offset;
     while (end_path_offset < pipeline_state.path_indices.end) {
-        const next_path_offset = end_path_offset + 1;
-        var next_line_offset: u32 = undefined;
+        next_path_offset += 1;
+        var next_segment_index: u32 = undefined;
         if (next_path_offset < pipeline_state.path_indices.end) {
+            next_segment_index = path_offsets[next_path_offset - pipeline_state.path_indices.start] - pipeline_state.segment_indices.start;
         } else {
+            next_segment_index = @intCast(pipeline_state.segment_indices.size() - 1);
         }
+        const next_line_offset = line_offsets[next_segment_index * 2 + 1];
+
+        if (next_line_offset - start_line_offset > config.buffer_sizes.linesSize()) {
+            break;
+        }
+
+        end_path_offset = next_path_offset;
+        end_line_offset = next_line_offset;
     }
+
+    pipeline_state.run_line_path_indices = RangeU32.create(start_path_offset, end_path_offset);
 }
 
 pub fn getArcPoints(config: KernelConfig, path_tag: PathTag, path_monoid: PathMonoid, segment_data: []const u8) ArcF32 {

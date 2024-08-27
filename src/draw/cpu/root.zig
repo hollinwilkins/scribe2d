@@ -88,7 +88,6 @@ pub const CpuRasterizer = struct {
                     self.config,
                     self.buffers.path_tags,
                     &pipeline_state,
-                    self.buffers.path_offsets,
                     self.buffers.path_monoids,
                 );
 
@@ -138,10 +137,17 @@ pub const CpuRasterizer = struct {
                 );
 
                 if (self.config.debug_flags.calculate_lines) {
+                    debugPipelineState(pipeline_state);
                     self.debugCalculateLines(pipeline_state, encoding);
                 }
             }
         }
+    }
+
+    pub fn debugPipelineState(pipeline_state: PipelineState) void {
+        std.debug.print("============ Pipeline State ============\n", .{});
+        std.debug.print("{}\n", .{pipeline_state});
+        std.debug.print("======================================\n", .{});
     }
 
     pub fn debugExpandMonoids(self: @This(), pipeline_state: PipelineState) void {
@@ -171,8 +177,8 @@ pub const CpuRasterizer = struct {
             });
 
             for (start_segment_offset..end_segment_offset) |segment_index| {
-                const fill_offset = self.buffers.offsets[segment_index];
-                const stroke_offset = self.buffers.offsets[pipeline_state.segment_indices.size() + segment_index];
+                const fill_offset = self.buffers.offsets[segment_index * 2];
+                const stroke_offset = self.buffers.offsets[segment_index * 2 + 1];
 
                 std.debug.print("FillOffset({}), StrokeOffset({})\n", .{
                     fill_offset,
