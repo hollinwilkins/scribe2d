@@ -84,7 +84,7 @@ pub const CpuRasterizer = struct {
                 );
 
                 // expand path monoids
-                kernel_module.PathMonoidExpander.expand(
+                kernel_module.MonoidExpander.expandPathMonoids(
                     self.config,
                     self.buffers.path_tags,
                     &pipeline_state,
@@ -99,6 +99,12 @@ pub const CpuRasterizer = struct {
                         Style,
                         self.buffers.styles,
                         encoding.styles[start..end],
+                    );
+
+                    kernel_module.MonoidExpander.expandStyles(
+                        self.buffers.styles,
+                        &pipeline_state,
+                        self.buffers.style_offsets,
                     );
                 }
 

@@ -191,6 +191,7 @@ pub const Buffers = struct {
     path_boundary_offsets: []u32,
     path_bumps: []u32,
     styles: []Style,
+    style_offsets: []u32,
     transforms: []TransformF32.Affine,
     path_tags: []PathTag,
     path_monoids: []PathMonoid,
@@ -219,6 +220,10 @@ pub const Buffers = struct {
             .styles = try allocator.alloc(
                 Style,
                 sizes.stylesSize(),
+            ),
+            .style_offsets = try allocator.alloc(
+                u32,
+                sizes.stylesSize() * 2,
             ),
             .transforms = try allocator.alloc(
                 TransformF32.Affine,
@@ -253,6 +258,7 @@ pub const Buffers = struct {
         allocator.free(self.path_boundary_offsets);
         allocator.free(self.path_bumps);
         allocator.free(self.styles);
+        allocator.free(self.style_offsets);
         allocator.free(self.transforms);
         allocator.free(self.path_tags);
         allocator.free(self.path_monoids);
@@ -304,8 +310,8 @@ pub const PipelineState = struct {
     }
 };
 
-pub const PathMonoidExpander = struct {
-    pub fn expand(
+pub const MonoidExpander = struct {
+    pub fn expandPathMonoids(
         config: Config,
         path_tags: []const PathTag,
         // outputs
@@ -331,6 +337,27 @@ pub const PathMonoidExpander = struct {
             start_path_monoid.segment_offset,
             end_path_monoid.segment_offset + end_path_tag.segment.size(),
         );
+    }
+
+    pub fn expandStyles(
+        styles: []const Style,
+        // outputs
+        pipeline_state: *PipelineState,
+        style_offsets: []u32,
+    ) void {
+        if (pipeline_state.style_indices.start >= 0 and pipeline_state.style_indices.size() > 0) {
+            for (0..styles.len) |style_index| {
+                const style = styles[style_index];
+                style_offsets[style_index * 2] = style.fill.brush.offset();
+                style_offsets[style_index * 2 + 1] = style.stroke.brush.offset();
+            }
+
+            var sum_offset: u32 = 0;
+            for (style_offsets[0..styles.len * 2]) |*offset| {
+                sum_offset += offset.*;
+                offset.* = sum_offset;
+            }
+        }
     }
 };
 
