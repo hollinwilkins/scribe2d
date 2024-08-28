@@ -100,13 +100,15 @@ pub const CpuRasterizer = struct {
                         self.buffers.styles,
                         encoding.styles[start..end],
                     );
-
-                    kernel_module.MonoidExpander.expandStyles(
-                        self.buffers.styles,
-                        &pipeline_state,
-                        self.buffers.style_offsets,
-                    );
                 }
+
+                kernel_module.MonoidExpander.expandStyles(
+                    self.buffers.path_offsets,
+                    self.buffers.styles,
+                    self.buffers.path_monoids,
+                    &pipeline_state,
+                    self.buffers.style_offsets,
+                );
 
                 // load transforms
                 if (pipeline_state.transform_indices.start >= 0) {

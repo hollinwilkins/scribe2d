@@ -141,12 +141,14 @@ pub const BufferSizes = struct {
     pub const DEFAULT_BOUNDARIES_SIZE: u32 = 4096 * 4096;
     pub const DEFAULT_SEGMENTS_SIZE: u32 = 10;
     pub const DEFAULT_SEGMENT_DATA_SIZE: u32 = DEFAULT_SEGMENTS_SIZE * @sizeOf(CubicBezierF32);
+    pub const DEFAULT_DRAW_DATA_SIZE: u32 = DEFAULT_PATHS_SIZE * @sizeOf(ColorU8) * 32;
 
     paths_size: u32 = DEFAULT_PATHS_SIZE,
     path_tags_size: u32 = DEFAULT_SEGMENTS_SIZE,
     segment_data_size: u32 = DEFAULT_SEGMENT_DATA_SIZE,
     lines_size: u32 = DEFAULT_LINES_SIZE,
     boundaries_size: u32 = DEFAULT_BOUNDARIES_SIZE,
+    draw_data_size: u32 = DEFAULT_DRAW_DATA_SIZE,
 
     pub fn pathsSize(self: @This()) u32 {
         return self.paths_size;
@@ -183,6 +185,10 @@ pub const BufferSizes = struct {
     pub fn boundariesSize(self: @This()) u32 {
         return self.boundaries_size;
     }
+
+    pub fn drawDataSize(self: @This()) u32 {
+        return self.draw_data_size;
+    }
 };
 
 pub const Buffers = struct {
@@ -192,6 +198,7 @@ pub const Buffers = struct {
     path_bumps: []u32,
     styles: []Style,
     style_offsets: []u32,
+    draw_data: []u8,
     transforms: []TransformF32.Affine,
     path_tags: []PathTag,
     path_monoids: []PathMonoid,
@@ -224,6 +231,10 @@ pub const Buffers = struct {
             .style_offsets = try allocator.alloc(
                 u32,
                 sizes.stylesSize() * 2,
+            ),
+            .draw_data = try allocator.alloc(
+                u8,
+                sizes.drawDataSize(),
             ),
             .transforms = try allocator.alloc(
                 TransformF32.Affine,
@@ -259,6 +270,7 @@ pub const Buffers = struct {
         allocator.free(self.path_bumps);
         allocator.free(self.styles);
         allocator.free(self.style_offsets);
+        allocator.free(self.draw_data);
         allocator.free(self.transforms);
         allocator.free(self.path_tags);
         allocator.free(self.path_monoids);
@@ -340,23 +352,28 @@ pub const MonoidExpander = struct {
     }
 
     pub fn expandStyles(
+        path_offsets: []const u32,
         styles: []const Style,
+        path_monoids: []const PathMonoid,
         // outputs
         pipeline_state: *PipelineState,
         style_offsets: []u32,
     ) void {
-        if (pipeline_state.style_indices.start >= 0 and pipeline_state.style_indices.size() > 0) {
-            for (0..styles.len) |style_index| {
-                const style = styles[style_index];
-                style_offsets[style_index * 2] = style.fill.brush.offset();
-                style_offsets[style_index * 2 + 1] = style.stroke.brush.offset();
-            }
+        for (path_offsets[0..pipeline_state.path_indices.size()]) |path_index| {
+            const style_index = pipeline_state.styleIndex(path_monoids[path_index].style_index);
 
-            var sum_offset: u32 = 0;
-            for (style_offsets[0..styles.len * 2]) |*offset| {
-                sum_offset += offset.*;
-                offset.* = sum_offset;
+            if (style_index >= 0) {
+                const style_index2: u32 = @intCast(style_index);
+                const style = styles[style_index2];
+                style_offsets[style_index2 * 2] = style.fill.brush.offset();
+                style_offsets[style_index2 * 2 + 1] = style.stroke.brush.offset();
             }
+        }
+
+        var sum_offset: u32 = 0;
+        for (style_offsets[0 .. styles.len * 2]) |*offset| {
+            sum_offset += offset.*;
+            offset.* = sum_offset;
         }
     }
 };
