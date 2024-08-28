@@ -286,6 +286,8 @@ pub const PipelineState = struct {
     style_indices: RangeI32 = RangeI32{},
     transform_indices: RangeI32 = RangeI32{},
     segment_data_indices: RangeU32 = RangeU32{},
+    draw_data_indices: RangeU32 = RangeU32{},
+    run_style_path_indices: RangeU32 = RangeU32{},
     run_line_path_indices: RangeU32 = RangeU32{},
     run_boundary_path_indices: RangeU32 = RangeU32{},
 
@@ -352,6 +354,7 @@ pub const MonoidExpander = struct {
     }
 
     pub fn expandStyles(
+        config: Config,
         path_offsets: []const u32,
         styles: []const Style,
         path_monoids: []const PathMonoid,
@@ -375,6 +378,14 @@ pub const MonoidExpander = struct {
             sum_offset += offset.*;
             offset.* = sum_offset;
         }
+
+        calculateRunStylePaths(
+            config,
+            pipeline_state,
+            path_offsets,
+            path_monoids,
+            style_offsets,
+        );
     }
 };
 
@@ -1804,6 +1815,42 @@ pub const Flatten = struct {
         line_writer.write(LineF32.create(p0, p1));
     }
 };
+
+pub fn calculateRunStylePaths(
+    config: Config,
+    pipeline_state: *PipelineState,
+    path_offsets: []const u32,
+    path_monoids: []const PathMonoid,
+    style_offsets: []const u32,
+) void {
+    _ = config;
+    _ = pipeline_state;
+    _ = path_offsets;
+    _ = path_monoids;
+    _ = style_offsets;
+
+    // const path_size = pipeline_state.path_indices.size();
+    // const start_path_offset = 0;
+    // const start_fill_line_offset = if (start_path_offset > 0) path_line_offsets[start_path_offset - 1] else 0;
+    // const start_stroke_line_offset = if (start_path_offset > 0) path_line_offsets[path_size + start_path_offset - 1] else path_line_offsets[path_size + start_path_offset];
+    // var end_path_offset: u32 = start_path_offset;
+
+    // var next_path_offset = end_path_offset + 1;
+    // while (next_path_offset <= path_size) {
+    //     const next_fill_line_offset = path_line_offsets[next_path_offset - 1];
+    //     const next_stroke_line_offset = path_line_offsets[path_size + next_path_offset - 1];
+    //     const lines = (next_fill_line_offset - start_fill_line_offset) + (next_stroke_line_offset - start_stroke_line_offset);
+
+    //     if (lines > config.buffer_sizes.linesSize()) {
+    //         break;
+    //     }
+
+    //     end_path_offset = next_path_offset;
+    //     next_path_offset += 1;
+    // }
+
+    // pipeline_state.run_line_path_indices = RangeU32.create(start_path_offset, end_path_offset);
+}
 
 pub fn calculateRunLinePaths(
     config: Config,
